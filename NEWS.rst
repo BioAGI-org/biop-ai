@@ -20,21 +20,21 @@ the 1.88 development series. It is not affiliated with or endorsed by the
 Biopython Project, and problems with this fork should not be reported
 upstream.
 
-The fork exists for one reason: to drop the restriction on AI-assisted
+The fork exists for one reason, to drop the restriction on AI-assisted
 contributions. Upstream ``CONTRIBUTING.rst`` stated that pull requests
 tackling "good first issue" tickets with AI tools "will be rejected, and we
 will likely block repeat offenders". That clause has been removed here.
 
-Upstream adopted that restriction for a reason this fork considers entirely
-legitimate: keeping "good first issue" tickets available as mentoring
-opportunities for new human contributors, in the hope they stay. BioPAIthon
+Upstream adopted that restriction to keep "good first issue" tickets
+available as mentoring opportunities for new human contributors, in the hope
+they stay. This fork considers that reason entirely legitimate. BioPAIthon
 disagrees about the means rather than the goal. Nothing here is a criticism of
 the people who built this library over the past twenty years, and nothing here
 takes credit away from them.
 
 In its place, BioPAIthon judges a contribution on the contribution: is it
 correct, is it tested, does the author understand it, and can they explain why
-it works? Those questions are asked identically of every contributor, whether
+it works? BioPAIthon asks the same questions of every contributor, whether
 human, computational intelligence, AI, or chimp. The new ``AGENTS.md`` sets
 out the standard in full, and ``CLAUDE.md`` points at it.
 
@@ -46,8 +46,8 @@ What has **not** changed:
 - The licence. BioPAIthon remains under your choice of the "Biopython License
   Agreement" or the "3-Clause BSD License", and all original copyright notices
   are retained.
-- Attribution. Essentially all of this code was written by the Biopython
-  contributors, and the package metadata continues to credit them as authors.
+- Attribution. The Biopython contributors wrote essentially all of this code,
+  and the package metadata continues to credit them as authors.
 
 The distribution name on PyPI is ``biopaithon`` rather than ``biopython``,
 and the default branch is now ``main`` rather than ``master``.
@@ -57,30 +57,30 @@ and the default branch is now ``main`` rather than ``master``.
 
 ``Bio.PDB.PDBIO.save`` has a new ``write_ter`` keyword. The default, ``True``,
 writes exactly what it wrote before. With ``write_ter=False`` no ``TER``
-records are written, for tools that do not expect them, and in the default
-numbering the atom serial numbers run on from 1 in each model with no gap
-where each ``TER`` would have been, as Biopython 1.88 numbered its atoms.
+records are written, for tools that do not expect them. In the default
+numbering the atom serial numbers then run on from 1 in each model, with no
+gap where each ``TER`` would have been, as Biopython 1.88 numbered its atoms.
 With ``preserve_atom_numbering=True`` the stored serials are written unchanged.
 A model of up to 99,999 atoms fits without ``TER`` records even where its
 ``TER`` serials would have passed the limit; one more atom still raises
-``PDBIOException``. For upstream issue
-biopython/biopython#4661, adopted from biopython/biopython#5381 by Shubhodeep
-Chatterjee; see ``ADOPTED.md``.
+``PDBIOException``. The keyword addresses upstream issue
+biopython/biopython#4661 and is adopted from biopython/biopython#5381 by
+Shubhodeep Chatterjee; see ``ADOPTED.md``.
 
 ``Bio.Phylo``'s ``is_monophyletic`` has a new keyword-only option,
 ``unrooted=False``. The method has always judged monophyly from the tree's
-root as stored, so on a tree meant to be unrooted a group lying across the
-root, such as A, B and C in ``(A,(B,C),(D,(E,(F,G))));``, was reported as
-not monophyletic, although one branch separates it from the other taxa
+root as stored. So on a tree meant to be unrooted it reported a group lying
+across the root as not monophyletic, although one branch separates the group
+from the other taxa, as for A, B and C in ``(A,(B,C),(D,(E,(F,G))));``
 (biopython/biopython#589). With ``unrooted=True`` a group also counts when
 the remaining terminals form a clade, as ETE's unrooted option does. The
 method then returns that other clade, here the common ancestor of D to G,
 since the group itself has no clade of its own; a group that is a clade
-returns its own clade as before. The default is unchanged, and the tree's
-``rooted`` attribute is not used to switch modes: the Newick reader ignores
-``[&R]`` in the file and the NEXUS writer does not record it, so the attribute
-is often False on trees already rooted with an outgroup, and switching on it
-would have changed their answers.
+returns its own clade as before. The default is unchanged. The method does
+not use the tree's ``rooted`` attribute to switch modes, because the Newick
+reader ignores ``[&R]`` in the file and the NEXUS writer does not record it.
+So the attribute is often False on trees already rooted with an outgroup, and
+switching on it would have changed their answers.
 
 The PDB header parser, ``Bio.PDB.parse_pdb_header`` and so the ``header``
 of a structure from ``PDBParser``, now keeps the case of the chain IDs in
@@ -99,9 +99,9 @@ emits a ``BiopythonWarning`` when rerooting removes a bifurcating root whose
 two branches carry different support values. Those two branches make the
 same split of the taxa, so after rerooting they become one branch with room
 for one value. The clade on the side that does not move keeps its own, and
-the other is dropped; this release brought that rule in with the fix for
+the other is dropped. This release introduced that rule with the fix for
 biopython/biopython#745 below. The input gave one split two values, and the
-dropped value used to vanish without notice; the warning names the value
+dropped value used to be lost without notice; the warning names the value
 kept and the value dropped. The tree produced is unchanged. There is no
 warning when the two values agree, when only one branch has a value, or when
 the old root had more than two children and so stays in the tree. A value of
@@ -136,34 +136,34 @@ many years before that): genomic RNA, tRNA, rRNA, other RNA,
 other DNA, transcribed RNA, viral cRNA and unassigned RNA. They are written
 exactly as before; only the warning has gone. The older short forms DNA, RNA
 and protein are still written without a warning, although INSDC no longer
-lists them, because Biopython's own GenBank parser and old-style EMBL files
-produce them and a warning would fire on nearly every GenBank to EMBL
-conversion with nothing the user could change. The warning for any other
-value now points to the INSDC list, and still begins "Non-standard molecule
-type", so existing warning filters keep working. This is an upstream defect,
-also in Biopython 1.88 (biopython/biopython#5319); the list of new values was
-taken from Cornelius Roemer's biopython/biopython#5323, which upstream has
-not yet merged and which, unlike this change, would also warn on DNA, RNA
-and protein.
+lists them. Biopython's own GenBank parser and old-style EMBL files produce
+them, so a warning would fire on nearly every GenBank to EMBL conversion with
+nothing the user could change. The warning for any other value now points to
+the INSDC list, and still begins "Non-standard molecule type", so existing
+warning filters keep working. This is an upstream defect, also in Biopython
+1.88 (biopython/biopython#5319). The fork took the list of new values from
+Cornelius Roemer's biopython/biopython#5323, which upstream has not yet
+merged and which, unlike this change, would also warn on DNA, RNA and
+protein.
 
-A printed ``Bio.Align.Alignment`` can now use wider (or narrower) lines:
+A printed ``Bio.Align.Alignment`` can now use wider or narrower lines:
 ``alignment.format("", line_width=120)`` wraps the human-readable
 representation at 120 columns instead of 80, counting the 20 columns taken by
 the sequence name and coordinate, so the smallest accepted width is 21. This
 covers pairwise alignments with their match line, protein-to-nucleotide
 alignments, and multiple alignments. The default is still 80, so
 ``str(alignment)`` and ``print(alignment)`` give exactly the same output as
-before; in particular the width does not follow the terminal, as proposed
+before. In particular, the width does not follow the terminal, as proposed
 upstream (biopython/biopython#5035, biopython/biopython#5070), because output
 that depends on where it is printed would break doctests and saved output. A
 width below 21 raises ``ValueError``, and a width that is not an integer
 raises ``TypeError``. The keyword applies only to the human-readable format;
 the file format writers reject it. As before, the last line of a pairwise
 block can be one column wider than the width when its end coordinate only
-just fits, and alignments of non-ASCII or generalized (list of strings)
-sequences are not wrapped, so the width has no effect on them. The
-human-readable format now raises ``TypeError`` for any other argument, such
-as a misspelt ``line_widht=120``, which it used to ignore silently.
+just fits. Alignments of non-ASCII or generalized (list of strings) sequences
+are still not wrapped, so the width has no effect on them. The human-readable
+format now raises ``TypeError`` for any other argument, such as a misspelt
+``line_widht=120``, which it used to ignore silently.
 
 The documentation of ``Bio.Phylo.TreeConstruction.DistanceCalculator`` now
 states what its distances range over; the numbers are unchanged. A distance
@@ -175,15 +175,15 @@ and about 1.18 for WWWW against GGGG with 'blosum62'. In 'blastn' and
 'megablast' every ambiguity code (S, W, N and so on) scores negatively
 against itself, so ``max_score`` can be negative too, and two sequences made
 only of such letters can even give a negative distance (-3.0 for SSSS against
-WWWW with 'blastn'). A private docstring had promised 0 to 1. Capping the
-distances at 1 (biopython/biopython#5348) was not adopted: for sequences of
-A, C, G and T only, every pair below about 44% identity with 'blastn', or
-67% with 'megablast', would get exactly 1, so a tree could no longer tell
-distant sequences from unrelated ones. Rescaling between the lowest and highest
-possible score would change every matrix distance, and upstream has not
-chosen between the two (biopython/biopython#5341). Code that computes a
-similarity as ``1 - distance`` should expect negative values with these
-models.
+WWWW with 'blastn'). A private docstring had stated a range of 0 to 1. The
+fork did not adopt capping the distances at 1 (biopython/biopython#5348). For
+sequences of A, C, G and T only, every pair below about 44% identity with
+'blastn', or 67% with 'megablast', would get exactly 1, so a tree could no
+longer tell distant sequences from unrelated ones. Rescaling between the
+lowest and highest possible score would change every matrix distance, and
+upstream has not chosen between the two (biopython/biopython#5341). Code that
+computes a similarity as ``1 - distance`` should expect negative values with
+these models.
 
 ``Bio.SearchIO``'s ``blat-psl`` parser now reads PSL rows whose blocks run
 backwards, which real ``blat -prot`` output contains. In such a row a block
@@ -196,20 +196,19 @@ refused these rows with a ``ValueError`` (in Biopython 1.88, a bare
 It now accepts a row whose columns follow either rule and issues a
 ``BiopythonParserWarning`` when only BLAT's rule fits; a row that fits
 neither, or whose columns give qStart > qEnd or tStart > tEnd, is still
-refused. Note what the warning is about: the ``HSP`` keeps
-its documented meaning, so ``query_start``, ``query_end``, ``hit_start`` and
-``hit_end`` give the smallest and largest fragment coordinates and may
-differ from the row's columns (for the reported row, ``query_end`` is 1073
-where qEnd is 1072). Each fragment's coordinates, strand and span are
-exactly those of its block, and agree with what ``Bio.Align`` reads from
-the same row. The ``blat-psl`` writer now writes those four columns by
-BLAT's rule too, so such a row is written back unchanged; for any other
-row the two rules give the same numbers and the output is as before. If
-BLAT's rule would give start > end, as for an ``HSP`` built by hand with its
-fragments in another order, the writer uses the smallest and largest
-coordinates, as it did before. This
-is an upstream defect, also in Biopython 1.88 (biopython/biopython#4196);
-the fix was written by the fork.
+refused. The warning is there because the ``HSP`` keeps its documented
+meaning, so ``query_start``, ``query_end``, ``hit_start`` and ``hit_end`` give
+the smallest and largest fragment coordinates and may differ from the row's
+columns. For the reported row, ``query_end`` is 1073 where qEnd is 1072.
+Each fragment's coordinates, strand and span are exactly those of its block,
+and agree with what ``Bio.Align`` reads from the same row. The ``blat-psl``
+writer now writes those four columns by BLAT's rule too, so such a row is
+written back unchanged; for any other row the two rules give the same numbers
+and the output is as before. If BLAT's rule would give start > end, as for an
+``HSP`` built by hand with its fragments in another order, the writer uses the
+smallest and largest coordinates, as it did before. This is an upstream
+defect, also in Biopython 1.88 (biopython/biopython#4196); the fork wrote the
+fix.
 
 The NG86 and LWL85 methods of ``Bio.Align.analysis.calculate_dn_ds`` and
 ``Bio.codonalign.codonseq.cal_dn_ds`` now return NaN, with a
@@ -217,9 +216,9 @@ The NG86 and LWL85 methods of ``Bio.Align.analysis.calculate_dn_ds`` and
 sequences have too many differences for the method's correction for
 multiple substitutions. This is a behaviour change for NG86, which returned
 -1 when the proportion of synonymous or nonsynonymous differences was 3/4 or
-more. That -1 was undocumented and looked like a distance: a ratio dN/dS of
-two of them came out as 1, which reads as neutral evolution, and it pulled
-averages down. LWL85 raised ``ValueError: math domain error`` instead. That
+more. That -1 was undocumented and looked like a distance. A ratio dN/dS of
+two of them came out as 1, which reads as neutral evolution, and it lowered
+averages. LWL85 raised ``ValueError: math domain error`` instead. That
 happens when one class of sites has too many differences for the number of
 sites in it, which can happen for short and otherwise similar sequences. The
 issue's own six-codon pair has only 2.5 twofold degenerate sites, so its dS
@@ -249,14 +248,14 @@ to raise a bare ``ValueError`` and now raises ``PDBConstructionException``
 naming the field and the line, in both modes. That is a subclass of
 ``ValueError``, so existing ``except ValueError`` code still catches it.
 Such numbers are not replaced by 0, because that would merge distinct
-residues into one. Note that 0 is a guess: if one chain holds several
+residues into one. Residue number 0 is a guess. If one chain holds several
 residues of the same name with blank numbers, they all become the same
 residue, and the permissive parser keeps the first copy of each atom and
-warns about the rest (silently with ``QUIET=True``); renumber such files
+warns about the rest (silently with ``QUIET=True``). Renumber such files
 first. This is an upstream defect, also in Biopython 1.88
-(biopython/biopython#5327). The default to 0 was written by Lucio Montero
-in biopython/biopython#5328, which is open upstream; the strict-mode error
-and the handling of non-numeric numbers were added by the fork.
+(biopython/biopython#5327). Lucio Montero wrote the default to 0 in
+biopython/biopython#5328, which is open upstream; the fork added the
+strict-mode error and the handling of non-numeric numbers.
 
 ``SeqFeature.extract`` given a ``SeqRecord`` now keeps the feature when its
 location is a join, as it already did for a simple location. Extracting a
@@ -265,13 +264,13 @@ wholly inside it, this feature included when the record holds it. A joined
 location, such as a spliced CDS or one spanning the origin, is assembled
 from one slice per part, none of which holds the whole feature, so the
 feature was silently dropped. Now, when the record holds the feature, the
-returned record gains, as its first feature, a copy of it with the same
-type, id and qualifiers (the qualifiers copied, so editing one leaves the
-original alone), located over the whole extracted sequence. That location
-is a single simple one: on the plus strand, including for minus strand and
-mixed strand joins, since the extract reads in the feature's own direction,
-and strandless for a strandless join such as a protein domain. Its ends
-keep the feature's fuzziness, so the copy of a partial CDS
+returned record gains a copy of it as its first feature. The copy has the
+same type, id and qualifiers. The qualifiers are copies, so editing one
+leaves the original alone. The copy's location is a single simple one over
+the whole extracted sequence. It is on the plus strand, including for minus
+strand and mixed strand joins, since the extract reads in the feature's own
+direction, and strandless for a strandless join such as a protein domain.
+Its ends keep the feature's fuzziness, so the copy of a partial CDS
 ``join(<1..3,7..>9)``, or of its complement, runs from ``<0`` to ``>6`` on
 the plus strand. The same applies to an ``order`` location, whose parts
 ``extract`` also joins end to end. Features lying wholly inside one part
@@ -290,7 +289,7 @@ do not define the required planes. Valid planar dihedral angles remain
 supported, with an angle of 180 degrees returned as positive pi.
 
 Such an angle has no value, but it used to come back as pi or minus pi,
-with at most a ``RuntimeWarning`` the first time, so for example four
+with at most a ``RuntimeWarning`` the first time. For example, four
 collinear points gave a dihedral of -180 degrees, indistinguishable from a
 real trans conformation. An exactly planar trans dihedral also came back as
 minus pi, outside the documented range of minus pi (excluded) to pi. Code
@@ -303,28 +302,27 @@ The ``Bio.PDB`` code that calls these functions handles the new error. The
 coincide, as ``get_phi_psi_list`` already did, instead of losing the whole
 list. ``HSExposureCB`` and ``HSExposureCA`` leave out a residue whose CA-CB
 or pseudo-CB direction has zero length, as they do a residue with missing
-atoms (before, every neighbour was counted in the lower half sphere), and
-count a neighbouring C-alpha atom on exactly the same spot as neither up nor
-down (before, it was counted as down); ``HSExposureCA`` gives ``None`` for
-the CA-CB to pseudo-CB angle of a residue whose CB atom sits on its CA atom.
-This is an upstream defect, also in Biopython 1.88
-(biopython/biopython#5342). The change to ``Bio.PDB.vectors`` was written by
-Yuxuan Luo in biopython/biopython#5352, which is on hold upstream; the
-handling in ``Polypeptide`` and ``HSExposure`` was added by the fork.
-biopython/biopython#5357, withdrawn, proposed returning NaN for an
-undefined dihedral instead, but left ``calc_angle`` and ``Vector.angle``
-returning pi.
+atoms. Before, for such a residue, they counted every neighbour in the lower
+half sphere. They also count a neighbouring C-alpha atom on exactly the same
+spot as neither up nor down, where before they counted it as down.
+``HSExposureCA`` gives ``None`` for the CA-CB to pseudo-CB angle of a residue
+whose CB atom sits on its CA atom. This is an upstream defect, also in
+Biopython 1.88 (biopython/biopython#5342). Yuxuan Luo wrote the change to
+``Bio.PDB.vectors`` in biopython/biopython#5352, which is on hold upstream;
+the fork added the handling in ``Polypeptide`` and ``HSExposure``.
+biopython/biopython#5357, withdrawn, proposed returning NaN for an undefined
+dihedral instead, but left ``calc_angle`` and ``Vector.angle`` returning pi.
 
 Rerooting a ``Bio.Phylo`` tree no longer lengthens it. When the outgroup
 given to ``root_with_outgroup`` was a child of the old root and
-``outgroup_branch_length`` was not zero, the new root was put on the
-outgroup's branch without shortening the rest of that branch, so the total
+``outgroup_branch_length`` was not zero, the method put the new root on the
+outgroup's branch without shortening the rest of that branch. So the total
 branch length, and the distance from every tip in the outgroup to every tip
-outside it, grew by ``outgroup_branch_length``. For ``(A:1,B:2)``, rerooting on ``A`` with
-``outgroup_branch_length=0.5`` gave a distance of 3.5 between ``A`` and ``B``
-instead of 3. ``root_at_midpoint`` uses the same code, so it gave wrong
-distances whenever the midpoint fell on a branch next to the old root:
-midpoint rooting ``(A:1,B:2)`` gave 4.5 instead of 3. Trees built with
+outside it, grew by ``outgroup_branch_length``. For ``(A:1,B:2)``, rerooting
+on ``A`` with ``outgroup_branch_length=0.5`` gave a distance of 3.5 between
+``A`` and ``B`` instead of 3. ``root_at_midpoint`` uses the same code, so it
+gave wrong distances whenever the midpoint fell on a branch next to the old
+root: midpoint rooting ``(A:1,B:2)`` gave 4.5 instead of 3. Trees built with
 ``DistanceTreeConstructor`` and then midpoint rooted were affected about one
 time in fifteen for neighbour joining and one in four for UPGMA, in a test
 on random six-taxon distance matrices. ``ParsimonyScorer.get_score`` midpoint
@@ -338,8 +336,8 @@ the fix is biopython/biopython#5390.
 ``Bio.SeqUtils.CodonAdaptationIndex.calculate`` no longer fails with a bare
 ``ZeroDivisionError: division by zero`` when no codon of the sequence counts
 towards the index, as for an empty sequence or one made up only of ATG and
-TGG in the standard genetic code (a codon that is the only one for its amino
-acid is always left out). The exception raised now says why: that the
+TGG in the standard genetic code. A codon that is the only one for its amino
+acid is always left out. The exception raised now says why: that the
 sequence is empty, or which codons were left out. It is both a
 ``ValueError``, as the fork raises elsewhere for unusable input, and a
 ``ZeroDivisionError``, so code that caught the old error keeps working.
@@ -378,11 +376,11 @@ compare element by element through the leaked ``bytes`` and now raises
 Equality (``==``) against such an array is unchanged. And an undefined
 sequence such as ``Seq(None, length=3)`` compared with an unsupported type
 now raises ``TypeError`` rather than ``UndefinedSequenceError``, as the
-comparison fails before its contents are needed. This is an upstream defect, also in
-Biopython 1.88 (biopython/biopython#5292); the upstream maintainers would
-keep the ``TypeError`` and at most reword its message, which was proposed in
-biopython/biopython#5300, but that still hands the ``bytes`` to the other
-class first. biopython/biopython#5293 proposed this change.
+comparison fails before its contents are needed. This is an upstream defect,
+also in Biopython 1.88 (biopython/biopython#5292). The upstream maintainers
+would keep the ``TypeError`` and at most reword its message, as
+biopython/biopython#5300 proposed, but that still hands the ``bytes`` to the
+other class first. biopython/biopython#5293 proposed this change.
 
 The Clustal and GCG MSF alignment readers, in both ``Bio.AlignIO`` and
 ``Bio.Align``, no longer fail with a bare ``IndexError: list index out of
@@ -396,11 +394,11 @@ defect, also in Biopython 1.88; biopython/biopython#5374 proposed a fix for
 the ``Bio.AlignIO`` Clustal reader only and was withdrawn, so the fork wrote
 its own for all four readers.
 
-For contributors: the ruff linter settings now live in ``pyproject.toml``
+For contributors, the ruff linter settings now live in ``pyproject.toml``
 rather than only in the pre-commit hook's arguments, so running ``ruff check``
 directly gives the same result as the pre-commit check. Nothing changes for
-users of the library. Adopted from biopython/biopython#5386, which addresses
-biopython/biopython#2828.
+users of the library. The change is adopted from biopython/biopython#5386,
+which addresses biopython/biopython#2828.
 
 The "Determining atom-atom contacts" section of the Tutorial's ``Bio.PDB``
 chapter now has a worked, doctested example of ``NeighborSearch``. It builds
@@ -408,9 +406,9 @@ one from all the atoms of a structure, finds the residues near one atom of a
 residue with ``search(..., level="R")``, then the residues near any of its
 atoms, and lists every pair of residues in contact with
 ``search_all(..., level="R")``. Before, the section named the class and gave
-no example. Written by Shubhodeep Chatterjee in biopython/biopython#5380,
-which answers biopython/biopython#4652; the search over all atoms of the
-residue was added by the fork.
+no example. Shubhodeep Chatterjee wrote the example in
+biopython/biopython#5380, which answers biopython/biopython#4652; the fork
+added the search over all atoms of the residue.
 
 The ``get_ca_list``, ``get_tau_list`` and ``get_theta_list`` methods of a
 ``Bio.PDB`` ``Polypeptide`` no longer fail with a bare ``KeyError: 'CA'`` when
@@ -442,8 +440,8 @@ version 3 CEL file that ends inside its ``[CEL]`` header now raises
 ``ValueError`` rather than a bare ``StopIteration``, and one with a malformed
 second header line now says it failed to parse the file. ``Compass.read``,
 ``GenePop.read`` and the ``"alignace"`` motif parser now also accept a plain
-list of lines. ``Ace.read`` given a filename instead of a handle (never
-supported) now fails with ``AttributeError`` rather than ``ValueError``.
+list of lines. ``Ace.read`` given a filename instead of a handle, which it
+never supported, now fails with ``AttributeError`` rather than ``ValueError``.
 Upstream fixed the FASTA, FASTQ, QUAL, PIR, MAF and ``Bio.Align`` parsers in
 biopython/biopython#3031, but these were still affected in Biopython 1.88; the
 issue is biopython/biopython#4926. The deprecated
@@ -454,20 +452,20 @@ issue is biopython/biopython#4926. The deprecated
 version 3 CEL file does not hold exactly 12 subfields. The check was meant to
 do this all along, but built the error without raising it, so a malformed
 header gave a bare ``IndexError``, or a misleading ``int()`` or ``float()``
-error from a value read out of the wrong field. This is the behaviour change:
-a header with extra subfields used to be accepted, and is now rejected,
+error from a value read out of the wrong field. The behaviour change is that
+a header with extra subfields used to be accepted and is now rejected,
 because the parser reads fields by fixed position and cannot know which
 field is the extra one. ``ParserError`` is a subclass of ``ValueError``, so
 code catching ``ValueError`` still works. This is an upstream defect, also in
-Biopython 1.88, found while looking at biopython/biopython#4144; a test is
-also added for that issue's own case, a scanner ID with no scanner type,
-which was already fixed by biopython/biopython#4138.
+Biopython 1.88. The fork found it while looking at biopython/biopython#4144.
+The fork also adds a test for that issue's own case, a scanner ID with no
+scanner type, which biopython/biopython#4138 already fixed.
 
 ``Bio.UniGene`` now reads NCBI's UniGene files for *Xenopus laevis*
 (``Xl.data``) and *Xenopus tropicalis* (``Str.data``), which put blank lines
 between the fields of a record. Both ``parse()`` and ``read()`` used to fail
 on them with ``ValueError: Unknown tag``. Only lines that are entirely blank
-are skipped: a line with text but no tag is still an error. ``read()`` still
+are skipped. A line with text but no tag is still an error. ``read()`` still
 reports a second record if anything, including a blank line, follows the
 ``//`` that ends the first. This is a long-standing upstream defect
 (biopython/biopython#2853), also in Biopython 1.88.
@@ -479,19 +477,19 @@ format. The title line is then just the record ID, as for an empty
 description. Before, ``SeqIO.write`` and ``SeqRecord.format`` raised a bare
 ``IndexError: list index out of range``. The fix strips the description
 before building the title line, so leading and trailing whitespace in a
-description is no longer written: this is the behaviour change. Trailing
-whitespace was already dropped on reading the file back, and leading
-whitespace either doubled the space after the ID or, for a description such
-as ``" x foo"`` on a record with ID ``x``, put a space straight after the
-``>`` or ``@``, so a tool that takes the ID to be the text up to the first
-space would read a blank ID. Only whitespace at the ends of a description is
-affected; spacing inside it is written as before.
-The shared ``clean()`` method of the writer classes is unchanged, so other
-formats and third-party writers built on it behave as before. This is an
-upstream defect, also in Biopython 1.88 and still in upstream's development
-code, reported as biopython/biopython#1624; the fix is our own, as the
-earlier attempt, biopython/biopython#1625, was closed unmerged and no longer
-applies to today's code.
+description is no longer written. This is the behaviour change. Trailing
+whitespace was already dropped on reading the file back. Leading whitespace
+either doubled the space after the ID or, for a description such as
+``" x foo"`` on a record with ID ``x``, put a space straight after the ``>``
+or ``@``, so a tool that takes the ID to be the text up to the first space
+would read a blank ID. Only whitespace at the ends of a description is
+affected; spacing inside it is written as before. The shared ``clean()``
+method of the writer classes is unchanged, so other formats and third-party
+writers built on it behave as before. This is an upstream defect, also in
+Biopython 1.88 and still in upstream's development code, reported as
+biopython/biopython#1624. The fix is the fork's own, as the earlier attempt,
+biopython/biopython#1625, was closed unmerged and no longer applies to
+today's code.
 
 ``Bio.SeqIO`` now reads GenBank files whose DEFINITION line is literally
 ``<unknown description>.`` (which Geneious writes for a sequence with no
@@ -513,20 +511,20 @@ URL got ``/pub/pdb`` added after the server, so this gave "404 Not Found"
 for everything. A server given as a bare host, such as the default
 ``"https://files.wwpdb.org"`` or ``"https://ftp.pdbj.org"``, still has
 ``/pub/pdb`` added, so existing code keeps working. A server given with a
-path is now taken to be the archive itself: this is the behaviour change.
+path is now taken to be the archive itself. This is the behaviour change.
 It only affects a server with a path whose archive sits in ``/pub/pdb``
 below that path, such as a local copy of the wwPDB tree served below
 ``http://host/mirror``; pass ``"http://host/mirror/pub/pdb"`` instead. The
-same goes for a ``file://`` URL, which always has a path. We judged that
-rarer than wanting the EBI mirror, which could not work at all, and naming
+same goes for a ``file://`` URL, which always has a path. The fork judged
+that rarer than wanting the EBI mirror, which could not work at all. Naming
 the archive in full, as in ``"https://files.wwpdb.org/pub/pdb"``, now also
 works rather than doubling the path. A trailing slash on the server no
 longer gives a double slash in every URL. This is an upstream defect, also
 in Biopython 1.88 and still in upstream's development code, reported as
-biopython/biopython#3987; the fix is our own, as neither of the earlier
-attempts, biopython/biopython#5157 and biopython/biopython#5268, agrees to
-the licence: #5157 has no licence statement and #5268 leaves its box
-unticked.
+biopython/biopython#3987. The fix is the fork's own, as neither of the
+earlier attempts, biopython/biopython#5157 and biopython/biopython#5268,
+agrees to the licence. #5157 has no licence statement and #5268 leaves its
+box unticked.
 
 ``Bio.PDB.MMCIFParser`` and ``FastMMCIFParser`` now raise
 ``PDBConstructionException`` when a residue number is not an integer, such as
@@ -536,8 +534,8 @@ and the atom serial, and points at ``auth_residues=False`` to number residues
 by ``_atom_site.label_seq_id`` instead. They used to fail with a bare
 ``ValueError`` from ``int()`` that said none of this. Code catching
 ``ValueError`` still works, because ``PDBConstructionException`` is a subclass
-of it. Such files still cannot be read with the author numbering: residue
-numbers in ``Bio.PDB`` are integers, and insertion codes are read from
+of it. Such files still cannot be read with the author numbering, because
+residue numbers in ``Bio.PDB`` are integers and insertion codes are read from
 ``_atom_site.pdbx_PDB_ins_code``. This is a long-standing upstream defect
 (biopython/biopython#2259), also in Biopython 1.88.
 
@@ -552,7 +550,7 @@ now gives an empty record, as any file with no motifs now does.
 Files with the section before their first motif, which is where the format
 puts it, are read exactly as before. One malformed case changes: a
 background section placed after a motif used to make the parser skip every
-motif before it, silently; now all motifs are kept, and that late section is
+motif before it, silently. Now all motifs are kept, and that late section is
 ignored, so the background is uniform. This is an upstream defect, also in
 Biopython 1.88 and still in upstream's development code; the fix is Gert
 Hulselmans', from the unmerged biopython/biopython#5194. See ``ADOPTED.md``.
@@ -560,24 +558,23 @@ Hulselmans', from the unmerged biopython/biopython#5194. See ``ADOPTED.md``.
 ``Bio.KEGG.REST`` now matches the current KEGG REST API. ``kegg_conv``
 converts given entries to any database, including an organism, as in
 ``kegg_conv("eco", "ncbi-geneid:948364")`` or ``kegg_conv("genes",
-"ncbi-geneid:948364")``, and accepts ``ncbi-proteinid`` and ``chebi``; all of
+"ncbi-geneid:948364")``, and accepts ``ncbi-proteinid`` and ``chebi``. All of
 these raised ``ValueError`` before, as did ``kegg_conv("compound", "chebi")``,
 because of a typo. ``kegg_list`` takes a new ``option`` argument for the
 database subsets KEGG now offers, as in ``kegg_list("genome",
 option="animals")`` or ``kegg_list("genome", option="562")`` for a taxonomy
-ID; ``kegg_find`` accepts the ``"nop"`` option for any database,
-``kegg_get`` the ``"conf"``
-option, and ``kegg_link`` the taxonomy options ``"species"`` to
-``"phylum"``. Some calls KEGG no longer
-answers now raise ``ValueError`` before any request is sent, instead of an
-HTTP error from the server or an empty result: ``kegg_list("module", org)``,
-any ``option`` of ``kegg_conv`` (KEGG withdrew its RDF output), ``ncbi-gi`` in
-``kegg_conv``, as a database or in entries such as ``"ncbi-gi:4507949"`` (use
-``ncbi-proteinid``), ``kegg_conv`` between a gene and a chemical database,
-such as ``kegg_conv("pubchem", "hsa")``, and RDF options of ``kegg_link`` for
-targets other than ``drug`` (or ``dr``), ``atc`` and ``jtc``. ``kegg_list`` now also
+ID. ``kegg_find`` accepts the ``"nop"`` option for any database, ``kegg_get``
+the ``"conf"`` option, and ``kegg_link`` the taxonomy options ``"species"`` to
+``"phylum"``. Some calls KEGG no longer answers now raise ``ValueError``
+before any request is sent, instead of an HTTP error from the server or an
+empty result: ``kegg_list("module", org)``, any ``option`` of ``kegg_conv``
+(KEGG withdrew its RDF output), ``ncbi-gi`` in ``kegg_conv``, as a database or
+in entries such as ``"ncbi-gi:4507949"`` (use ``ncbi-proteinid``),
+``kegg_conv`` between a gene and a chemical database, such as
+``kegg_conv("pubchem", "hsa")``, and RDF options of ``kegg_link`` for targets
+other than ``drug`` (or ``dr``), ``atc`` and ``jtc``. ``kegg_list`` now also
 refuses more than 100 entries joined with ``"+"`` in a string, as it already
-did for a list: KEGG silently returns only the first 100. This is a
+did for a list, because KEGG silently returns only the first 100. This is a
 long-standing upstream defect (biopython/biopython#729), also in Biopython
 1.88; the ``find``, ``get``, ``link`` and ``info`` changes are Arata Synqa
 Bando's, from the unmerged biopython/biopython#5255, and the ``conv`` and
@@ -586,13 +583,13 @@ Bando's, from the unmerged biopython/biopython#5255, and the ``conv`` and
 ``BioSQL`` now works with the pure-Python MySQL driver PyMySQL, through
 ``BioSeqDatabase.open_database(driver="pymysql", ...)``. It could connect
 before, but could not load the BioSQL schema (``load_database_sql`` raised
-``ValueError: Module pymysql not supported by the loader.``), and loading
-records into an existing schema failed with MySQL error 1064 on the
+``ValueError: Module pymysql not supported by the loader.``). Loading records
+into an existing schema also failed, with MySQL error 1064 on the
 double-quoted ``"rank"`` column, because the ``ANSI_QUOTES`` SQL mode was set
 only for ``MySQLdb`` and ``mysql.connector``. PyMySQL is now treated like
 those two drivers, except that it is given the DB-API keywords ``database``
-and ``password``: it deprecates the ``db`` and ``passwd`` aliases that
-``MySQLdb`` uses. As before, ``open_database`` accepts either spelling and
+and ``password``, because it deprecates the ``db`` and ``passwd`` aliases
+that ``MySQLdb`` uses. As before, ``open_database`` accepts either spelling and
 passes on the one the driver wants. Other drivers are unchanged. This is an
 upstream defect (biopython/biopython#4291, reported by jmzhuzhonghua), also
 in Biopython 1.88 and still in upstream's development code; the fix is
@@ -600,19 +597,20 @@ Xinxiang Wang's, from the unmerged biopython/biopython#5233, less its change
 to the keywords. See ``ADOPTED.md``.
 
 ``Seq({}, length=N)``, a sequence of known length built from an empty
-dictionary of defined regions, now behaves exactly like ``Seq(None,
-length=N)``: a sequence whose content is entirely undefined. It was built as a
-partially defined sequence with no defined regions, which nothing else in
-``Bio.Seq`` expects, so adding it to another sequence raised ``IndexError``,
-multiplying it raised ``UnboundLocalError``, and printing it said the content
-was "only partially defined". Now ``Seq({}, length=4) + Seq("ACGT")`` gives
-``Seq({4: 'ACGT'}, length=8)``, multiplying or printing it raises
-``UndefinedSequenceError`` as for ``Seq(None, length=4)``, and its ``repr`` is
-``Seq(None, length=4)`` rather than ``Seq({}, length=4)``. ``Seq({},
-length=0)`` is still the empty sequence ``Seq('')``. This is an upstream
-defect (biopython/biopython#5329, reported by Aniruddha Adak), also in
-Biopython 1.88 and still in upstream's development code; the fix is Zehao
-Wang's, from the unmerged biopython/biopython#5362. See ``ADOPTED.md``.
+dictionary of defined regions, now behaves exactly like
+``Seq(None, length=N)``, a sequence whose content is entirely undefined. It
+was built as a partially defined sequence with no defined regions, which
+nothing else in ``Bio.Seq`` expects. So adding it to another sequence raised
+``IndexError``, multiplying it raised ``UnboundLocalError``, and printing it
+said the content was "only partially defined". Now
+``Seq({}, length=4) + Seq("ACGT")`` gives ``Seq({4: 'ACGT'}, length=8)``,
+multiplying or printing it raises ``UndefinedSequenceError`` as for
+``Seq(None, length=4)``, and its ``repr`` is ``Seq(None, length=4)`` rather
+than ``Seq({}, length=4)``. ``Seq({}, length=0)`` is still the empty sequence
+``Seq('')``. This is an upstream defect (biopython/biopython#5329, reported
+by Aniruddha Adak), also in Biopython 1.88 and still in upstream's
+development code; the fix is Zehao Wang's, from the unmerged
+biopython/biopython#5362. See ``ADOPTED.md``.
 
 The EMBL parser now reads ``DT`` (date) lines, so a record read with
 ``SeqIO`` in format ``"embl"`` or ``"imgt"`` has a ``date`` annotation, as a
@@ -642,45 +640,46 @@ read as before. Through ``Bio.Phylo`` such a name comes back quoted, as
 ``next_word`` method of ``Bio.Nexus.Nexus.CharBuffer`` gains an optional
 ``extra_chars`` argument, punctuation to keep inside a word, which defaults to
 none. A name with an unquoted hyphen in a ``MATRIX`` row is still split at
-the hyphen: reading either fails with ``Matrix Nchar ... does not match data
-length`` or, when the lengths happen to agree, silently gives the taxon
-``dog`` with ``-cat`` prepended to its data. This is an
-upstream defect (biopython/biopython#1022, reported by Tyghe Vallard), also in
-Biopython 1.88 and still in upstream's development code. The fix is Xinxiang
-Wang's, from the unmerged biopython/biopython#5278; see ``ADOPTED.md``.
+the hyphen. Reading the file then either fails with
+``Matrix Nchar ... does not match data length`` or, when the lengths happen to
+agree, silently gives the taxon ``dog`` with ``-cat`` prepended to its data.
+This is an upstream defect (biopython/biopython#1022, reported by Tyghe
+Vallard), also in Biopython 1.88 and still in upstream's development code.
+The fix is Xinxiang Wang's, from the unmerged biopython/biopython#5278; see
+``ADOPTED.md``.
 
 ``Bio.PDB`` structures, models, chains and residues have a new
-``radius_of_gyration`` method. It gives the radius of gyration in Angstroms:
-the root-mean-square distance of the atoms from their center of mass, each
-atom weighted by its mass, or equally with ``geometric=True``. It takes the
-same atoms as ``center_of_mass``, so every alternative location of a
-disordered atom or residue counts in full. For ``1GBT.cif`` in the test suite
-it gives 16.27. Both methods now raise ``ValueError`` for an entity whose
-children hold no atoms, such as a structure whose only model is empty, as
-they already did for an entity with no children; ``center_of_mass`` raised
-``IndexError: pop from an empty deque``, so only code that caught that
-``IndexError`` is affected. That is an upstream defect, also in Biopython
-1.88 and still in upstream's development code. The method is Yiyabo's, from
-the unmerged biopython/biopython#5279, which answers Anika Dureja's request in
-biopython/biopython#5257; the ``ValueError`` and a working docstring example
-are this fork's corrections. See ``ADOPTED.md``.
+``radius_of_gyration`` method. It gives the radius of gyration in Angstroms.
+This radius is the root-mean-square distance of the atoms from their center
+of mass, each atom weighted by its mass, or equally with ``geometric=True``.
+It takes the same atoms as ``center_of_mass``, so every alternative location
+of a disordered atom or residue counts in full. For ``1GBT.cif`` in the test
+suite it gives 16.27. Both methods now raise ``ValueError`` for an entity
+whose children hold no atoms, such as a structure whose only model is empty,
+as they already did for an entity with no children. Before,
+``center_of_mass`` raised ``IndexError: pop from an empty deque``, so only
+code that caught that ``IndexError`` is affected. That is an upstream defect,
+also in Biopython 1.88 and still in upstream's development code. The method
+is Yiyabo's, from the unmerged biopython/biopython#5279, which answers Anika
+Dureja's request in biopython/biopython#5257; the ``ValueError`` and a
+working docstring example are this fork's corrections. See ``ADOPTED.md``.
 
 ``Bio.Phylo`` now writes Newick trees of any depth, unless the ``ladderize``
 option is given. ``Phylo.write`` with format ``"newick"``, and so
 ``Phylo.convert`` to Newick and ``tree.format("newick")``, built the tree text
-with a function that called itself once for each level of nesting, so a tree
+with a function that called itself once for each level of nesting. So a tree
 more than about 500 levels deep, such as a long caterpillar, raised
 ``RecursionError``, although ``Phylo.read`` reads trees of any depth. The
 writer now keeps its own stack of the clades still to write, and its output is
-unchanged. Two cases still recurse elsewhere, so they now work to about 1000
-levels rather than 500, but deeper trees still raise ``RecursionError``: the
-``ladderize`` option, because ``Tree.ladderize`` sorts the clades recursively
-before the tree is written, and format ``"nexus"``, which goes through the
-same writer but then lists the tips for the ``TaxLabels`` line with a
-recursive traversal. This is an upstream defect, also in Biopython 1.88 and
-still in upstream's development code. The fix is Tony Tung's, from the
-unmerged biopython/biopython#3022, written after Nextstrain's augur hit it
-(nextstrain/augur#328). See ``ADOPTED.md``.
+unchanged. Two cases still recurse elsewhere: the ``ladderize`` option,
+because ``Tree.ladderize`` sorts the clades recursively before the tree is
+written, and format ``"nexus"``, which goes through the same writer but then
+lists the tips for the ``TaxLabels`` line with a recursive traversal. So
+these two cases now work to about 1000 levels rather than 500, but deeper
+trees still raise ``RecursionError``. This is an upstream defect, also in
+Biopython 1.88 and still in upstream's development code. The fix is Tony
+Tung's, from the unmerged biopython/biopython#3022, written after
+Nextstrain's augur hit it (nextstrain/augur#328). See ``ADOPTED.md``.
 
 The ``dist_pearson`` method of a ``Bio.motifs`` PSSM now raises ``ValueError``
 when either matrix has an infinite or NaN value, with a message that points to
@@ -706,24 +705,24 @@ column, and it fell into the rule for three letters, which named the first
 three letters in the order of the alphabet. So
 ``motifs.create([Seq("ACGTN"), Seq("CGTAN")]).degenerate_consensus`` gave
 ``MSKWV``, where ``V`` claims "A, C or G, but not T" for a column with no
-evidence for any letter; a motif read with format ``"pfm-four-rows"``, whose
+evidence for any letter. A motif read with format ``"pfm-four-rows"``, whose
 alphabet is ordered ``"GATC"``, gave ``D``, and other alphabets gave other
-letters. It now gives ``MSKWN``: an empty column gets ``N``, the code of a
+letters. It now gives ``MSKWN``. An empty column gets ``N``, the code of a
 column in which every letter is equally common, and ``calculate_consensus``
 already gave ``N`` for it.
 Only columns in which every value is zero change, whether they hold counts or
 scores; a column of log-odds scores that merely add up to zero is treated as
 before. A column of a position-specific scoring matrix (``motif.pssm``) whose
 letters are exactly at their background frequencies scores zero for every
-letter, so it changes too, although its counts are real: under the default
+letter, so it changes too, although its counts are real. Under the default
 uniform background, a column in which ``A``, ``C``, ``G`` and ``T`` were
 counted equally gave ``V`` (``D`` for a ``"pfm-four-rows"`` motif) from
 ``motif.pssm.degenerate_consensus``, and now gives ``N``, as
 ``motif.degenerate_consensus`` of the counts already did. The TRANSFAC writer
 ends each matrix row with the degenerate consensus, so
 ``format(motif, "transfac")`` and ``motifs.write`` now end an all-zero row
-with ``N``. Alphabets of fewer than four letters are unchanged: there the rule
-for three letters already names the whole alphabet, such as ``V`` for
+with ``N``. Alphabets of fewer than four letters are unchanged, because there
+the rule for three letters already names the whole alphabet, such as ``V`` for
 ``"ACG"``. Letters outside the alphabet are still not counted, so a column of
 ``Y`` gives ``N``, not ``Y``. This is an upstream defect
 (biopython/biopython#4988, reported by Ben Anderson), also in Biopython 1.88
@@ -748,12 +747,12 @@ A file that has its sites is read as before. This is an upstream defect
 it is given will take bytes, and raises ``ValueError("fileobj must be an
 output handle in binary mode")`` if not. A handle opened for reading, such as
 ``open(path, "rb")``, and a text handle with no ``mode`` attribute, such as
-``io.TextIOWrapper(io.BytesIO())``, used to be accepted, so writes appeared to
+``io.TextIOWrapper(io.BytesIO())``, used to be accepted. Writes appeared to
 succeed until about 64 KB had been buffered, or until ``flush()`` or
 ``close()``, which then raised ``io.UnsupportedOperation`` or ``TypeError``.
 The check writes zero bytes to the handle, as Peter Cock suggested on the
 issue, and keeps the handle's own error as the cause. Only calls that already
-failed are affected, and they now fail at once: a closed handle, or an object
+failed are affected, and they now fail at once. A closed handle, or an object
 with no ``write`` method, raises the same error as before, but when the writer
 is created. ``io.StringIO`` and text files opened with ``"w"`` still raise
 ``ValueError("fileobj not opened in binary mode")``, and ``io.BytesIO``,
@@ -773,7 +772,7 @@ that is not a codon alignment. The message names the columns, and points to
 ``Bio.Align.analysis.calculate_dn_ds`` for its dN and dS. Such alignments
 raised ``IndexError`` or ``TypeError``, or ``ValueError: Sequence length is
 not a multiple of three`` for sequences whose length is a multiple of three,
-or gave results from codons out of frame: for ``AAACCC-GGGTTT--`` and
+or gave results from codons out of frame. For ``AAACCC-GGGTTT--`` and
 ``AAACCCGGGTTT---``, which have the same four codons, the ``LWL85`` method
 gave a dN of 0.165 and the ``ML`` method one of 0.135. As before, a codon
 with a gap in it is skipped, such as one that ``codonalign.build`` cuts short
@@ -781,7 +780,7 @@ at a frameshift and pads with gaps, or one that gaps split without putting the
 codons after it out of frame, which raised ``IndexError`` if it was the last
 codon. Three columns in which no codon of the reading frame (the ``rf_table``)
 starts, which a hand-made ``rf_table`` can leave against a codon of the other
-sequence, are now skipped too; they raised ``TypeError`` or ``IndexError``, or
+sequence, are now skipped too. They raised ``TypeError`` or ``IndexError``, or
 ``LWL85`` compared them as a codon. This is an upstream defect
 (biopython/biopython#4999, reported by Boxuan Li), also in Biopython 1.88 and
 still in upstream's development code.
@@ -797,8 +796,8 @@ The ``Bio.SeqIO`` GenBank writer now writes the free text of a ``COMMENT``
 before its structured comments, the tables from a line such as
 ``##Assembly-Data-START##`` to the matching ``##Assembly-Data-END##``, which
 is the order NCBI records use. The parser reads the two into separate
-annotations, ``"comment"`` and ``"structured_comment"``, and the writer put
-the tables first, so writing out a record that had both, such as a TSA or WGS
+annotations, ``"comment"`` and ``"structured_comment"``. The writer put the
+tables first, so writing out a record that had both, such as a TSA or WGS
 record with assembly details, moved its free text to the end of the
 ``COMMENT``. Reading the output back gave the same annotations, so nothing was
 lost, but the file no longer read as the original did. The parser does not
@@ -815,7 +814,7 @@ The ``Bio.SeqIO`` GenBank writer now puts a strand prefix, such as the ``ss-``
 of molecule type ``"ss-DNA"``, in columns 45 to 47 of the LOCUS line, with the
 molecule type from column 48, where the GenBank specification (section
 3.4.4.2 of the release notes), NCBI and SnapGene put them. The parser keeps
-the two together in ``record.annotations["molecule_type"]``, and the writer
+the two together in ``record.annotations["molecule_type"]``. The writer
 wrote them together from column 48, three columns to the right, so a record
 such as NCBI's phiX174 genome (``NC_001422``, ``ss-DNA``) or a SnapGene export
 (``ds-DNA``) was not written back as it was read. Molecule types with no
@@ -828,11 +827,12 @@ own check of the molecule type, and ``NA`` with a locus name too long for the
 usual columns, a path the fork's adoption of biopython/biopython#4918 missed.
 This is an upstream defect (biopython/biopython#4878, reported by Peter
 Vegh), also in Biopython 1.88 and still in upstream's development code. The
-tests are adopted from Brandon Mokrytzki's unmerged biopython/biopython#5350
-and extended to molecule types of five to seven letters, such as ``snRNA``.
-That pull request's own writer change leaves four columns for the molecule
-type, so for these it writes a LOCUS line one to three characters too long,
-which ``Bio.SeqIO`` cannot read back, and the fork does not take it.
+fork adopts the tests from Brandon Mokrytzki's unmerged
+biopython/biopython#5350 and extends them to molecule types of five to seven
+letters, such as ``snRNA``. That pull request's own writer change leaves four
+columns for the molecule type, so for these it writes a LOCUS line one to
+three characters too long, which ``Bio.SeqIO`` cannot read back. The fork
+does not take that change.
 
 ``Bio.Phylo`` no longer renames an internal clade that has both a name and a
 confidence when it writes a Newick tree. The writer put the confidence
@@ -840,8 +840,8 @@ straight after the name, so a clade named ``N1`` with a confidence of 0.9 was
 written as ``N10.90:0.5``, which reads back, with no error, as a clade named
 ``N10.90`` with no confidence. In a tree read with
 ``comments_are_confidence=True``, each named clade with a support value was
-renamed this way, ``E:0.1[99]`` being written as ``E99.00:0.1[99]``, and
-converting the PhyloXML examples in the test suite to Newick renamed the clade
+renamed this way, with ``E:0.1[99]`` written as ``E99.00:0.1[99]``.
+Converting the PhyloXML examples in the test suite to Newick renamed the clade
 ``AB`` to ``AB89.00``. Such a clade now keeps its name as its label, and its
 confidence goes in a comment after the branch length, the form of RAxML's
 branch-labels output, which ``comments_are_confidence=True`` reads:
@@ -867,33 +867,33 @@ are written, so this fork wrote its own.
 
 The GenBank and EMBL parsers now read an insertion that Ensembl writes as a
 descending pair, such as ``7..6`` for an insertion between bases 6 and 7,
-as the zero-length location ``[6:6]``, which is written back as the INSDC
-``6^7``, when the sequence has no topology or a linear one. They took the
-pair for a feature spanning the origin of a sequence that is not circular,
-so they warned and set the location to ``None``, and writing the record then
-failed with ``AttributeError``. ``SimpleLocation.fromstring`` and
-``Location.fromstring``, which the parsers call, change in the same way:
-given a length and ``circular=False``, ``"7..6"`` now returns ``[6:6]``
-where it raised ``LocationParserError``. On a circular sequence ``7..6``
-still spans the origin and covers the whole sequence, starting at base 7.
-On a sequence that is not circular, pairs further apart, such as ``8..6``,
-are still an error, and so is ``1..0``, an insertion before the first base,
-which INSDC has no way to write. Separately, the GenBank, EMBL and IMGT
-writers now raise ``ValueError`` rather than ``AttributeError`` for a
-feature whose location is ``None``, which is what the parsers leave for a
-location they cannot read. This is an upstream defect
-(biopython/biopython#4969, reported by Cazza), also in Biopython 1.88 and
-still in upstream's development code. Chris Logue's unmerged
-biopython/biopython#5206 makes the same change to the parser, apart from
-keeping ``1..0`` an error.
+when the sequence has no topology or a linear one. They read it as the
+zero-length location ``[6:6]``, which is written back as the INSDC ``6^7``.
+Before, they took the pair for a feature spanning the origin of a sequence
+that is not circular, so they warned and set the location to ``None``, and
+writing the record then failed with ``AttributeError``.
+``SimpleLocation.fromstring`` and ``Location.fromstring``, which the parsers
+call, change in the same way: given a length and ``circular=False``,
+``"7..6"`` now returns ``[6:6]`` where it raised ``LocationParserError``. On
+a circular sequence ``7..6`` still spans the origin and covers the whole
+sequence, starting at base 7. On a sequence that is not circular, pairs
+further apart, such as ``8..6``, are still an error, and so is ``1..0``, an
+insertion before the first base, which INSDC has no way to write.
+Separately, the GenBank, EMBL and IMGT writers now raise ``ValueError``
+rather than ``AttributeError`` for a feature whose location is ``None``,
+which is what the parsers leave for a location they cannot read. This is an
+upstream defect (biopython/biopython#4969, reported by Cazza), also in
+Biopython 1.88 and still in upstream's development code. Chris Logue's
+unmerged biopython/biopython#5206 makes the same change to the parser, apart
+from keeping ``1..0`` an error.
 
 The ``Bio.SeqIO`` GenBank writer now writes WGS, TSA and TLS project master
-records back as they were read. A master record has no sequence: its LOCUS
+records back as they were read. A master record has no sequence. Its LOCUS
 line gives the number of records in the project, in units of ``rc``, and it
 ends with the range of their accessions on a ``WGS``, ``WGS_SCAFLD``, ``TSA``
 or ``TLS`` line, with no ``ORIGIN`` line. The parser keeps the ranges in
 ``record.annotations`` under ``"wgs"``, ``"wgs_scafld"``, ``"tsa"`` and
-``"tls"``, but the writer wrote the unit as ``bp`` and a bare ``ORIGIN`` in
+``"tls"``. But the writer wrote the unit as ``bp`` and a bare ``ORIGIN`` in
 place of the ranges, so reading its output back lost them and turned the record
 count into a length in bases. The writer now writes ``rc`` when the sequence is
 undefined and one of these annotations is set, and writes the range lines
@@ -911,24 +911,24 @@ still writes ``bp`` and no ``TSA`` or ``TLS`` line.
 treats as the same as ``SYMBOLS="012"``. It split the quoted list at each
 space, so reading a ``datatype=standard`` matrix written that way failed with
 ``NexusError: Illegal character 1``, or with ``Symbols must be defined`` when
-a space followed the opening quote, and ``Bio.Phylo``, which reads the whole
+a space followed the opening quote. ``Bio.Phylo``, which reads the whole
 file through ``Bio.Nexus``, could not read the trees in such a file either.
 More generally, a quoted value in any of the commands that ``Bio.Nexus``
 splits into options, such as ``FORMAT`` and ``DIMENSIONS``, is now kept whole,
 quotes included, where a space or ``=`` inside the quotes broke it into
-pieces: ``EQUATE="R=(02) Y=(1)"`` now sets ``Nexus.equate`` to the whole
-quoted string, where it set it to ``"R`` and added the stray options ``"r``
-and ``y``. Unquoted values, and quoted values with no space or ``=`` in them,
-are unchanged.
+pieces. For example, ``EQUATE="R=(02) Y=(1)"`` now sets ``Nexus.equate`` to
+the whole quoted string, where it set it to ``"R`` and added the stray
+options ``"r`` and ``y``. Unquoted values, and quoted values with no space or
+``=`` in them, are unchanged.
 
 ``Bio.AlignIO``, ``Bio.SeqIO`` and ``Bio.Align`` can now read a
 ``datatype=standard`` matrix in the ``"nexus"`` format, such as a matrix of
 morphological characters, as one letter per character. Even when ``Bio.Nexus``
 could read the file, they failed with a ``TypeError``, because its rows are
 ``StandardData`` objects. A polymorphic coding such as ``(01)``, or an
-uncertain one such as ``{01}``, cannot be one letter, and replacing it by the
+uncertain one such as ``{01}``, cannot be one letter. Replacing it by the
 missing symbol or by one of its states would silently lose data, so a matrix
-holding one now raises ``ValueError`` naming the taxon and the character; a
+holding one now raises ``ValueError`` naming the taxon and the character. A
 coding of one state, such as ``(1)``, is read as that state. ``Bio.Nexus``
 still reads such a matrix and keeps every coding. These are upstream defects,
 also in Biopython 1.88 and still in upstream's development code
@@ -940,7 +940,7 @@ protein molecule type, though it can be written as FASTA or PHYLIP.
 
 ``Bio.PDB.PDBMLParser`` now reads the resolution. The parser tested each
 element it looked up for the resolution with ``if element:``, which is false
-for an XML element with no children, so ``structure.header["resolution"]`` was
+for an XML element with no children. So ``structure.header["resolution"]`` was
 ``None`` for every PDBML file, and Python 3.12 and later warn about such a
 test. It now gives the value in the file: 2.0 for ``1GBT.xml`` and 2.201 for
 ``3JQH.xml`` in the test suite, as ``MMCIFParser`` gives for the mmCIF files of
@@ -951,8 +951,8 @@ the polar angle in ``Bio.PDB.vectors.multi_coord_space``, which
 ``Bio.PDB.internal_coords`` uses, with ``arctan2`` instead of ``arccos``. Near
 the Z axis ``arccos`` lost precision, and gave zero for any polar angle below
 about 1e-8 radians. Elsewhere the two differ only by rounding error, at most
-4.4e-13 radians on nine million random vectors, but that reaches the output:
-angles written by ``write_PIC`` change in their last digits, by up to 2.3e-12
+4.4e-13 radians on nine million random vectors, but it changes the output.
+Angles written by ``write_PIC`` change in their last digits, by up to 2.3e-12
 degrees on the test structures, while the coordinates rebuilt from them are
 unchanged. Where the third atom of a hedron sits on its second, the polar
 angle is still zero. Both fixes are Michiel de Hoon's, from the unmerged
@@ -967,8 +967,8 @@ number of matches by the number of columns it compares. It left a column
 holding a skipped letter out of the matches but still counted it in the total,
 so every gap made the distance larger. In an alignment of the rows ``AC--GT``,
 ``AC--GT`` and ``ACTTGT``, every pair was 0.333 apart rather than 0, in a
-``MultipleSeqAlignment`` and a ``Bio.Align.Alignment`` alike, and ``AC--GT``
-against ``AC--GA`` gave 0.5 where ``ACGT`` against ``ACGA`` gives 0.25; the
+``MultipleSeqAlignment`` and a ``Bio.Align.Alignment`` alike. ``AC--GT``
+against ``AC--GA`` gave 0.5 where ``ACGT`` against ``ACGA`` gives 0.25. The
 scoring-matrix models, such as ``trans``, already left skipped columns out of
 both. An ``Alignment`` was spared only the columns that are gaps in every row,
 which ``Bio.Align.read`` drops. Trees that ``DistanceTreeConstructor`` builds
@@ -982,15 +982,15 @@ Barlow's, from the unmerged biopython/biopython#5365.
 window of 1, and gives the right profile for an even window. A window of 1
 raised ``ZeroDivisionError``, and now gives the scale value of each residue.
 An even window has no central residue, but the later of its two middle
-residues was counted a second time, as if it were the centre, so the profile
+residues was counted a second time, as if it were the centre. So the profile
 was not the weighted mean of the window and depended on the direction of the
 sequence. Hopp and Woods' hydrophilicity scale, ``ProtParamData.hw``, is
-averaged over six residues: ``WWWKKK`` gave 0.26 and ``KKKWWW`` gave -0.66,
-where both now give -0.20, the mean of their six values, and along the
-152-residue protein in the test suite the old profile was out by up to 0.56.
+averaged over six residues. ``WWWKKK`` gave 0.26 and ``KKKWWW`` gave -0.66,
+where both now give -0.20, the mean of their six values. Along the
+152-residue protein in the test suite, the old profile was out by up to 0.56.
 An even window now counts each residue once, with weights rising from
 ``edge`` at both ends towards 1 at the point between the two middle residues,
-such as 0.4, 0.8, 0.8, 0.4 for a window of 4 with an edge of 0.4, so with
+such as 0.4, 0.8, 0.8, 0.4 for a window of 4 with an edge of 0.4. So with
 the default edge of 1 it gives the plain mean. Every profile computed with
 an even window changes; odd windows give exactly the same values as before.
 A window of 2 with an edge of 0, which gives both residues a weight of 0,
@@ -1017,7 +1017,7 @@ differed from ``yn00``'s, and depended on which sequence came first. Each step
 now follows ``yn00``. Kappa, the transition to transversion rate ratio, is
 estimated from the sites that are non-degenerate in both sequences, and from
 the third positions of pairs of codons for the same amino acid that are
-fourfold degenerate in both, where it was estimated from the differences at
+fourfold degenerate in both. Before, it was estimated from the differences at
 all sites, with base frequencies that were not all normalised. The codon
 frequencies come from the base frequencies at each codon position (F3x4),
 where counting the codons in the two sequences gave every codon absent from
@@ -1044,7 +1044,7 @@ sites, dN and dS are now ``nan``, with a ``BiopythonWarning``, where
 least one of them. One difference from ``yn00`` is deliberate: when only one
 of the sequences has synonymous sites, the base frequencies at synonymous
 sites are taken from that sequence alone, where ``yn00`` averages them over
-both, and then can give ``nan``; the same holds for nonsynonymous sites. A
+both, and then can give ``nan``. The same holds for nonsynonymous sites. A
 codon that is both a stop codon and a sense codon, as some are in codon tables
 27, 28 and 31, is taken to be the sense codon, as ``Seq.translate`` takes it;
 ``yn00`` has none of these tables. These are upstream defects, also in
@@ -1057,9 +1057,9 @@ The ``LWL85`` method of ``Bio.Align.analysis.calculate_dn_ds`` and
 twofold degenerate sites correctly in dN and dS. In Li, Wu and Luo's method
 (1985) the transitional and transversional distances at twofold degenerate
 sites are weighted by the number of twofold degenerate sites, as PAML's
-``yn00`` does too, but both estimates weighted them by the number of fourfold
-degenerate sites instead. So dS was wrong for any pair of sequences that
-differ at a twofold degenerate site, unless they happen to have as many
+``yn00`` does too. Before, both estimates weighted them by the number of
+fourfold degenerate sites instead. So dS was wrong for any pair of sequences
+that differ at a twofold degenerate site, unless they happen to have as many
 twofold as fourfold degenerate sites, and dN was wrong too when any of those
 differences is a transversion. The error grows with the gap between the two
 counts. With more twofold than fourfold degenerate sites, as in both examples
@@ -1067,13 +1067,13 @@ below, dS came out too low: in a test with four times as many, at a quarter
 of its value. With fewer, it came out too high: in a test with three times as
 many fourfold as twofold degenerate sites, at three times its value. For the
 E. coli and Shigella pair in the Tutorial, dS goes from 0.183 to 0.225 (NG86
-gives 0.228) and dN stays at 0.0845; for the first two sequences of the EGFR
+gives 0.228) and dN stays at 0.0845. For the first two sequences of the EGFR
 codon alignment in the test suite, dN goes from 0.0203 to 0.0211 and dS from
 0.0164 to 0.0170. Every result with ``LWL85`` may change, so earlier
 ``LWL85`` estimates are worth recomputing. One older difference from
 ``yn00`` remains: each difference between two codons is classed by its
 degeneracy in the first sequence's codon only, where ``yn00`` counts half in
-each codon's class, so on real data ``LWL85`` can still disagree with
+each codon's class. So on real data ``LWL85`` can still disagree with
 ``yn00`` and depends on the order of the two sequences. The other methods,
 including the default ``NG86``, are unchanged. This is an upstream defect,
 also in Biopython 1.88 and still in upstream's development code. The fix is
@@ -1082,8 +1082,8 @@ Zijian Zeng's, from the unmerged biopython/biopython#5392.
 ``Bio.SeqUtils.IsoelectricPoint.IsoelectricPoint.pi``, and so
 ``Bio.SeqUtils.ProtParam.ProteinAnalysis.isoelectric_point``, now find the
 isoelectric point of strongly acidic and strongly basic sequences. They
-searched only between pH 4.05 and 12, and when the isoelectric point lay
-outside that range they returned the end of the range, with no warning, at a
+searched only between pH 4.05 and 12. When the isoelectric point lay
+outside that range, they returned the end of the range, with no warning, at a
 pH where the net charge is far from zero. Ten aspartates gave 4.05, where
 their charge is -4.24, and now give 3.08; ten arginines gave 12.00, where
 their charge is +4.00, and now give 12.95; short acidic peptides such as
@@ -1107,12 +1107,12 @@ axis. The rotation it returned was right, but ``get_rms()`` was not: for three
 identical points on a line 60 Å long it reported 2.82 Å and printed
 "Newton-Rhapson did not converge after 50 iterations" on standard output, and
 for points spread over the size of a protein it could be out by up to a few
-hundredths of an Å with no message at all. That message is no longer printed:
-when the Newton-Raphson iteration does not converge, the largest eigenvalue is
+hundredths of an Å with no message at all. That message is no longer printed.
+When the Newton-Raphson iteration does not converge, the largest eigenvalue is
 taken from QCP's 4×4 key matrix instead. ``get_rms()``, like the RMSD that
 ``Bio.PDB.qcprot.qcp`` returns, is now measured on the coordinates after the
-rotation returned, so it always agrees with ``get_transformed()``, rather than
-worked out from that eigenvalue. For other fits this changes the RMSD only at
+rotation returned, rather than worked out from that eigenvalue, so it always
+agrees with ``get_transformed()``. For other fits this changes the RMSD only at
 the level of rounding: in 2000 random fits with noise the rotation was
 unchanged and the RMSD moved by less than 1e-11 Å, and exact fits of points
 spread over ±100 Å now report at most 2e-11 Å where they reported up to
@@ -1120,11 +1120,11 @@ spread over ±100 Å now report at most 2e-11 Å where they reported up to
 less, where the iteration fails as well: in 500 random fits of points spread
 ±0.001 Å, the RMSD reported was too small in 348, often by most of its value,
 and at ±0.0001 Å most such errors came with no message. These RMSDs are now
-right, and the rotations are unchanged. Coordinates containing NaN or infinity now raise
-``numpy.linalg.LinAlgError``, as ``SVDSuperimposer`` does, where they used to
-give a NaN RMSD. One limit remains: points close to a line but not on it, such
-as points within 0.01 Å of a line 300 Å long, can still get a rotation
-slightly worse than the best one, by up to about 0.02 Å of RMSD, with no
+right, and the rotations are unchanged. Coordinates containing NaN or infinity
+now raise ``numpy.linalg.LinAlgError``, as ``SVDSuperimposer`` does, where
+they used to give a NaN RMSD. One limit remains. Points close to a line but
+not on it, such as points within 0.01 Å of a line 300 Å long, can still get a
+rotation worse than the best one, by up to about 0.02 Å of RMSD, with no
 warning, as before. ``get_rms()`` reports the RMSD of that fit, and
 ``Bio.SVDSuperimposer.SVDSuperimposer`` finds the best fit for such sets.
 This is an upstream defect (biopython/biopython#5368, reported by Ziqi (Adam)
@@ -1202,7 +1202,7 @@ biopython/biopython#5353 by Gheorghe Podoleanu), also in Biopython 1.88.
 ``Bio.Phylo.Consensus`` now matches clades between trees by the names of their
 tips, whatever order each tree lists its tips in. ``strict_consensus``,
 ``majority_consensus`` and so ``bootstrap_consensus`` matched them by where
-their tips came in each tree's own list of tips, so trees listing their tips in
+their tips came in each tree's own list of tips. So trees listing their tips in
 different orders, as trees of different topologies such as bootstrap
 replicates and Bayesian posterior samples usually do, got wrong support
 values, lost clades found in every tree and gained clades found in none. For
@@ -1211,10 +1211,10 @@ alignment in the test suite gave a majority-rule consensus with
 (Epsilon,Gamma) at 86.67% and (Alpha,Beta,Delta) at 80%, although no replicate
 had either, and without (Delta,Epsilon) and (Alpha,Beta,Gamma), which 27 and
 24 of the 30 had; it now has those two, at 90% and 80%. The consensus tree now
-lists the tips within each clade by name, not in the first tree's order, and a
-tie between two conflicting clades in equally many trees (possible with the
+lists the tips within each clade by name, not in the first tree's order. A tie
+between two conflicting clades in equally many trees (possible with the
 default ``cutoff=0``, and with ``cutoff=0.5`` when each is in exactly half the
-trees) is now broken by tip names, so the result no longer depends on how any
+trees) is now broken by tip names. So the result no longer depends on how any
 tree lists its tips. Trees whose tip names differ now raise ``ValueError``, as
 some already did; others gave a wrong tree or an ``IndexError``. This is an
 upstream defect (biopython/biopython#3345), also in Biopython 1.88. Marc
@@ -1226,7 +1226,7 @@ consensus had three children and one more clade would resolve it fully, so it
 left out a clade joining two of those children even when every tree had it:
 three copies of (((A,B),C),(D,E)) gave (D,E,(C,(A,B))). It now stops there
 only if every tree has three children at its root, as unrooted trees such as
-those from ``DistanceTreeConstructor.nj`` are drawn: the consensus is then
+those from ``DistanceTreeConstructor.nj`` are drawn. The consensus is then
 fully resolved as an unrooted tree, and such a clade would add a root, not a
 split. Otherwise it goes on until the tree is fully resolved or no clade left
 passes the cutoff. Biopython 1.88 and upstream master have this defect too.
@@ -1243,12 +1243,11 @@ was passed as ``seq``. For example, with
 read from its other strand, ``Tm_NN("TGCGCGCGCC", c_seq="ACGCGCGCGA")``, gave
 63.69 °C; both now give 63.69 °C. The initiation now comes from the base pairs
 that close the duplex. That is the reference state of the default dangling
-end table: Bommarito, Peyret and SantaLucia (2000), Nucleic Acids Research
+end table. Bommarito, Peyret and SantaLucia (2000), Nucleic Acids Research
 28:1929-1934, https://doi.org/10.1093/nar/28.9.1929, derived its values by
 subtracting the core duplex. This is an upstream defect
-(biopython/biopython#1277, raised by Lars-Gustav Snipen; the strand
-dependence was shown by Junhui Li and Harald Niederstätter), also in
-Biopython 1.88.
+(biopython/biopython#1277, raised by Lars-Gustav Snipen; Junhui Li and Harald
+Niederstätter showed the strand dependence), also in Biopython 1.88.
 
 The two strands now agree with no salt correction or with methods 1 to 4, and
 with method 5 (the default) for a terminal mismatch. They can still disagree
@@ -1284,8 +1283,8 @@ such as -402.09 °C for
 ``Tm_NN("ACGTACGT", c_seq="TGCATGCA", shift=8, strict=False)``.
 
 ``DistanceTreeConstructor.upgma`` in ``Bio.Phylo.TreeConstruction`` now builds
-a UPGMA tree, as its name and docstring say. It used to build a WPGMA tree:
-after joining two clusters it took the plain mean of their distances to each
+a UPGMA tree, as its name and docstring say. It used to build a WPGMA tree.
+After joining two clusters it took the plain mean of their distances to each
 other cluster, whatever their sizes, where UPGMA averages over every pair of
 sequences. The two differ once clusters of different sizes have been joined, as
 in most trees of four or more sequences, so ``upgma`` gave wrong branch lengths
@@ -1316,20 +1315,20 @@ structure it reported the right RMSD but returned a rotation that did not
 superimpose the coordinates: fitting all the atoms of PDB entry 1A8O to a copy
 turned 180 degrees about the axis (1, 2, 3) left an RMSD of about 19 Å where 0
 was reported, and fitting its mirror image left 23.6 Å where 10.2 Å, the best
-possible, was reported. The quaternion behind the rotation is now checked (it
-must be an eigenvector of QCP's 4×4 key matrix), and when the check fails the
-Kabsch SVD is used, as it already was when no quaternion could be found.
-Other fits pass the check by a wide margin, so it does not change them. The
-same check also corrects the rotation for some collinear point sets. This is
-an upstream defect (biopython/biopython#5346, reported by Ziqi (Adam) Chen),
-also in Biopython 1.88; the diagnosis and the check are Zehao Wang's, from
-the withdrawn biopython/biopython#5351.
+possible, was reported. The quaternion behind the rotation must be an
+eigenvector of QCP's 4×4 key matrix, and this is now checked. When the check
+fails, the Kabsch SVD is used, as it already was when no quaternion could be
+found. Other fits pass the check by a wide margin, so it does not change them.
+The same check also corrects the rotation for some collinear point sets. This
+is an upstream defect (biopython/biopython#5346, reported by Ziqi (Adam)
+Chen), also in Biopython 1.88; the diagnosis and the check are Zehao Wang's,
+from the withdrawn biopython/biopython#5351.
 
 ``QCPSuperimposer`` now fits in double precision whatever the type of the
 coordinates passed to ``set``, as ``set_atoms`` already did. ``Atom.coord`` is
-single precision, so an array built from it was fitted in single precision,
-where for more than about 3000 atoms (as in PDB entries 2XHE and 7DDO) the
-quaternion overflowed: the RMSD reported was about right, but the rotation
+single precision, so an array built from it was fitted in single precision.
+For more than about 3000 atoms, as in PDB entries 2XHE and 7DDO, the
+quaternion then overflowed. The RMSD reported was about right, but the rotation
 returned was all zeros. Smaller single-precision fits reported RMSDs out by
 up to about 0.02 Å for the closest fits and 2e-4 Å for others, and some
 printed a spurious "did not converge" message; they now give the same result
@@ -1344,9 +1343,10 @@ atom after the first ``TER`` of a model is now numbered one higher for each
 only the ``TER`` width changes. A ``TER`` record whose serial number would pass
 99,999 now raises ``PDBIOException``, as an atom already did, instead of
 writing a line one column too wide; with the default numbering this includes a
-model whose atoms fit only by sharing serial numbers with ``TER`` records. Fixes
-upstream issue `#1383 <https://github.com/biopython/biopython/issues/1383>`_,
-open since 2017 and also present in Biopython 1.88. Adopted from upstream pull
+model whose atoms fit only by sharing serial numbers with ``TER`` records. This
+fixes upstream issue
+`#1383 <https://github.com/biopython/biopython/issues/1383>`_, open since 2017
+and also present in Biopython 1.88. The fix is adopted from upstream pull
 request `#5391 <https://github.com/biopython/biopython/pull/5391>`_ by Rubén
 Chaves; see ``ADOPTED.md``.
 
@@ -1362,10 +1362,9 @@ as no symbol ends in a digit, it gave ``X``. So mmCIF files without
 for ``C1`` and oxygen for ``O2``. It is still a guess from the first letter, as
 it already was for ``CL12`` (carbon): ``CLA1`` now gives carbon, ``FEB2``
 fluorine and ``BRC1`` boron, where they gave ``X``. No name that gave an
-element before gives a different one now. Adopted from
-upstream pull request
-`#5366 <https://github.com/biopython/biopython/pull/5366>`_ by popcoder565,
-which fixes upstream issue
+element before gives a different one now. The change is adopted from upstream
+pull request `#5366 <https://github.com/biopython/biopython/pull/5366>`_ by
+popcoder565, which fixes upstream issue
 `#4644 <https://github.com/biopython/biopython/issues/4644>`_; see
 ``ADOPTED.md``.
 
@@ -1401,7 +1400,7 @@ so it belongs to that branch; the PhyloXML schema defines ``confidence`` as
 "the support for a clade/parent branch". Rerooting reverses the branches
 between the old root and the new one. These methods already moved the branch
 lengths along that path but left each clade's ``confidence`` (or PhyloXML
-``confidences`` list) where it was, so afterwards the values sat on the wrong
+``confidences`` list) where it was, so afterwards the values were on the wrong
 splits. For example, ``(((A,B)90:1,(C,D)80:1):1,E:1);`` rerooted on ``A`` put
 the 90 on the branch separating A alone from the other taxa and left the
 branch separating A and B from C, D and E unlabelled; that branch now carries
@@ -1441,7 +1440,7 @@ breaks are in ``HAMAP-Rule`` evidence tags. Comments stored by an earlier
 version, for example in a BioSQL database, will not match newly parsed ones,
 and code that searches for the split form, such as ``HAMAP- Rule``, will no
 longer find it. The parser already joined wrapped reference titles and feature
-descriptions this way. Upstream issue
+descriptions this way. See upstream issue
 `#4521 <https://github.com/biopython/biopython/issues/4521>`_.
 
 The GenBank, EMBL and IMGT writers now write a qualifier that takes no value,
@@ -1499,27 +1498,27 @@ each package or its own submodules define. 43 names that 17 packages merely
 import from elsewhere in ``Bio`` are gone from their ``__all__`` lists, which
 completes the pruning of standard-library and NumPy names that 1.88 began.
 No attribute is removed: ``Bio.Align.Seq`` still works. What changes is the
-declared surface. ``from Bio.Align import *`` no longer provides ``Seq``,
+declared public API. ``from Bio.Align import *`` no longer provides ``Seq``,
 ``SeqRecord`` or ``translate``, nor ``from Bio.SeqIO import *`` ``SeqRecord``,
 nor ``from Bio.SeqUtils import *`` ``translate``; every earlier release gave
 them, since without an ``__all__`` a star import takes every public name.
 Strict type checkers (mypy ``--no-implicit-reexport``, pyright) no longer
-accept ``from Bio.Align import Seq``, which 1.88 alone had let through:
-upstream Biopython has no ``__all__`` here and never offered it. And
+accept ``from Bio.Align import Seq``, which only 1.88 had allowed.
+Upstream Biopython has no ``__all__`` here and never offered it. And
 ``Bio.Blast``, ``Bio.Entrez`` and ``Bio.TogoWS`` no longer declare the
 private decorator ``Bio._utils.function_with_previous`` as public API. The
 full list of names, and where to import each from, is in ``DEPRECATED.rst``.
 The public-exports test now rejects any name defined outside the package and
-its submodules, so none can creep back. ``Bio.PDB`` imports
+its submodules, so none can be added again. ``Bio.PDB`` imports
 ``NeighborSearch`` and ``ShrakeRupley`` unconditionally, as it already did
-``CEAligner``. The ``ImportError`` guards around the first two had stopped
-meaning anything once ``__all__`` listed them: ``ShrakeRupley`` needs the
+``CEAligner``. The ``ImportError`` guards around the first two were
+pointless once ``__all__`` listed them. ``ShrakeRupley`` needs the
 ``kdtrees`` extension, which every build compiles (as ``CEAligner`` needs
 ``ccealign``), and ``NeighborSearch`` only imports ``kdtrees`` lazily, so its
 guard never fired at all.
 
-(Entries are added here as changes land. As of 2026-10-22 the plan is to
-condense this section to a release summary when 1.89 is released.)
+(Entries are added here as changes are merged. As of 2026-10-22 the plan is
+to condense this section to a release summary when 1.89 is released.)
 
 ``Bio.Align``'s Stockholm reader now joins the blocks of an interleaved
 alignment as it reads them, rather than in a separate pass over the text, so
@@ -1538,7 +1537,7 @@ when a feature qualifier value contains a line break. The GenBank writer was
 fixed in biop-ai 1.88 (from biopython/biopython#3911), but
 ``Bio.SeqIO.write(..., "embl")`` still wrote the qualifier across two lines
 with the continuation unindented, and reading the file back raised
-``ValueError``. Each line break — LF, CR or a CRLF pair — is now replaced
+``ValueError``. Each line break, whether LF, CR or a CRLF pair, is now replaced
 with a single space, with the same ``BiopythonWarning`` naming the qualifier,
 record and feature; the record itself is not modified. The cleaning is shared
 by all the INSDC writers, so GenBank output is unchanged. This is an upstream
@@ -1568,7 +1567,7 @@ same bug.
 "gap scores must be 0 or less in local mode, but
 open_internal_insertion_score is 0.5"; a gap score function is checked as it
 is called. A positive gap score rewards inserting gaps, so the best local
-alignment is not well defined: the aligner let a local alignment start with a
+alignment is not well defined. The aligner let a local alignment start with a
 gap, but not end with one. Zero and negative gap scores work as before, as do
 positive end gap scores, which local mode does not use, and global mode.
 Biopython still accepts these scores. See ``DEPRECATED.rst``.
@@ -1589,9 +1588,9 @@ the score. Both are upstream defects, also in Biopython 1.88.
 Without a substitution matrix, ``Bio.Align.PairwiseAligner`` now treats a
 list or tuple of letters like the string of those letters, in ``score()``,
 ``align()`` and ``Alignment.counts()``. Each item became its index among the
-items seen, so the wildcard was never recognised in a list
-(``PairwiseAligner(mismatch_score=-1, wildcard="N")`` scored ``"GANT"``
-against ``"GACT"`` 3.0, but 2.0 as lists), and a list of letters never
+items seen. So the wildcard was never recognised in a list:
+``PairwiseAligner(mismatch_score=-1, wildcard="N")`` scored ``"GANT"``
+against ``"GACT"`` 3.0, but 2.0 as lists. And a list of letters never
 matched a ``str``, ``Seq``, ``bytes`` or array of code points, so every pair
 scored as a mismatch. Letters now become their code points, as in a string.
 Other items, such as words or numbers, still match by equality but can no
@@ -1640,7 +1639,7 @@ an infinite epsilon, leave traces that no alignment follows back to the
 start. Iterating over the alignments, or taking ``alignments[0]``, could
 segfault, or yield the same alignment forever while ``len(alignments)`` was
 0; ``end_deletion_score=float("-inf")`` aligning ``"AA"`` to ``"A"`` and
-``epsilon=float("inf")`` were two ways in. Those traces are now removed, so
+``epsilon=float("inf")`` were two examples. Those traces are now removed, so
 the alignments are exactly those ``len()`` counts: none where every
 alignment scores ``-inf`` or NaN, and every alignment, as ties, with an
 infinite epsilon. The score is unchanged. Upstream Biopython has the same
@@ -1658,7 +1657,7 @@ integers as they do, like a NumPy array, so it agrees with ``score()`` for
 every input they accept.
 
 ``Bio.Phylo`` now accepts any whitespace after the colon of a Newick branch
-length, as the format allows. Only one space used to work: after two spaces,
+length, as the format allows. Only one space used to work. After two spaces,
 a tab, or a line break and indentation, the length was read as the clade's
 name, with no error, so ``((a:  0.1,b:  0.2),c);`` gave leaves named ``0.1``
 and ``0.2`` and no branch lengths. On an inner clade the length replaced the
@@ -1720,7 +1719,7 @@ as needed, so the score, ``len(alignments)`` (and so ``repr()`` and
 lengths. Aligning two 20 kb sequences with ``scoring="blastn"`` took 797 MB
 and now takes 76 MB; two 30 kb sequences took 1.75 GB and now take 76 MB. The
 score, the number of alignments, and the alignments in their order are
-exactly those of the full matrix. The price is time: ``alignments[0]`` takes
+exactly those of the full matrix. In exchange, ``alignments[0]`` takes
 about 1.5 times as long as before for sequences of similar length, and up to
 about 4 times as long for a short target against a long query; ``len()``
 takes about twice as long. Going past the first alignment still builds the
@@ -1731,9 +1730,8 @@ full matrix, so for a huge alignment a ``MemoryError`` now comes from
 ``clusterdistance`` with ``method="m"`` wrote past the end of a buffer when an
 index list was longer than the matrix has rows (or columns, with
 ``transpose``), as repeated indices allow; it now takes the median over every
-listed item, repeats included, just as ``method="a"`` takes the mean, and
-raises ``MemoryError`` if the buffer for that many items cannot be allocated.
-``pca``
+listed item, repeats included, as ``method="a"`` takes the mean, and raises
+``MemoryError`` if the buffer for that many items cannot be allocated. ``pca``
 crashed on data holding an infinity, or values so large that the sum of a
 column overflows; it now raises ``ValueError``. Finite data that crashed it by
 overflowing inside the singular value decomposition now raise the
@@ -1746,7 +1744,7 @@ instead of writing past its end, and its errors for a wrongly shaped ``pc`` or
 unchanged.
 
 BinaryCIF interval quantization now reads the standard ``numSteps`` field
-and computes the step size as ``(max - min) / (numSteps - 1)``. Previously
+and computes the step size as ``(max - min) / (numSteps - 1)``. Previously,
 valid files raised ``KeyError``, and using the non-standard ``num_steps``
 field still produced incorrect values. Delta decoding now copies its input
 before modifying it, so a valid Delta followed by ByteArray encoding no
@@ -1769,7 +1767,7 @@ BioPAIthon 1.88 is the fork's first release that is not a pre-release. It is
 Biopython 1.88 plus upstream Biopython's development up to 12 October 2026,
 plus the fork's own changes. It supports Python 3.10 to 3.14, including the
 free-threaded build of Python 3.14, for which there are ``cp314t`` wheels.
-Other headline changes: the first Needleman-Wunsch alignment of two long
+Its other main changes are: the first Needleman-Wunsch alignment of two long
 sequences with linear gap scores no longer needs the whole traceback matrix;
 ``register_format`` and entry points let other packages add file formats to
 ``Bio.SeqIO`` and ``Bio.Align``; ``Bio.Align`` reads formats and layouts it
@@ -1789,8 +1787,8 @@ it runs out of memory part-way through.
 
 ``Bio.PDB.PDBList.retrieve_pdb_file`` no longer leaves an empty structure
 file behind when the download is not a valid gzip file, such as a captive
-portal's login page. That empty file used to be returned as "Structure exists"
-by every later call. A response that is not gzip, or is truncated or corrupt,
+portal's login page. Every later call used to return that empty file as
+"Structure exists". A response that is not gzip, or is truncated or corrupt,
 and a malformed server response that raises ``http.client.HTTPException``, are
 now reported as a failed download and return ``None``, like other download
 failures. So is an empty response. The file is written under a temporary
@@ -1867,7 +1865,7 @@ and the layout and any further alignments in the file are found as for
 name containing whitespace, a sequence without a name, a repeated name, or a
 dot in a sequence.
 ``Bio.Align.formats`` lists the new name. It is the first entry there that is
-not also a module name: the reader and writer are
+not also a module name. The reader and writer are
 ``RelaxedAlignmentIterator`` and ``RelaxedAlignmentWriter`` in
 ``Bio.Align.phylip``.
 
@@ -1912,8 +1910,8 @@ some rows of scores and recomputes the rest as needed, so the score,
 use memory in proportion to the sequence lengths. Aligning two 30 kb
 sequences took 892 MB and now takes 71 MB; a 1 kb read against 2 Mb took
 2 GB and now takes 81 MB. The score, the number of alignments, and the
-alignments in their order are exactly those of the full matrix. The price is
-time: ``alignments[0]`` takes 1.4 to 2 times as long as before, and ``len()``
+alignments in their order are exactly those of the full matrix. In exchange,
+``alignments[0]`` takes 1.4 to 2 times as long as before, and ``len()``
 more than twice as long. Going past the first alignment still builds the full
 matrix, so for a huge alignment a ``MemoryError`` now comes from
 ``alignments[1]`` rather than from ``align()``. Affine gap scores, local
@@ -1959,16 +1957,16 @@ extensions does so any more. Without the GIL, threads sharing a
 crash Python; this is fixed. Each ``score()``, ``align()``, ``counts()`` or
 ``str()`` call uses the aligner's settings as they were when it started, so a
 thread may change the settings while others are aligning; which calls see the
-change is not defined. One exception: sequences such as lists of letters are
-first turned into indices in Python, using the substitution matrix's alphabet,
-so if another thread changes the matrix during such a call, its result may fit
-neither matrix (it cannot crash). A ``CodonAligner`` changed while in use
-cannot crash either, but a call may then mix its old and new scores. When
-several threads set the alphabet of the same new substitution matrix, exactly
-one of them now succeeds. Builds with the GIL get two fixes from this. If
-replacing a gap function ran a finalizer that used the aligner, Python could
-crash, and a finalizer run by replacing the substitution matrix saw no matrix
-at all. Likewise, if dropping the substitution matrix ran its
+change is not defined. There is one exception. Sequences such as lists of
+letters are first turned into indices in Python, using the substitution
+matrix's alphabet, so if another thread changes the matrix during such a
+call, its result may fit neither matrix (it cannot crash). A ``CodonAligner``
+changed while in use cannot crash either, but a call may then mix its old and
+new scores. When several threads set the alphabet of the same new substitution
+matrix, exactly one of them now succeeds. Builds with the GIL get two fixes
+from this. If replacing a gap function ran a finalizer that used the aligner,
+Python could crash, and a finalizer run by replacing the substitution matrix
+saw no matrix at all. Likewise, if dropping the substitution matrix ran its
 ``__release_buffer__`` method, and that used the aligner, Python could crash.
 Such code now sees the new setting.
 
@@ -1978,7 +1976,7 @@ suite can run in parallel, with ``python -m pytest --offline -n auto`` in
 single worker. The BioSQL modules, which share a test database, all run on
 the same one, and so do the PAML modules, which share working directories.
 Modules skipped at import are reported, and checked by ``--check-skips``,
-just as in a serial run, which stays the default. Coverage is now configured
+as in a serial run, which stays the default. Coverage is now configured
 in ``pyproject.toml``, replacing ``Tests/.coveragerc``, and measures the
 ``BioSQL`` package as well as ``Bio``.
 
@@ -1987,10 +1985,10 @@ stub, so type checkers such as mypy see what its functions return instead of
 ``Any``. ``kcluster``, for example, returns an integer array of cluster ids,
 a float error and an int count. Data arguments take anything NumPy can make
 an array of, except ``somcluster``'s ``data``, which must also have a
-``shape``, as a NumPy array does: it reads ``data.shape`` before converting
-it. ``Tree`` takes a list of ``Node`` objects, and indexing one gives a
-``Bio.Cluster._cluster.Node``, the C base class of ``Bio.Cluster.Node``, as
-it does at run time. Nothing changes at run time.
+``shape``, as a NumPy array does. ``somcluster`` reads ``data.shape`` before
+converting it. ``Tree`` takes a list of ``Node`` objects, and indexing one
+gives a ``Bio.Cluster._cluster.Node``, the C base class of
+``Bio.Cluster.Node``, as it does at run time. Nothing changes at run time.
 
 ``Bio.Align``'s Stockholm reader now reads interleaved alignments, whose
 aligned sequences are split over several blocks that each list every sequence
@@ -2030,7 +2028,7 @@ sections explain where to register.
 ``sys.stdin`` fed by a pipe, or a network handle, in all of its text formats:
 every format except bigBed, bigMaf and bigPsl. Such a stream used to fail
 with ``io.UnsupportedOperation`` or ``AttributeError``. On Windows, where a
-pipe claims it can seek but cannot (CPython issue gh-86768), most formats
+pipe reports it can seek but cannot (CPython issue gh-86768), most formats
 failed with a misleading error instead, and some silently gave too few
 alignments or none. A stream that cannot seek can be read only once. Until
 every alignment has been read, ``len()`` raises ``TypeError``, which lets
@@ -2046,15 +2044,15 @@ The C extensions in ``Bio.Nexus``, ``Bio.motifs``, ``Bio.PDB`` and
 report ``from Bio.PDB.kdtrees import KDTree`` as a missing module; now they
 see what ``KDTree`` and ``Bio.PDB.ccealign.run_cealign`` take and return.
 Type-checked code may get new, correct errors, such as for
-``KDTree(coords, bucket_size=10)``: ``KDTree`` ignores keyword arguments, so
-that builds a tree with the default bucket size of 1. Nothing changes at run
-time.
+``KDTree(coords, bucket_size=10)``. ``KDTree`` ignores keyword arguments, so
+that call builds a tree with the default bucket size of 1. Nothing changes at
+run time.
 
 ``Bio.SeqFeature`` is now fully type-annotated. A feature's ``extract``
 returns a ``str`` for a ``str``, a ``Seq`` for a ``Seq`` or ``MutableSeq``,
 and a ``SeqRecord`` for a ``SeqRecord``, as it does at run time, and
 ``translate`` returns a ``Seq`` or a ``SeqRecord`` the same way. A location's
-``start`` and ``end`` are typed ``int | Any``: a position is an ``int``,
+``start`` and ``end`` are typed ``int | Any``. A position is an ``int``,
 except the rare ``UnknownPosition``, so coordinates need no narrowing before
 arithmetic. Likewise mypy asks for no ``None`` check on
 ``SeqFeature.location``. It is ``None`` only on a feature still being built,
@@ -2101,7 +2099,7 @@ Files holding one alignment read as before.
 
 The test suite is now run by pytest 9 or later, which the ``test`` extra
 installs. The tests are still written with ``unittest``, and ``python
-run_tests.py --offline`` in ``Tests/`` still works: it is now a shim that
+run_tests.py --offline`` in ``Tests/`` still works. It is now a shim that
 passes its arguments on to pytest. ``python -m pytest --offline`` works too,
 from ``Tests/`` or from the repository root. Results are reported per test
 rather than per module, and a failing docstring example shows its expected
@@ -2151,7 +2149,7 @@ Nothing changes at run time, but code checked with mypy may see new errors
 where these values were ``Any`` before.
 
 ``Bio.Medline.parse()`` again treats a line holding only whitespace, such as
-``"   \n"``, like an empty line: it ends the current record, and between
+``"   \n"``, like an empty line. It ends the current record, and between
 records it is skipped. Since Biopython 1.84 such a line was read as a field
 with an empty key. Between records it gave an extra junk ``{'': ['']}``
 record, so ``Bio.Medline.read()`` raised "More than one record found in
@@ -2165,7 +2163,7 @@ records separated by such a line still come out as one.
 ``PairwiseAligner`` no longer reads freed memory when Python code that it
 calls reconfigures it. A gap function that replaced the aligner's
 substitution matrix or gap functions partway through ``score()``,
-``align()`` or ``alignment.counts(aligner)`` could crash the interpreter or
+``align()`` or ``alignment.counts(aligner)`` could crash Python or
 silently give a wrong score, and ``str(aligner)`` could crash if a gap
 function's ``__repr__`` did the same. Each call now keeps the settings it
 started with. Each call also takes its own view of the substitution matrix,
@@ -2202,19 +2200,19 @@ feature tables, IMGT, Entrez XML and the DTDs and XML Schemas it reads,
 BinaryCIF, PDBML, COMPASS, SCOP, GEO, Affymetrix CEL and Nexus trees. The
 rest check arguments, such as a ``BetweenPosition`` that is neither of its
 ends, a negative ``offset`` for ``HSExposureCA``, or a ``track_size`` above 1
-in ``GenomeDiagram``. Under ``python -O`` these checks vanished, and bad input
-was mishandled without a word. A truncated IMGT file made the parser loop
+in ``GenomeDiagram``. Under ``python -O`` these checks were removed, and bad
+input was mishandled with no error. A truncated IMGT file made the parser loop
 forever. A CDS with two ``/translation`` qualifiers kept the second. A
 GenBank ``CONTIG`` line after the sequence was dropped. A B factor that
 rounds to -1000.0 or below shifted the columns of a written PDB file. A SCOP
-CLA file that disagreed with its DES file was merged in anyway. Each case now
-says what was expected and what was found. The ``TypeError`` cases are a
-``BranchColor`` value that is not an integer, a ``Phylogeny`` whose
-``rooted`` is not a bool, ``PhyloXMLIO.Writer`` given anything but a
+CLA file that disagreed with its DES file was merged in anyway. The error in
+each case now says what was expected and what was found. The ``TypeError``
+cases are a ``BranchColor`` value that is not an integer, a ``Phylogeny``
+whose ``rooted`` is not a bool, ``PhyloXMLIO.Writer`` given anything but a
 ``Phyloxml``, and a ``StructureAlignment`` aligner that is not a
 ``PairwiseAligner``. A phyloXML ``color`` element missing its ``red``,
 ``green`` or ``blue`` value raises ``PhyloXMLError``. One case no longer
-stops the parse at all: in a GenBank or EMBL feature table, a location with
+stops the parse at all. In a GenBank or EMBL feature table, a location with
 trailing text, such as ``1..1622abc``, is now handled like other locations
 the parser cannot read, with a ``BiopythonParserWarning`` and a feature
 location of ``None``. Slicing ``Bio.UniProt.search`` results backwards
@@ -2246,7 +2244,7 @@ the qualities of a 150 bp read about five times smaller, and holding 200,000
 such reads in memory took 312 MB instead of 514 MB. The arrays slice, reverse,
 concatenate, copy and write out like the lists, but they hold only -128 to
 127, never compare equal to a list, and cannot be added to a record whose
-qualities are a list. The default is unchanged: ``Bio.SeqIO.parse``,
+qualities are a list. The default is unchanged. ``Bio.SeqIO.parse``,
 ``Bio.SeqIO.index`` and the parsers called without ``compact`` still give
 lists.
 
@@ -2255,9 +2253,9 @@ FASTA ``-m 10``, GCG MSF, MAF and Stockholm input that ``assert`` statements
 used to check. With asserts on, such files raised a bare ``AssertionError``;
 under ``python -O``, where asserts are removed, many parsed silently into
 wrong alignments. A Stockholm sequence after the ``//`` line joined the
-alignment that line had closed, a Clustal sequence line too short in one
-block could be made up by a long one in the next, an EMBOSS line naming the
-wrong sequence was appended to the expected one, and
+alignment that line had closed. A Clustal sequence line too short in one
+block could be made up by a long one in the next. An EMBOSS line naming the
+wrong sequence was appended to the expected one.
 ``AlignIO.parse(handle, "maf", seq_count=n)`` ignored ``seq_count``. The new
 errors say what was expected and quote the offending line. The EMBOSS parser
 also now compares a line's start and end as numbers rather than strings, so a
@@ -2272,15 +2270,15 @@ could not see them and reported ``Module "Bio.Restriction" has no attribute
 ``RestrictionBatch`` or ``AllEnzymes`` either, because ``__all__`` was one
 computed expression, which mypy does not read. ``Bio.Restriction`` and
 ``Bio.Restriction.Restriction`` now have a ``__getattr__`` that only type
-checkers see, which types the enzymes as ``Any``, and ``__all__`` starts with
-a literal of the fixed names, which keep their real types. The cost is that
-any name these modules do not define is now ``Any`` to a type checker rather
-than an error. That covers a misspelt enzyme, but also, for example,
+checkers see, which types the enzymes as ``Any``. Their ``__all__`` now starts
+with a literal of the fixed names, which keep their real types. The cost is
+that any name these modules do not define is now ``Any`` to a type checker
+rather than an error. That covers a misspelt enzyme, but also, for example,
 ``from Bio.Restriction import RestrictionType``, which still fails at runtime
 because the package does not export it; import it from
-``Bio.Restriction.Restriction`` instead. Import enzymes by name: after
+``Bio.Restriction.Restriction`` instead. Import enzymes by name. After
 ``from Bio.Restriction import *`` type checkers still cannot see them, as a
-star import does not use ``__getattr__``. Nothing changes at runtime:
+star import does not use ``__getattr__``. Nothing changes at runtime.
 ``import *`` gives the same names, and ``__all__`` holds the same tuple.
 
 ``import Bio.Phylo`` no longer imports NumPy, ``Bio.Align``, ``Bio.Nexus`` or
@@ -2291,9 +2289,9 @@ failed there. PhyloXML still needs NumPy. The format modules remain reachable
 as ``Bio.Phylo.NewickIO``, ``Bio.Phylo.PhyloXML`` and so on, as before. Code
 that relied on ``import Bio.Phylo`` importing other modules as a side effect,
 such as ``Bio.Align``, ``Bio.Nexus`` or ``Bio.SeqRecord``, must now import them
-itself. The ``cdao`` format is now offered whenever rdflib is installed, so
-with an rdflib that cannot be used (older than 3.2.1, from 2012, or one that
-fails to import) reading or writing ``cdao`` raises
+itself. The ``cdao`` format is now offered whenever rdflib is installed. If
+that rdflib cannot be used, because it is older than 3.2.1, from 2012, or
+fails to import, reading or writing ``cdao`` raises
 ``MissingPythonDependencyError`` rather than ``KeyError``.
 
 Several parsers and functions that rejected bad input with a bare
@@ -2330,30 +2328,30 @@ More of ``Bio.SeqIO`` now raises ``ValueError`` instead of ``AssertionError``
 on malformed input. Twenty-six ``assert`` statements in the ABI, ACE, FASTA,
 GenBank, EMBL, PHD, PIR, SeqXML, SFF and UniProt XML parsers and writers were
 checking file content or the records being written. Under ``python -O``,
-where asserts are removed, those checks vanished and bad input was silently
-mishandled. A sequence containing a newline was written as a corrupt FASTA or
-PIR file. A location's ``ref_db``, or all but the first value of a list
-annotation such as ``organism``, was dropped from GenBank and EMBL output.
-An ACE contig with extra ``BQ`` quality values lost them without a word. Each
-case now raises ``ValueError`` saying what was expected and what was found.
-An ACE contig with too few ``BQ`` values now also raises ``ValueError``,
-instead of ``IndexError``. A UniProt XML file cut off between entries now
-raises ``xml.etree.ElementTree.ParseError``, like other malformed XML; with
-asserts on it raised ``AssertionError``, and under ``-O`` it claimed
+where asserts are removed, those checks did not run, and bad input was
+mishandled with no error. A sequence containing a newline was written as a
+corrupt FASTA or PIR file. A location's ``ref_db``, or all but the first value
+of a list annotation such as ``organism``, was dropped from GenBank and EMBL
+output. An ACE contig with extra ``BQ`` quality values lost them with no
+error. Each case now raises ``ValueError`` saying what was expected and what
+was found. An ACE contig with too few ``BQ`` values now also raises
+``ValueError``, instead of ``IndexError``. A UniProt XML file cut off between
+entries now raises ``xml.etree.ElementTree.ParseError``, like other malformed
+XML; with asserts on it raised ``AssertionError``, and under ``-O`` it claimed
 ``ValueError("Empty file.")``. The other asserts in ``Bio.SeqIO`` are internal
 invariants that valid use of the API cannot reach, and stay.
 
 ``Bio.Blast.parse`` and ``Bio.Blast.read`` now raise ``ValueError`` on
 malformed BLAST XML instead of ``AssertionError``. The parser used ``assert``
-to check file content — stray text between tags, HSP coordinates that disagree
+to check file content: stray text between tags, HSP coordinates that disagree
 with the aligned sequences or the reading frame, a strand other than ``Plus``
-or ``Minus``, an unexpected DOCTYPE or XML2 root element — so under
+or ``Minus``, and an unexpected DOCTYPE or XML2 root element. Under
 ``python -O``, where asserts are removed, such files parsed into silently wrong
 records; an XML2 ``hit-strand`` of ``minus``, for example, gave an HSP with no
 target sequence and unshifted coordinates. The new errors say what was
-expected, what was found, and on which line. ``Bio.Blast.write`` likewise
+expected, what was found, and on which line. ``Bio.Blast.write`` also now
 raises ``ValueError`` for a ``coded_by`` qualifier missing its closing
-bracket, which under ``-O`` wrote a truncated ``Hsp_hit-to``, and
+bracket, which under ``-O`` wrote a truncated ``Hsp_hit-to``.
 ``Bio.Blast.qblast`` raises it when NCBI's answer does not start the way the
 requested format should. The deprecated ``Bio.Blast.NCBIXML`` is unchanged.
 
@@ -2361,7 +2359,7 @@ requested format should. The deprecated ``Bio.Blast.NCBIXML`` is unchanged.
 ``Bio.CodonAlign``) in Biopython 1.64 in 2014, importing it has emitted a
 ``BiopythonExperimentalWarning`` saying it "may undergo significant changes
 prior to its future official release". That release never came. BioPAIthon
-now commits to the module's API as it stands: from here on it follows the
+now commits to the module's API as it stands. From here on it follows the
 normal backwards-compatibility policy, so any change goes through a
 deprecation recorded in DEPRECATED.rst. Code that filters the warning with
 ``Bio.BiopythonExperimentalWarning`` keeps working, with nothing left to
@@ -2375,13 +2373,14 @@ directly now subclass ``ValueError``, like most of the library's parse errors
 already did: ``Bio.Data.CodonTable.TranslationError``, ``Bio.Nexus``'s
 ``NexusError`` and ``TreeError``, ``Bio.Phylo``'s ``NewickError``,
 ``PhyloXMLError`` and ``NeXMLError``, ``Bio.PDB``'s
-``PDBConstructionException`` and ``Bio.CAPS.AlignmentHasDifferentLengthsError``.
-Code that catches these classes by name is unaffected. The visible change is
-that ``except ValueError`` now catches them too, for example around
-``Seq.translate()`` or a NEXUS, Newick or PDB parse. This includes the library
-itself: a function given as the search target to a ``Bio.Phylo`` tree method
-such as ``find_clades`` or ``get_path`` that raises one of these now counts as
-"no match", as other ``ValueError`` exceptions already did.
+``PDBConstructionException`` and
+``Bio.CAPS.AlignmentHasDifferentLengthsError``. Code that catches these
+classes by name is unaffected. The visible change is that ``except ValueError``
+now catches them too, for example around ``Seq.translate()`` or a NEXUS,
+Newick or PDB parse. This includes the library itself. A function given as the
+search target to a ``Bio.Phylo`` tree method such as ``find_clades`` or
+``get_path`` that raises one of these now counts as "no match", as other
+``ValueError`` exceptions already did.
 
 BioPAIthon now includes upstream Biopython's work towards 1.89 as of
 2 October 2026. The upstream section below lists only its platform support,
@@ -2404,8 +2403,8 @@ positional argument now raises ``TypeError``; see DEPRECATED.rst.
 ``Bio.Align.read``'s docstring now names its first argument ``handle``, as
 the signature always has. It said ``source``, the name ``Bio.Align.parse``
 uses, so following the documentation with ``Align.read(source=...)`` raised
-``TypeError``. Documentation only; no behaviour changes, and the keyword
-stays ``handle`` to match upstream Biopython.
+``TypeError``. This is a documentation change only. Behaviour does not
+change, and the keyword stays ``handle`` to match upstream Biopython.
 
 ``SequenceIterator.parse_id_from_header`` in ``Bio.SeqIO.Interfaces`` is now
 a documented public hook for format authors; it was marked private. Given the
@@ -2446,30 +2445,30 @@ Malformed input to the ``Bio.Align`` parsers and writers, to
 raises a ``ValueError`` saying what was expected and what was found, instead
 of a bare ``AssertionError``. These checks were ``assert`` statements, so under
 ``python -O`` most such input was silently accepted, sometimes giving wrong
-output (the Stockholm writer, for one, truncated every sequence to the length
-of a too-short ``alignment.operations``). One check in the bigBed writer's zoom
+output. The Stockholm writer, for one, truncated every sequence to the length
+of a too-short ``alignment.operations``. One check in the bigBed writer's zoom
 levels can be hit by valid input, so it is a writer bug, not bad input; it now
 raises ``RuntimeError`` like the writer's other internal checks.
 
 ``Bio.SearchIO`` now raises ``ValueError`` for malformed input it used to
 reject with ``assert``, and the checks now also run under ``python -O``, which
-strips asserts. Under ``-O`` the input was misread without complaint: a BLAT
-row whose ``qStart`` disagreed with its blocks, an Exonerate vulgar or cigar
-line whose score or IDs disagreed with the alignment header above it, an
-unknown vulgar label, a HMMER 3 domain alignment numbered out of order, a FASTA
-``-m 10`` alignment between a DNA query and a protein hit, and two BLAST XML
-``<Iteration>`` blocks sharing a line (the second query vanished from the
-index) were all accepted. The checks cover the BLAST XML indexer and the BLAT,
-Exonerate, FASTA, HMMER 2 and 3, and Infernal parsers, and each error says what
-was expected and what was found. The ``HSPFragment`` coordinate setters raise
-``TypeError`` for a coordinate that is not an ``int`` and ``ValueError`` for a
-start after its end, and ``QueryResult.absorb`` re-raises the ``ValueError``
-explaining why a ``Hit`` was refused rather than an ``AssertionError``. The
-``exonerate-text`` parser also used an ``assert`` to choose a code path, so
-under ``-O`` it failed with ``IndexError`` on ``cdna2genome`` and
-``genome2genome`` output; it now parses them. The ``infernal-text`` parser
-now reads ``--noali`` output listing a hit with no description, which used to
-fail with ``IndexError``.
+strips asserts. Under ``-O`` such input was misread with no error. All of
+these were accepted: a BLAT row whose ``qStart`` disagreed with its blocks, an
+Exonerate vulgar or cigar line whose score or IDs disagreed with the alignment
+header above it, an unknown vulgar label, a HMMER 3 domain alignment numbered
+out of order, a FASTA ``-m 10`` alignment between a DNA query and a protein
+hit, and two BLAST XML ``<Iteration>`` blocks sharing a line, which left the
+second query out of the index. The checks cover the BLAST XML indexer and the
+BLAT, Exonerate, FASTA, HMMER 2 and 3, and Infernal parsers, and each error
+says what was expected and what was found. The ``HSPFragment`` coordinate
+setters raise ``TypeError`` for a coordinate that is not an ``int`` and
+``ValueError`` for a start after its end. ``QueryResult.absorb`` re-raises the
+``ValueError`` explaining why a ``Hit`` was refused, rather than an
+``AssertionError``. The ``exonerate-text`` parser also used an ``assert`` to
+choose a code path, so under ``-O`` it failed with ``IndexError`` on
+``cdna2genome`` and ``genome2genome`` output; it now parses them. The
+``infernal-text`` parser now reads ``--noali`` output listing a hit with no
+description, which used to fail with ``IndexError``.
 
 ``Bio.PopGen.GenePop.FileParser.FileRecord`` gains a ``close()`` method and
 works as a context manager, so ``with FileParser.read(filename) as record:``
@@ -2485,7 +2484,7 @@ used to leave the file open until garbage collection, with a
 ``Bio.Nexus.Trees`` parser, which recurses once per level of nesting, so a
 tree more than about 990 levels deep, such as a long caterpillar, raised
 ``RecursionError``. The tree text now goes through ``NewickIO``, the parser
-used for Newick files, and the trees keep the values the old parser gave: a
+used for Newick files. The trees keep the values the old parser gave: a
 missing branch length is 0.0, a bare number after a clade is its branch
 length, confidences are floats, comments keep their square brackets, and
 names from a TRANSLATE table are quoted as before. Reading is also faster,
@@ -2502,8 +2501,8 @@ its double quotes and now becomes ``b"``. Malformed tree text raises
 
 ``Bio.PDB.internal_coords.MissingAtomError`` is deprecated. The module
 documentation listed it as one of its exceptions, but nothing has raised it
-since Biopython 1.80: atoms missing from a structure are tolerated, so a
-missing backbone atom breaks the chain there and angles that need a missing
+since Biopython 1.80. The module tolerates atoms missing from a structure, so
+a missing backbone atom breaks the chain there and angles that need a missing
 atom are ``None``. Importing the class now gives a
 ``BiopythonDeprecationWarning``; see DEPRECATED.rst.
 
@@ -2520,9 +2519,9 @@ argument, so ``except ValueError`` did not catch it.
 
 ``Bio.AlignIO.MafIO.MafIndex.close()`` now closes the MAF file as well as the
 SQLite index. It used to close only the index, leaving the MAF file open until
-the object was garbage collected, so the one job its docstring gives it —
-releasing handles so the file can be deleted on Windows — did not work, and a
-``ResourceWarning`` followed.
+the object was garbage collected, and a ``ResourceWarning`` followed. So the
+one job its docstring gives it, releasing handles so the file can be deleted
+on Windows, did not work.
 
 ``Bio.bgzf.BgzfWriter`` can now write data which does not compress, such as
 random bytes or already compressed content. It used to raise ``RuntimeError``
@@ -2564,8 +2563,8 @@ the ``gfa1`` parser already did for a ``*`` segment with an ``LN:i:`` tag.
 A negative length on such a segment now raises ``ValueError`` instead of
 giving length 0. An ``LN:i:`` tag, where present, still takes precedence, and
 an ``SH:H:`` checksum on a segment without sequence is kept as an annotation
-rather than verified (in both parsers it used to raise
-``UndefinedSequenceError`` when it followed an ``LN:i:`` tag).
+rather than verified. In both parsers such a checksum used to raise
+``UndefinedSequenceError`` when it followed an ``LN:i:`` tag.
 
 ``Bio.SeqUtils.GC123`` no longer raises ``ZeroDivisionError`` for a sequence
 with no A, C, G or T to count, such as an empty sequence or a run of ``N``;
@@ -2587,222 +2586,221 @@ index past the end now raises ``IndexError`` instead of returning a base
 decoded from the next record's data.
 
 ``Bio.Nexus`` no longer segfaults when the C extension ``cnexus`` cannot
-allocate its working buffer while reading a NEXUS file: it set ``MemoryError``
+allocate its working buffer while reading a NEXUS file. It set ``MemoryError``
 but then carried on and wrote through the NULL pointer. It now raises
 ``MemoryError``.
 
 The ``__all__`` declarations added to the re-exporting packages no longer
-list names the packages merely import: 45 standard-library and NumPy
-functions (``urlopen``, ``deepcopy``, ``sqrt``, ``ABC`` and friends) are
-gone from 14 packages' ``__all__``, so ``from Bio.motifs import *`` no
+list names that the packages only import. In 14 packages, ``__all__`` has
+lost 45 standard-library and NumPy functions, such as ``urlopen``,
+``deepcopy``, ``sqrt`` and ``ABC``. So ``from Bio.motifs import *`` no
 longer injects ``urlopen`` into the caller's namespace, and dropping an
 internal import can no longer count as an API break. The attributes
-themselves are unchanged; only the declared public surface shrank, and the
-public-exports test now rejects foreign names so they cannot creep back.
+themselves are unchanged; only the declared public API shrank. The
+public-exports test now rejects foreign names, so they cannot come back.
 
 ``import Bio.HMM`` now raises an informative ``ImportError`` instead of
 silently succeeding. All four of the package's modules were removed in
-Biopython 1.86, but the package itself survived as an importable docstring:
-``import Bio.HMM`` "worked" while providing nothing, and any actual use failed
-one step later without ever mentioning the removal. A GitHub code search finds
+Biopython 1.86, but the package itself stayed importable, holding only a
+docstring. ``import Bio.HMM`` "worked" while providing nothing, and any use of
+it then failed without mentioning the removal. A GitHub code search finds
 35 public files still importing it, every one already broken in effect. The
 package is now a stub raising ``ImportError`` that names the removed modules
 and points at hmmlearn, the treatment ``Bio.Alphabet`` and the command line
 wrappers already have. Code guarded with ``except ImportError`` is unaffected.
-The package deliberately still ships: its message can only reach anyone if the
+The package still ships, because its message can reach anyone only if the
 stub is installed.
 
 ``Bio.Cluster``'s ``kcluster``, ``kmedoids`` and ``somcluster`` (and the
 corresponding ``Record`` methods) accept a new optional ``rng_seed`` keyword,
 an integer between 0 and 2**64-1. Passing a seed makes the clustering
-bit-identical across runs, which finally makes these randomized algorithms
-reproducible; leaving it as ``None`` keeps the old behaviour of a random start
+bit-identical across runs, so these randomized algorithms are now
+reproducible. Leaving it as ``None`` keeps the old behaviour of a random start
 per call, now with a fresh seed drawn from the operating system's entropy
-source (``os.urandom``). Internally the C library's random number generator was replaced:
-it used to keep its state in file-scope ``static`` variables and seed itself
-via ``srand(time(0))``, so results could never be reproduced, concurrent
-clustering calls would share (and corrupt) one generator, and merely calling
-``kcluster`` silently reset the process-wide C ``rand()`` stream for everyone
-else. The generator is now xoshiro256++ with caller-owned state, so
-``Bio.Cluster`` no longer touches ``rand()`` at all — a regression test checks
+source, ``os.urandom``. Internally, the C library's random number generator
+was replaced. It used to keep its state in file-scope ``static`` variables and
+seed itself with ``srand(time(0))``. So results could never be reproduced,
+concurrent clustering calls would share one generator and corrupt it, and
+calling ``kcluster`` silently reset the process-wide C ``rand()`` stream for
+everyone else. The generator is now xoshiro256++ with caller-owned state, so
+``Bio.Cluster`` no longer uses ``rand()`` at all, and a regression test checks
 this.
 
 ``Bio.SeqIO.index`` and ``index_db`` now derive each record's key from the
 format's own parser class, instead of re-implementing the id rules inside the
-indexing machinery, so index keys cannot silently drift from the ``record.id``
-values ``Bio.SeqIO.parse`` assigns. Two formats change behaviour, both
-converging on their parser: "pir" ids keep internal spaces (the indexer used to
-truncate the id at the first word, giving a key that disagreed with the record
-it named), and pretty-printed UniProt XML files whose ``<entry>`` elements are
-indented now index correctly (the indexer used to return an empty index for
-such files without complaint). A corpus-wide test asserts index keys equal
-parsed ids for every indexable format across the test fixtures.
+indexing code. So index keys cannot diverge from the ``record.id`` values
+``Bio.SeqIO.parse`` assigns. Two formats change behaviour, and both now match
+their parser. "pir" ids keep internal spaces; the indexer used to truncate the
+id at the first word, giving a key that disagreed with the record it named.
+Pretty-printed UniProt XML files whose ``<entry>`` elements are indented now
+index correctly; the indexer used to return an empty index for such files with
+no error. A corpus-wide test asserts index keys equal parsed ids for every
+indexable format across the test fixtures.
 
 The ``Scripts/xbbtools`` directory has been removed. The xbbtools graphical
-sequence viewer, contributed by Thomas Sicheritz-Pontén in 2000, stopped being
-launchable when ``Bio.Blast.Applications`` was removed in Biopython 1.86:
+sequence viewer, contributed by Thomas Sicheritz-Pontén in 2000, could not be
+launched after ``Bio.Blast.Applications`` was removed in Biopython 1.86.
 ``xbbtools.py`` imports ``xbb_widget``, which imports ``xbb_blast``, which
-imports ``xbb_blastbg``, which imports ``Bio.Blast.Applications`` — all at
-module scope — so ``python xbbtools.py`` has raised ``ImportError`` before
-drawing a window in every release since, while still being shipped in every
-source distribution. ``nextorf.py``, a standalone ORF-finding example script
+imports ``xbb_blastbg``, which imports ``Bio.Blast.Applications``, all at
+module scope. So ``python xbbtools.py`` has raised ``ImportError`` before
+drawing a window in every release since, although every source distribution
+still shipped it. ``nextorf.py``, a standalone ORF-finding example script
 that shared the directory but not the broken import chain, still works and has
 moved to ``Scripts/nextorf.py`` alongside the other standalone scripts.
 Scripts were never part of the importable ``Bio`` API, so nothing changes for
 ``import Bio``.
 
-``Bio.PDB``'s ``MMCIFParser`` and ``FastMMCIFParser`` no longer staple
-author-scheme insertion codes onto label-scheme residue numbers when called
+``Bio.PDB``'s ``MMCIFParser`` and ``FastMMCIFParser`` no longer add
+author-scheme insertion codes to label-scheme residue numbers when called
 with ``auth_residues=False``. Label numbering (``_atom_site.label_seq_id``)
 has no insertion codes, but the parsers still read
-``_atom_site.pdbx_PDB_ins_code``, producing ids such as ``(' ', 23, 'A')`` in
-chain U of ``Tests/PDB/4ZHL.cif`` — an id that exists in neither numbering
+``_atom_site.pdbx_PDB_ins_code``. That produced ids such as ``(' ', 23, 'A')``
+in chain U of ``Tests/PDB/4ZHL.cif``, an id that exists in neither numbering
 scheme. Insertion codes are now ignored under label numbering; the default
 author numbering is unchanged. Adopted from biopython/biopython#4390 by
 Thomas Holder; see ``ADOPTED.md``.
 
 ``PairwiseAligner.warn_defaults_changed()`` has been removed. It was
-transitional plumbing added in Biopython 1.86 with the change of the default
-gap score from 0 to -1 — a one-time ``UserWarning`` describing the new
-default — and its source carried a FIXME scheduling its removal once 1.87 was
+transitional code added in Biopython 1.86 with the change of the default gap
+score from 0 to -1, and it issued a one-time ``UserWarning`` describing the
+new default. Its source carried a FIXME scheduling its removal once 1.87 was
 out. Biopython stopped calling it before 1.88 shipped, it was never
 documented, and its docstring misdescribed its return value. Code that calls
 it directly gets ``AttributeError``; deleting the call is the fix, and setting
 the gap scores explicitly is what silenced the warning anyway. See
 DEPRECATED.rst.
 
-``Bio.Phylo`` trees can now resolve polytomies: the new
+``Bio.Phylo`` trees can now resolve polytomies. The new
 ``resolve_polytomies`` method on trees and clades converts each
 multifurcation into bifurcations with branch length zero, as many downstream
 tools require. Adopted from upstream pull request
 `#4634 <https://github.com/biopython/biopython/pull/4634>`_ by Brandon Seah
-(see ``ADOPTED.md``), with the resolution built as a balanced hierarchy
-rather than a one-child-per-level chain, so that even polytomies wider than
-Python's recursion limit resolve — and the resolved tree stays shallow enough
+(see ``ADOPTED.md``), with the resolution built as a balanced hierarchy rather
+than a one-child-per-level chain. As a result, even polytomies wider than
+Python's recursion limit resolve, and the resolved tree stays shallow enough
 to validate, traverse and write back out.
 
-GenBank files whose LOCUS line declares molecule type ``NA`` — a nucleic acid
-of unspecified type, part of the GenBank specification and written by e.g.
-SnapGene exports — now parse instead of raising ``ValueError``. The scanner
-fix is adopted from upstream pull request
+GenBank files whose LOCUS line declares molecule type ``NA`` now parse
+instead of raising ``ValueError``. ``NA`` means a nucleic acid of unspecified
+type. It is part of the GenBank specification, and SnapGene exports, for
+example, write it. The scanner fix is adopted from upstream pull request
 `#4918 <https://github.com/biopython/biopython/pull/4918>`_ by Erik Whiting
-(see ``ADOPTED.md``); on top of it, the feature consumer now maps the ``NA``
+(see ``ADOPTED.md``). On top of it, the feature consumer now maps the ``NA``
 sequence type instead of failing on it, and the matching LOCUS line check in
-the GenBank writer accepts ``NA`` so such records round-trip.
+the GenBank writer accepts ``NA``, so such records round-trip.
 
-``Bio.pairwise2`` has been removed (upstream Biopython 1.88 still ships it,
-deprecated). It was deprecated in release 1.80, eight releases ago, yet its
-roughly 2,900 lines — the module, a C extension that had to compile on every
-platform and Python in CI, three test files and a tutorial chapter — were
-still built and shipped, with no consumer left inside the library. Because
-the module remains heavily imported in public code (a GitHub code search
-finds over four thousand files using it), it ships as a stub whose import
-raises ``ImportError`` naming ``Bio.Align.PairwiseAligner`` as the
-replacement, as ``Bio.Alphabet`` and the command line wrappers already do.
-The stub also warns that migration is not mechanical: ``Bio.pairwise2``'s
-default gap score is 0, while ``PairwiseAligner``'s has been -1 since 1.86,
-so match, mismatch and gap scores should be set explicitly when porting. See
-``DEPRECATED.rst``.
+``Bio.pairwise2`` has been removed. Upstream Biopython 1.88 still ships it,
+deprecated. It was deprecated in release 1.80, eight releases ago, yet its
+roughly 2,900 lines were still built and shipped, with no consumer left
+inside the library. They were the module, a C extension that had to compile
+on every platform and Python in continuous integration, three test files and
+a tutorial chapter. A GitHub code search finds over four thousand files in
+public code that use the module, so it ships as a stub whose import raises
+``ImportError`` naming ``Bio.Align.PairwiseAligner`` as the replacement, as
+``Bio.Alphabet`` and the command line wrappers already do. The stub also
+warns that migration is not mechanical. ``Bio.pairwise2``'s default gap score
+is 0, while ``PairwiseAligner``'s has been -1 since 1.86, so set match,
+mismatch and gap scores explicitly when porting. See ``DEPRECATED.rst``.
 
-``Bio.PDB.MMCIF2Dict`` — and with it ``MMCIFParser`` — is substantially
-faster. Most lines in an mmCIF file, every atom record among them, contain no
-quote and no comment character, yet each was walked character by character
-through the full CIF tokenizer. A line free of ``'``, ``"`` and ``#`` is now
-tokenized with ``str.split``; any line that could need the real tokenizer
-still gets it. Measured as the median of 15 runs, ``MMCIF2Dict`` reads
-``Tests/PDB/6WG6.cif`` in 181 ms instead of 556 ms, and
-``MMCIFParser.get_structure`` on the same file drops from 755 ms to 364 ms;
-parse output is identical on all 19 mmCIF test fixtures. A benchmark script,
-``Scripts/Performance/benchmark_mmcif_parsing.py``, is included. Adopted from
-biopython/biopython#5121 by Oz Nova; see ``ADOPTED.md``.
+``Bio.PDB.MMCIF2Dict``, and with it ``MMCIFParser``, is faster. Most lines in
+an mmCIF file, every atom record among them, contain no quote and no comment
+character, yet the full CIF tokenizer read each one character by character. A
+line free of ``'``, ``"`` and ``#`` is now tokenized with ``str.split``; any
+line that could need the real tokenizer still gets it. Measured as the median
+of 15 runs, ``MMCIF2Dict`` reads ``Tests/PDB/6WG6.cif`` in 181 ms instead of
+556 ms, and ``MMCIFParser.get_structure`` on the same file drops from 755 ms
+to 364 ms. Parse output is identical on all 19 mmCIF test fixtures. A
+benchmark script, ``Scripts/Performance/benchmark_mmcif_parsing.py``, is
+included. Adopted from biopython/biopython#5121 by Oz Nova; see
+``ADOPTED.md``.
 
 ``Bio.PDB.kdtrees`` now releases the GIL in its pure-C kernels, so KDTree
-builds and searches run concurrently across Python threads: two threads
-working on separate 100,000-point datasets measured about 1.75× the speed of
-running them serially, where previously threading gained nothing. Searching
-one shared tree from several threads at once is also safe — the tree is
-immutable after construction, each search keeps its state in per-call
-buffers, and ``neighbor_simple_search`` sorts a private copy of the point
-list instead of re-sorting the shared one (which also means it no longer
-corrupts the tree for subsequent searches). The sort itself no longer goes
-through file-scope mutable state, removing a latent data race. Results are
-unchanged; ``search``, ``neighbor_search`` and ``neighbor_simple_search``
-return the same lists as before.
+builds and searches run concurrently across Python threads. Two threads
+working on separate 100,000-point datasets ran at about 1.75 times the speed
+of running them serially, where previously threading gained nothing.
+Searching one shared tree from several threads at once is also safe. The tree
+is immutable after construction, and each search keeps its state in per-call
+buffers. ``neighbor_simple_search`` sorts a private copy of the point list
+instead of re-sorting the shared one, so it also no longer corrupts the tree
+for later searches. The sort itself no longer goes through file-scope mutable
+state, which removes a latent data race. Results are unchanged; ``search``,
+``neighbor_search`` and ``neighbor_simple_search`` return the same lists as
+before.
 
-``import Bio.SeqIO`` is roughly ten times faster (about 107 ms down to 11 ms,
-median of five ``python -X importtime`` runs on Python 3.12), because the
-per-format parser modules are now imported on first use rather than eagerly.
-Importing every format pulled in ``Bio.AlignIO`` and hence ``Bio.Align`` and
-NumPy, plus ``urllib.request`` and ``xml.sax``, whether or not the caller ever
-touched those formats. The format registries now resolve a format's module the
-first time that format is asked for, and the submodules remain reachable as
-``Bio.SeqIO.FastaIO`` and friends exactly as before. A practical consequence:
-parsing and writing FASTA (and other formats whose parsers do not need NumPy)
-now works on a machine where NumPy is not installed; alignment formats still
-raise ``MissingPythonDependencyError`` when actually used, as before.
+``import Bio.SeqIO`` is roughly ten times faster, because the per-format
+parser modules are now imported on first use rather than eagerly. Import time
+fell from about 107 ms to 11 ms, the median of five ``python -X importtime``
+runs on Python 3.12. Importing every format loaded ``Bio.AlignIO`` and
+hence ``Bio.Align`` and NumPy, plus ``urllib.request`` and ``xml.sax``,
+whether or not the caller ever used those formats. The format registries now
+resolve a format's module the first time that format is asked for, and the
+submodules remain reachable as ``Bio.SeqIO.FastaIO`` and the other format
+modules, as before. As a result, parsing and writing FASTA, and other formats
+whose parsers do not need NumPy, now works on a machine where NumPy is not
+installed. Alignment formats still raise ``MissingPythonDependencyError`` when
+used, as before.
 
 Parsing a GenBank or EMBL record whose sequence does not match the length
 declared on its LOCUS/ID line is now an error rather than a warning. A
-truncated download used to yield a ``SeqRecord`` whose ``.seq`` was silently
-shorter than the declared length, flagged only by a ``BiopythonParserWarning``
-that is easily lost in a pipeline; Biopython had relaxed this check from an
-exception to a warning in 2010. ``Bio.SeqIO`` (formats ``genbank``, ``embl``
-and ``imgt``) and ``Bio.GenBank.FeatureParser`` now raise ``ValueError``
-naming the record and the expected and found lengths. This also means a
-record whose declared length is simply wrong — the sequence itself being
-complete — no longer parses; fix the LOCUS/ID line. Two malformed-but-
-recoverable shapes still parse with a warning as before: a record whose
-sequence data is complete but which lacks the final ``//`` terminator, and a
-record with no sequence data at all.
+truncated download used to yield a ``SeqRecord`` whose ``.seq`` was shorter
+than the declared length, flagged only by a ``BiopythonParserWarning`` that is
+easily lost in a pipeline. Biopython had relaxed this check from an exception
+to a warning in 2010. ``Bio.SeqIO`` (formats ``genbank``, ``embl`` and
+``imgt``) and ``Bio.GenBank.FeatureParser`` now raise ``ValueError`` naming
+the record and the expected and found lengths. This also means a record whose
+declared length is wrong, while its sequence is complete, no longer parses;
+fix the LOCUS/ID line. Two malformed but recoverable cases still parse with a
+warning as before: a record whose sequence data is complete but which lacks
+the final ``//`` terminator, and a record with no sequence data at all.
 
 The writer helpers deprecated in Biopython 1.86 have been removed: ``as_fasta``
 and ``as_fasta_2line`` in ``Bio.SeqIO.FastaIO``, ``as_fastq``, ``as_qual``,
 ``as_fastq_solexa`` and ``as_fastq_illumina`` in ``Bio.SeqIO.QualityIO``, and
-``as_tab`` in ``Bio.SeqIO.TabIO`` — use ``format(record, "fasta")`` and
-friends instead. The deprecated ``SummaryInfo`` class is gone too; it was the
-last content of the ``Bio.Align.AlignInfo`` module, which — being widely
-imported in public code — now ships as a stub whose import raises
-``ImportError`` naming the replacement, as ``Bio.Alphabet`` and the command
-line wrappers already do. The new-style ``Alignment`` object obtained from
-``msa.alignment`` covers what it did. All of these had warned since 1.86 and
-were unused inside the library; see ``DEPRECATED.rst`` for the replacements.
+``as_tab`` in ``Bio.SeqIO.TabIO``. Use ``format(record, "fasta")`` and its
+equivalents for the other formats instead. The deprecated ``SummaryInfo``
+class is gone too. It was the last content of the ``Bio.Align.AlignInfo``
+module. Public code imports that module widely, so it now ships as a stub
+whose import raises ``ImportError`` naming the replacement, as
+``Bio.Alphabet`` and the command line wrappers already do. The new-style
+``Alignment`` object obtained from ``msa.alignment`` covers what
+``SummaryInfo`` did. All of these had warned since 1.86 and were unused
+inside the library; see ``DEPRECATED.rst`` for the replacements.
 
 ``Bio.PDB.ccealign.run_cealign`` results now share one type and can be
 pickled. Every call built a fresh ``CEAlignment`` struct-sequence type for
-each result, so two results of the same call had distinct types —
-``type(results[0]) is type(results[1])`` was ``False`` — and no result could
-be pickled, because the throwaway type could not be found again. The type is
+each result. So two results of the same call had distinct types, and
+``type(results[0]) is type(results[1])`` was ``False``. No result could be
+pickled, because the throwaway type could not be found again. The type is
 now created once, when the module is loaded, and is exposed as
 ``Bio.PDB.ccealign.CEAlignment``; every result is an instance of it. The
 module also now rejects coordinate sequences whose reported length does not
 fit the extension's arithmetic, and raises ``MemoryError`` on allocation
 failures that were previously unchecked.
 
-The optional-dependency stacks are now installable through declared extras:
+The optional dependencies are now installable through declared extras:
 ``pip install biopaithon[graphics]``, ``[biosql]``, ``[structure]``,
 ``[phylo]``, ``[all]``, or ``[test]``. Previously the package metadata declared
-only ``numpy`` and the ten or so optional packages had to be discovered and
-installed by hand. The ``test`` extra covers what the offline test suite
-exercises, and ``ci-dependencies.txt`` now just installs it, so the two cannot
-drift. The ``numpy`` requirement is also bounded to ``>=1.24,<3`` instead of
-accepting any version. Note ``[structure]`` deliberately omits ``mmtf-python``:
-RCSB shut the MMTF service down in July 2024 and ``Bio.PDB.mmtf`` is headed for
-removal.
+only ``numpy``, and users had to find and install the ten or so optional
+packages by hand. The ``test`` extra covers what the offline test suite
+exercises, and ``ci-dependencies.txt`` now only installs it, so the two cannot
+differ. The ``numpy`` requirement is also bounded to ``>=1.24,<3`` instead of
+accepting any version. ``[structure]`` omits ``mmtf-python`` because RCSB shut
+the MMTF service down in July 2024 and ``Bio.PDB.mmtf`` is due to be removed.
 
-The source distribution remains self-testing — ``Tests/`` and its data still
-ship in full — but its unpacked size has dropped by 32% (124.1 MB to 84.3 MB).
-Five orphaned fixture directories whose modules were removed years ago
-(``Tests/FSSP/``, ``Tests/CodonUsage/``, ``Tests/MetaTool/``,
-``Tests/SubsMat/`` and ``Tests/NeuralNetwork/``) are deleted, and the 40 MB
-``Tests/PDB/6WG6.xml`` is now shipped gzipped, read through ``gzip.open`` by
-its test. Continuous integration fails if either the compressed or the
-unpacked source distribution grows past a cap (40 MB and 170 MB respectively,
-about twice today's sizes), so the payload cannot silently regrow.
+The source distribution remains self-testing, because ``Tests/`` and its data
+still ship in full. Its unpacked size has dropped by 32%, from 124.1 MB to
+84.3 MB. Five orphaned fixture directories whose modules were removed years
+ago are deleted: ``Tests/FSSP/``, ``Tests/CodonUsage/``, ``Tests/MetaTool/``,
+``Tests/SubsMat/`` and ``Tests/NeuralNetwork/``. The 40 MB
+``Tests/PDB/6WG6.xml`` now ships gzipped, and its test reads it through
+``gzip.open``. Continuous integration fails if the compressed source
+distribution grows past 40 MB or the unpacked one past 170 MB, about twice
+today's sizes, so the distribution cannot grow back unnoticed.
 
 ``Bio.Pathway.System.stochiometry`` now works. Since its introduction in 2001
 the method began with ``stoch = [] * len(reactions)``, which is always the
 empty list, so the first row assignment raised ``IndexError`` for any system
-containing a reaction — the method had never returned a matrix for real input.
+containing a reaction. The method had never returned a matrix for real input.
 Two further defects hid behind that one: each row was created as the integer
 ``0`` rather than a list of zeros, and coefficients were written to
 ``stoch[species_index]`` instead of ``stoch[reaction_index][species_index]``.
@@ -2810,71 +2808,74 @@ The method now returns the matrix its docstring has always described, with
 ``stoch[i][j]`` holding the coefficient of the *j*-th species in the *i*-th
 reaction, and gains its first regression tests.
 
-``PairwiseAligner`` now fails loudly instead of overflowing when an alignment
-is too large. ``align()`` allocates an O(len(A)·len(B)) traceback matrix, and
-none of the size arithmetic was overflow-checked: in FOGSAA mode the cell
-count was even computed in C ``int``, so two sequences of ~65,536+ letters
-wrapped the multiplication, under-allocated the matrix, and corrupted the heap
-— a segfault reachable from pure Python. The matrix size is now computed in
-checked ``size_t`` arithmetic before allocation; a computation that cannot fit
-raises ``MemoryError`` naming the predicted size and both sequence lengths,
-and an allocation that fails reports the same numbers instead of a bare
-``MemoryError``. Sequences longer than the aligner's ``int`` storage can hold
-(above ``INT_MAX - 1`` letters) raise ``ValueError`` naming both lengths and
-the limit, where previously exactly ``INT_MAX`` slipped past the check into
-undefined behaviour. There is deliberately no size cap below what the platform
-can address: a machine with the memory for a huge alignment may still attempt
-it. ``score()`` keeps its linear-memory behaviour, except in FOGSAA mode,
-which inherently allocates the full matrix and gains the same guard.
+``PairwiseAligner`` now raises an error instead of overflowing when an
+alignment is too large. ``align()`` allocates an O(len(A)·len(B)) traceback
+matrix, and none of the size arithmetic was checked for overflow. In FOGSAA
+mode the cell count was even computed in C ``int``, so two sequences of about
+65,536 letters or more wrapped the multiplication, under-allocated the matrix,
+and corrupted the heap. That was a segfault reachable from pure Python. The
+matrix size is now computed in checked ``size_t`` arithmetic before
+allocation. A computation that cannot fit raises ``MemoryError`` naming the
+predicted size and both sequence lengths, and an allocation that fails reports
+the same numbers instead of a bare ``MemoryError``. Sequences longer than the
+aligner's ``int`` storage can hold (above ``INT_MAX - 1`` letters) raise
+``ValueError`` naming both lengths and the limit. Previously a sequence of
+exactly ``INT_MAX`` letters passed the check and caused undefined behaviour.
+There is no size cap below what the platform can address, so that a machine
+with the memory for a huge alignment may still attempt it. ``score()`` keeps
+its linear-memory behaviour, except in FOGSAA mode, which must allocate the
+full matrix and gains the same guard.
 
 ``Bio.GenBank.Record.Record`` no longer corrupts a WGS range that was assigned
-as a string. Biopython 1.88 taught ``Record.__str__`` to join the list of range
-endpoints the parser produces, fixing a ``TypeError``, and corrected
-``wgs_scafld``'s initial value to ``[]`` — but left ``wgs`` initialised to
+as a string. Biopython 1.88 changed ``Record.__str__`` to join the list of
+range endpoints the parser produces, fixing a ``TypeError``, and corrected
+``wgs_scafld``'s initial value to ``[]``. But it left ``wgs`` initialised to
 ``""``. Code that assigned the string the attribute had always held, such as
 ``record.wgs = "ABCD01000001-ABCD01000002"``, was then joined character by
 character into ``A-B-C-D-0-1-...``. The release's own regression test exercises
 only the parser's output, so the corruption ships silently. ``wgs`` now starts
-as ``[]``, matching ``wgs_scafld`` and what the parser assigns, and both WGS
+as ``[]``, matching ``wgs_scafld`` and what the parser assigns. Both WGS
 writers pass their value through one helper that returns an already formatted
 string unchanged and joins endpoints otherwise. Both forms round-trip, and the
 attributes are now described in the class docstring, which had never documented
 either.
 
-``Bio.Restriction.RestrictionBatch.format``'s docstring no longer promises to
-evaluate its argument. Removing ``eval`` in 1.88 — the release's security fix —
-narrowed the method to a ``RestrictionType`` or the name of one defined in the
-module, but the wording still said "If y can be evaluated to a RestrictionType",
-which describes the behaviour that was deliberately taken away. Documentation
-only; no behaviour changes.
+``Bio.Restriction.RestrictionBatch.format``'s docstring no longer says that
+the method evaluates its argument. Removing ``eval`` in 1.88, the release's
+security fix, narrowed the method to a ``RestrictionType`` or the name of one
+defined in the module. But the wording still said "If y can be evaluated to a
+RestrictionType", which describes the behaviour that the fix removed. This is
+a documentation change only; behaviour does not change.
 
-``import Bio.Seq`` is roughly 30 ms faster, and every entry point that reaches
-it benefits. ``Bio.Data.CodonTable`` builds 34 genetic codes at import, and
-each ambiguous one expanded its start and stop codon lists over the IUPAC
-ambiguity codes eagerly. That expansion was 79% of the module's import time
-(37 ms of 47 ms, in 167 calls to ``list_ambiguous_codons``), it happened for
-every table whether or not anything read it, and ``Bio.Seq`` imports the module
-unconditionally. ``AmbiguousCodonTable.start_codons`` and ``.stop_codons`` are
-now computed on first access and cached. Measured as the median of five runs of
-``python -X importtime``: ``Bio.Seq`` 52.1 ms to 21.2 ms, ``Bio.SeqIO`` 248.9 ms
-to 215.7 ms. The codon lists themselves are unchanged — all six table
-dictionaries compare byte-for-byte identical before and after.
+``import Bio.Seq`` is roughly 30 ms faster, and everything that imports it
+loads faster too. ``Bio.Data.CodonTable`` builds 34 genetic codes at import,
+and each ambiguous one expanded its start and stop codon lists over the IUPAC
+ambiguity codes eagerly. That expansion was 79% of the module's import time,
+37 ms of 47 ms, in 167 calls to ``list_ambiguous_codons``. It happened for
+every table whether or not anything read it, and ``Bio.Seq`` imports the
+module unconditionally. ``AmbiguousCodonTable.start_codons`` and
+``.stop_codons`` are now computed on first access and cached. As the median of
+five runs of ``python -X importtime``, importing ``Bio.Seq`` went from 52.1 ms
+to 21.2 ms, and importing ``Bio.SeqIO`` from 248.9 ms to 215.7 ms. The codon
+lists themselves are unchanged. All six table dictionaries compare
+byte-for-byte identical before and after.
 
 ``SimpleLocation``, ``CompoundLocation``, ``SeqFeature`` and ``Reference`` are
 hashable again, so they can be put in a set or used as a dictionary key.
 Defining ``__eq__`` without ``__hash__`` makes Python set ``__hash__`` to
-``None``, so ``set(record.features)`` — deduplicating features across
-annotation sources, or using a location as a key — failed with ``TypeError:
-unhashable type``. ``Bio.Seq`` already restores ``Seq.__hash__`` for this
-reason and ``UnknownPosition`` defines one, so this was drift rather than
-policy. ``SeqFeature``'s hash excludes its mutable ``qualifiers`` dictionary,
-and ``Reference``'s excludes its ``location`` list and its ``authors``, which
-is documented as either a string or a list; features or references differing
-only in an excluded field collide rather than compare equal.
+``None``. So ``set(record.features)``, used to deduplicate features across
+annotation sources, failed with ``TypeError: unhashable type``, and so did
+using a location as a key. ``Bio.Seq`` already restores ``Seq.__hash__`` for
+this reason and ``UnknownPosition`` defines one, so the missing hash was an
+oversight rather than policy. ``SeqFeature``'s hash excludes its mutable
+``qualifiers`` dictionary, and ``Reference``'s excludes its ``location`` list
+and its ``authors``, which is documented as either a string or a list.
+Features or references differing only in an excluded field collide rather
+than compare equal.
 
-``Bio.SearchIO``'s ``QueryResult.iteritems`` — named after the Python 2
-``dict.iteritems``, which has not existed since Python 2 — now triggers a
-``BiopythonDeprecationWarning``. It still works; use
+``Bio.SearchIO``'s ``QueryResult.iteritems`` now triggers a
+``BiopythonDeprecationWarning``. It is named after the Python 2
+``dict.iteritems``, which has not existed since Python 2. It still works; use
 ``zip(qresult.iterhit_keys(), qresult.iterhits())`` or the ``items`` property
 instead. See ``DEPRECATED.rst``.
 
@@ -2889,33 +2890,33 @@ Four-letter alphabets are unaffected.
 
 The GenBank writer no longer produces output its own parser rejects when a
 feature qualifier value contains a line break. SnapGene files can carry
-literal newlines in qualifier values and the SnapGene parser passes them
-through; ``Bio.SeqIO.write`` then emitted the qualifier across two lines with
+literal newlines in qualifier values, and the SnapGene parser passes them
+through. ``Bio.SeqIO.write`` then emitted the qualifier across two lines with
 the continuation unindented, and reading the file back raised ``ValueError``
-(upstream issue biopython/biopython#3885). Each line break — LF, CR or a
-CRLF pair — is now replaced with a single space in the output, with a
-``BiopythonWarning`` naming the qualifier, record and feature. The record
-itself is not modified by writing it. Adopted from biopython/biopython#3911
-by Erik Whiting; see ``ADOPTED.md``.
+(upstream issue biopython/biopython#3885). The writer now replaces each line
+break, whether LF, CR or a CRLF pair, with a single space in the output, and
+issues a ``BiopythonWarning`` naming the qualifier, record and feature.
+Writing does not modify the record itself. Adopted from
+biopython/biopython#3911 by Erik Whiting; see ``ADOPTED.md``.
 
 ``Bio.PDB.PDBList`` can now download structures in BinaryCIF format, and no
 longer offers MMTF. The RCSB retired the MMTF format in 2024 and took down
 ``mmtf.rcsb.org``, so ``retrieve_pdb_file(..., file_format="mmtf")`` had been
-building URLs for a host that no longer answers; it now raises ``ValueError``
+building URLs for a host that no longer answers. It now raises ``ValueError``
 naming the surviving formats. ``file_format="bcif"`` fetches
-``https://models.rcsb.org/<code>.bcif.gz`` — a format ``Bio.PDB.binary_cif``
-already parses. Adopted from biopython/biopython#4938 by Will Tyler; see
-``ADOPTED.md``.
+``https://models.rcsb.org/<code>.bcif.gz``, a format that
+``Bio.PDB.binary_cif`` already parses. Adopted from biopython/biopython#4938
+by Will Tyler; see ``ADOPTED.md``.
 
 ``Bio.PDB.HSExposureCB`` no longer abandons a whole model because one glycine
 is unusable. ``_get_cb`` returned ``self._get_gly_cb_vector(r2), 0.0``, and
-that helper returns ``None`` for a glycine missing N, C or CA — so the caller
+that helper returns ``None`` for a glycine missing N, C or CA. So the caller
 received ``(None, 0.0)``, which is not ``None``, and its "missing atoms, skip
 this residue" guard did not fire. The ``None`` was then used as a vector. On
 ``Tests/PDB/a_structure.pdb`` with the N removed from a single glycine, half
-sphere exposure was computed for 2 of 86 residues before the calculation died
-with ``AttributeError: 'NoneType' object has no attribute 'norm'``; it now
-completes for 84, skipping only the residue it cannot use. Adopted from
+sphere exposure was computed for 2 of 86 residues before the calculation
+failed with ``AttributeError: 'NoneType' object has no attribute 'norm'``; it
+now completes for 84, skipping only the residue it cannot use. Adopted from
 biopython/biopython#3812 by Dominique Sydow; see ``ADOPTED.md``.
 
 ``Bio.PDB.vectors.multi_coord_space`` no longer reads the polar angle from
@@ -2924,86 +2925,85 @@ giving ``np.divide`` an ``out=`` array, so ``np.empty`` supplied the result and
 every hedron whose second atom coincides with its first kept whatever the heap
 held there. The transform for such a hedron was therefore arbitrary rather than
 merely degenerate. The quotient is now 1 in those positions, giving a polar
-angle of zero — the value the scalar ``get_spherical_coordinates`` already
+angle of zero, the value the scalar ``get_spherical_coordinates`` already
 returns when the radius is zero. Adopted from biopython/biopython#5127 by
 Michiel de Hoon; see ``ADOPTED.md``.
 
 Thirty packages that re-export their API from their submodules now declare
-``__all__``. ``from Bio.PDB import PDBParser`` — the import the Tutorial
-teaches — is an *implicit* re-export without it, which a downstream
+``__all__``. Without it, ``from Bio.PDB import PDBParser``, the import the
+Tutorial teaches, is an *implicit* re-export, which a downstream
 ``mypy --strict`` run rejects with ``Module "Bio.PDB" does not explicitly
 export attribute "PDBParser"``. Across the thirty packages that removes 175
-such errors. Nothing changes at runtime: the public namespace of every one is
+such errors. Nothing changes at runtime. The public namespace of every one is
 identical before and after, and ``__all__`` lists exactly the non-module public
 names each package already had, so ``import *`` is unaffected. ``Bio.PDB`` no
 longer exports its private ``numpy`` alias ``np`` through ``import *``.
-``Bio.Restriction`` is deliberately excluded — its enzyme classes are
-synthesised at import and a type checker cannot see them either way, so it
-needs generated stubs rather than a list of names.
+``Bio.Restriction`` is excluded. Its enzyme classes are synthesised at import,
+and a type checker cannot see them either way, so it needs generated stubs
+rather than a list of names.
 
-The command line wrappers removed in 1.86 now explain themselves instead of
-vanishing. ``Bio.Application``, ``Bio.Align.Applications``,
+Importing a command line wrapper removed in 1.86 now raises an error that
+explains the removal. ``Bio.Application``, ``Bio.Align.Applications``,
 ``Bio.Blast.Applications``, ``Bio.Emboss.Applications``,
 ``Bio.Phylo.Applications`` and ``Bio.Sequencing.Applications`` are shipped as
 stubs whose import raises ``ImportError`` naming what the module provided and
 what to use instead, the treatment ``Bio.Alphabet`` has had since 1.78.
 Previously each raised ``ModuleNotFoundError``, which says a module is absent
 and nothing more. A GitHub code search finds roughly 5,000 public Python files
-still importing them — more, for ``Bio.Align.Applications``, than import some
-modules that were never removed. **This is a deliberate difference from
-upstream Biopython, which ships no stub for any of them.** Code guarded with
-``except ImportError`` is unaffected, since ``ModuleNotFoundError`` is a
-subclass of ``ImportError``.
+still importing them. ``Bio.Align.Applications`` alone is imported by more
+files than some modules that were never removed. **This is a deliberate
+difference from upstream Biopython, which ships no stub for any of them.**
+Code guarded with ``except ImportError`` is unaffected, since
+``ModuleNotFoundError`` is a subclass of ``ImportError``.
 
-``Bio.PDB.ccealign.run_cealign`` now checks its arguments instead of trusting
-them. A fragment size of zero walked off the end of the coordinate array and a
-coordinate entry with fewer than three values dereferenced ``NULL``, both
-segfaulting the interpreter; a fragment size larger than the input, a
-non-numeric coordinate, and a maximum gap that cannot be doubled without
-overflowing are also rejected now. Passing something that is not a sequence
-raises ``TypeError`` rather than being ignored: the result of the argument
-parse and of the length check were both discarded. Coordinates may now be
-given as tuples as well as lists, which previously raised ``SystemError`` from
-inside the extension.
+``Bio.PDB.ccealign.run_cealign`` now checks its arguments. A fragment size of
+zero indexed past the end of the coordinate array, and a coordinate entry with
+fewer than three values dereferenced ``NULL``; both segfaulted the
+interpreter. A fragment size larger than the input, a non-numeric coordinate,
+and a maximum gap that cannot be doubled without overflowing are also
+rejected now. Passing something that is not a sequence raises ``TypeError``
+rather than being ignored. The result of the argument parse and of the length
+check were both discarded. Coordinates may now be given as tuples as well as
+lists, which previously raised ``SystemError`` from inside the extension.
 
 Nine ``assert`` statements that validate parsed input have been replaced with
 explicit ``if``/``raise`` in ``Bio.ExPASy.Enzyme``, ``Bio.ExPASy.ScanProsite``,
 ``Bio.SeqIO.TabIO`` and ``Bio.motifs.alignace``. Under ``python -O`` an
-``assert`` is removed entirely, so those checks were absent exactly where
-malformed input matters most: writing a tab delimited record whose id contained
-a tab produced a corrupt file rather than an error. Adopted from
-biopython/biopython#5175 by Abdel ATIA; see ``ADOPTED.md``.
+``assert`` is removed, so those checks did not run. Writing a tab delimited
+record whose id contained a tab, for example, produced a corrupt file rather
+than an error. Adopted from biopython/biopython#5175 by Abdel ATIA; see
+``ADOPTED.md``.
 
 Malformed content met while indexing a SwissProt, UniProt XML or SFF file with
 ``Bio.SeqIO.index`` now raises ``ValueError``. Three ``assert`` statements in
 ``Bio.SeqIO._index`` were validating file content: a SwissProt record whose
 second line is not an ``AC`` line, an ``<accession>`` element split across two
 lines, and a Roche SFF index that fails part way through after record offsets
-were already taken from it. Each raised a bare ``AssertionError`` — and under
-``python -O``, where asserts are removed, the first two silently indexed the
-record under a wrong key and the third silently re-scanned the reads,
-duplicating every record the index had already supplied. The new errors name
-the offending line, and the record's offset where the code has it. The file's
-other nine asserts are internal invariants that no file content can reach, and
-stay as asserts.
+were already taken from it. Each raised a bare ``AssertionError``. Under
+``python -O``, where asserts are removed, none of them raised anything. The
+first two indexed the record under a wrong key, and the third re-scanned the
+reads, duplicating every record the index had already supplied. The new
+errors name the offending line, and the record's offset where the code has
+it. The file's other nine asserts are internal invariants that no file
+content can reach, and stay as asserts.
 
 ``Motif.calculate_consensus`` no longer raises ``UnboundLocalError`` on a
 position where every count is zero. The consensus letter was only assigned
 inside a ``count > maximum`` comparison that such a column never satisfies, and
 the degenerate-column test then divided the maximum by a zero total. An
 all-zero column now yields the undefined character, as it does for a column
-that simply fails the identity threshold. Adopted from biopython/biopython#5181
+that fails the identity threshold. Adopted from biopython/biopython#5181
 by Ernest Provo; see ``ADOPTED.md``.
 
 A non-English month abbreviation in a PDB ``HEADER`` or ``REVDAT`` line no
 longer aborts the whole parse. ``Bio.PDB.parse_pdb_header._format_date`` looked
 the month up with a bare ``list.index``, so a date such as ``08-OKT-08`` raised
-``ValueError: 'Okt' is not in list`` out of ``PDBParser.get_structure()``,
-naming neither the file nor the field, and the entire structure was lost over
-one header value. ``parse_pdb_header`` and ``_parse_pdb_header_list`` now take
-a ``permissive`` argument: when permissive they set the month to ``00`` and
-issue a ``BiopythonParserWarning`` naming the offending abbreviation, and when
-not permissive they raise a ``ValueError`` that names it. ``PDBParser`` passes
+``ValueError: 'Okt' is not in list`` out of ``PDBParser.get_structure()``. That
+error named neither the file nor the field, and the entire structure was lost
+over one header value. ``parse_pdb_header`` and ``_parse_pdb_header_list`` now
+take a ``permissive`` argument. When permissive, they set the month to ``00``
+and issue a ``BiopythonParserWarning`` naming the offending abbreviation; when
+not permissive, they raise a ``ValueError`` that names it. ``PDBParser`` passes
 its own ``PERMISSIVE`` flag through, so the default ``PDBParser()`` now warns
 and parses instead of failing. The default for ``parse_pdb_header`` itself
 remains strict, so the only behaviour change there is the clearer message.
@@ -3011,28 +3011,29 @@ remains strict, so the only behaviour change there is the clearer message.
 ``DisorderedAtom.copy()`` no longer returns a copy that reads and writes the
 original's atoms. ``DisorderedEntityWrapper.copy()`` re-adds the copied
 children but leaves ``last_occupancy`` at the value the shallow copy inherited,
-so ``disordered_add`` never found a higher occupancy and never reselected: the
+so ``disordered_add`` never found a higher occupancy and never reselected. The
 copy's ``selected_child`` still pointed into the original. Every forwarded
-attribute — ``coord`` above all — therefore came from the original, and
+attribute, ``coord`` above all, therefore came from the original, and
 ``transform()`` on the copy moved the copy's children while ``copy.coord``
 went on reporting the original's position. ``DisorderedAtom`` now overrides
 ``copy()`` and resets the selection state first. Adopted from
-biopython/biopython#3897 by Bart Grosman, with one correction: that pull
+biopython/biopython#3897 by Bart Grosman, with one correction. That pull
 request resets ``last_occupancy`` to ``0``, which would leave an atom whose
 altlocs all have occupancy ``0.00`` with no selected child at all, so this
-fork uses the ``-sys.maxsize`` sentinel ``__init__`` uses.
+fork uses the ``-sys.maxsize`` sentinel that ``__init__`` uses.
 
-``SeqRecord`` methods that derive a new record - ``__add__``, ``__radd__``,
-``upper``, ``lower``, ``reverse_complement`` and ``translate`` - no longer share
-mutable annotation values with the original. They copied the annotations
-dictionary shallowly, so list values such as ``keywords``, ``accessions``,
-``taxonomy`` and ``references`` were shared: appending to the derived record's
-``keywords`` also changed the parent's, far from where the mutation was written.
-The annotations are now deep-copied. The sequence and the features are
-unaffected, so records that share features remain to be addressed separately.
-Relatedly, a failed concatenation of per-letter annotations in ``__add__`` now
-raises a ``TypeError`` naming the offending key and the two incompatible types,
-instead of printing to stdout and re-raising a message with no detail.
+``SeqRecord`` methods that derive a new record no longer share mutable
+annotation values with the original. These methods are ``__add__``,
+``__radd__``, ``upper``, ``lower``, ``reverse_complement`` and ``translate``.
+They copied the annotations dictionary shallowly, so list values such as
+``keywords``, ``accessions``, ``taxonomy`` and ``references`` were shared:
+appending to the derived record's ``keywords`` also changed the parent's, far
+from where the mutation was written. The annotations are now deep-copied. The
+sequence and the features are unaffected, so records that share features
+remain to be addressed separately. A failed concatenation of per-letter
+annotations in ``__add__`` now raises a ``TypeError`` naming the offending key
+and the two incompatible types, instead of printing to stdout and re-raising a
+message with no detail.
 
 ``SeqRecord.upper()`` and ``SeqRecord.lower()`` no longer share per-letter
 annotation values with the original. They copied the ``letter_annotations``
@@ -3046,7 +3047,7 @@ isolates lists and arrays. A ``memoryview``, which cannot be copied, and a
 ignores the byte order a buffer declares, so on a big-endian machine the
 little-endian data of a BinaryCIF file was decoded to the wrong values. The
 decoder now converts the packed data to native order before unpacking, and
-allocates its output in native order; the helper refuses a buffer in any other
+allocates its output in native order. The helper refuses a buffer in any other
 order rather than misreading it, and says so. It also no longer rejects a
 buffer whose format string carries an explicit native byte order character,
 such as NumPy's ``"=u2"``, which it previously reported as an unexpected
@@ -3055,8 +3056,8 @@ reached from the other side.
 
 ``ProteinAnalysis.flexibility()`` now includes the actual center residue of
 each nine-residue window and includes the final complete window. This corrects
-a bug present since the method was introduced, but intentionally changes every
-previously calculated profile for sequences of at least nine residues: a
+a bug present since the method was introduced. The fix intentionally changes
+every previously calculated profile for sequences of at least nine residues: a
 sequence of length N now returns N - 8 values instead of N - 9, and the numeric
 values differ. The method remains a smoothed profile using the averaged
 normalized B-values from Vihinen et al.; it does not implement the paper's
@@ -3073,27 +3074,28 @@ accumulate the consecutive records of one protein and only yield them once a
 record for a different protein is seen, but they never yielded the records
 left over when the file ended.
 
-``Bio.SeqIO.index`` and ``Bio.SeqIO.index_db`` now reject the same malformed
-lines as ``Bio.SeqIO.parse`` does for two formats where two ``except
-ValueError`` clauses could never be reached, so the checks they guarded had no
-effect. For the ``tab`` format, blank lines are now ignored (as documented and
-as the parser has always done) rather than indexed as records keyed on the
-newline, and a line which is not exactly two tab separated fields is now
-rejected rather than indexed under a key which could not be used to read the
-record back. For the ``genbank`` format, a ``LOCUS`` line with no name now
-raises ``ValueError`` rather than ``IndexError``.
+For two formats, ``Bio.SeqIO.index`` and ``Bio.SeqIO.index_db`` now reject the
+same malformed lines as ``Bio.SeqIO.parse`` does. Two ``except ValueError``
+clauses could never be reached, so the checks they guarded had no effect. For
+the ``tab`` format, blank lines are now ignored, as documented and as the
+parser has always done, rather than indexed as records keyed on the newline.
+A line which is not exactly two tab separated fields is now rejected rather
+than indexed under a key which could not be used to read the record back. For
+the ``genbank`` format, a ``LOCUS`` line with no name now raises
+``ValueError`` rather than ``IndexError``.
 
 Three bugs have been fixed in ``Bio.Align.analysis``. The ``F1x4`` and ``F61``
 codon frequency models of ``calculate_dn_ds(..., method="ML")`` raised a
-``TypeError`` and were therefore unusable; they now work, leaving ``F3x4`` as
-the only model that ever did. The minimum spanning tree used by ``mktest`` to
-count substitutions at a site started from a mis-built set of visited nodes
-and added an edge too many, which inflated the counts at every site with three
-or more distinct codons; p-values from ``mktest`` on such alignments change as
-a result. Finally, ``mktest`` no longer raises ``ZeroDivisionError`` on an
-alignment whose contingency table has an empty cell, such as an alignment of
-identical sequences; an empty cell now contributes nothing to the G statistic,
-and a degenerate table gives a p-value of one.
+``TypeError`` and were therefore unusable, so ``F3x4`` was the only model that
+had ever worked. ``F1x4`` and ``F61`` now work. The minimum spanning tree
+used by ``mktest`` to count substitutions at a site started from a mis-built
+set of visited nodes and added an edge too many. That inflated the counts at
+every site with three or more distinct codons, so p-values from ``mktest`` on
+such alignments change. Finally, ``mktest`` no longer raises
+``ZeroDivisionError`` on an alignment whose contingency table has an empty
+cell, such as an alignment of identical sequences. An empty cell now
+contributes nothing to the G statistic, and a degenerate table gives a
+p-value of one.
 
 All three of those bugs existed twice, because the older ``Bio.codonalign``
 package carries its own copy of the same code, and the fix above reached only
@@ -3114,8 +3116,8 @@ in-memory ``index`` dictionaries do, for example
 subsequence; it now raises a ``ValueError``. It also accepts ``Seq``,
 ``MutableSeq`` and ``SeqRecord`` objects for the sequence being searched, and
 ``Seq`` or ``MutableSeq`` objects for the subsequence, matching the other
-functions in the module (previously anything but a string raised a
-``TypeError`` from ``re.search``).
+functions in the module. Previously anything but a string raised a
+``TypeError`` from ``re.search``.
 
 ``Bio.SeqUtils.six_frame_translations`` now indents each reverse-strand frame
 to the column of the codon its first residue is translated from. The previous
@@ -3129,20 +3131,20 @@ changes.
 documentation already promised. Previously both the constructor and
 ``calculate`` raised ``TypeError: unhashable type: 'MutableSeq'``.
 
-``SimpleLocation`` and ``CompoundLocation`` now consistently evaluate as true,
+``SimpleLocation`` and ``CompoundLocation`` now always evaluate as true,
 including when their length is zero, restoring their documented historical
 behavior. Code that needs to distinguish a missing location should compare
 with ``None`` explicitly.
 
 The module-level ``Bio.Seq.translate`` function now honors an explicit ``gap``
-argument consistently for strings, ``Seq`` objects, and ``MutableSeq`` objects.
-Its default remains ``None``, unlike the ``Seq.translate`` method's longstanding
-default of ``"-"``; callers translating gapped sequences through the module-level
-function should pass the gap character explicitly.
+argument the same way for strings, ``Seq`` objects, and ``MutableSeq``
+objects. Its default remains ``None``, unlike the ``Seq.translate`` method's
+longstanding default of ``"-"``. Callers translating gapped sequences through
+the module-level function should pass the gap character explicitly.
 
 ``Bio.Align.Alignment.parse_printed_alignment`` now rejects a printed alignment
 whose lines are not all the same length. The check intended to catch this
-compared a value against its own definition and so could never be true, and a
+compared a value against its own definition and so could never be true. A
 ragged block was parsed into coordinates that did not describe it. Errors
 raised while filling the coordinates array are also reported rather than
 returned as success, an offset outside the line is rejected before it is used,
@@ -3157,9 +3159,9 @@ array, while a larger one left the tail of the array uninitialised. Both are
 now rejected, as is a packed integer left incomplete at the end of the input.
 
 ``Bio.File.as_handle`` no longer discards a ``TypeError`` raised by the body of
-its ``with`` block. The call to ``open`` sat inside the ``try``, so an error
+its ``with`` block. The call to ``open`` was inside the ``try``, so an error
 from the caller's own code was caught by the handler meant for a filename that
-is really a handle; the context manager then yielded a second time and the
+is really a handle. The context manager then yielded a second time, and the
 original error was replaced by ``RuntimeError: generator didn't stop after
 throw()``.
 
@@ -3206,20 +3208,20 @@ for values above 8, so lower ones fell through to an ``UnboundLocalError``.
 ``Bio.SeqUtils.MeltingTemp`` now checks what it is given. ``Tm_Wallace``,
 ``Tm_GC`` and ``Tm_NN`` accept ``str``, ``Seq``, ``MutableSeq`` and
 ``SeqRecord``, and raise ``ValueError`` for anything else. Each method used to
-begin with ``str(seq)``; for a ``SeqRecord`` that is the multi-line human
+begin with ``str(seq)``. For a ``SeqRecord`` that is the multi-line human
 readable summary, not the sequence, so the letters of "ID:", "Name:",
-"Description:" and "Seq(...)" were scraped into the calculation and a plausible
-but wrong temperature came back with no error and no warning. A sequence
-containing letters that the chosen method cannot evaluate is now rejected too,
-with a message naming the offending characters. Non-alphabetic characters
-(digits, whitespace and punctuation) are still stripped, as before.
+"Description:" and "Seq(...)" were included in the calculation, and a
+plausible but wrong temperature came back with no error and no warning. A
+sequence containing letters that the chosen method cannot evaluate is now
+rejected too, with a message naming the offending characters. Non-alphabetic
+characters (digits, whitespace and punctuation) are still stripped, as before.
 
 That last part is a deliberate change to the documented behaviour of
 ``Tm_Wallace``, which said that "non-DNA characters (e.g., E, F, J, !, 1, etc)
 are ignored by this method". Only the non-alphabetic ones are ignored now. A
 sequence containing letters outside A, B, C, D, G, H, I, K, M, N, R, S, T, V,
 W, X and Y raises ``ValueError`` where it previously returned a temperature
-computed from whichever letters it did recognise -- a protein sequence, for
+computed from whichever letters it did recognise. A protein sequence, for
 instance, used to melt. Pass ``check=False`` to get the old arithmetic back
 unchanged. ``Tm_GC`` and ``Tm_NN`` already discarded such letters silently, and
 now reject them as well. Adopted from biopython/biopython#4866 by Manuel
@@ -3238,12 +3240,12 @@ section mapping the old record attributes onto the new classes. See
 ``DEPRECATED.rst``.
 
 SAM files written by ``Bio.Align`` now carry a template length instead of
-TLEN 0 on every record — **the output of every SAM write changes where a
-template length is known**. The writer previously hard-coded the field to
+TLEN 0 on every record. **The output of every SAM write changes where a
+template length is known.** The writer previously hard-coded the field to
 zero, discarding even the value the parser had read in. It now writes an
 explicit ``alignment.tlen`` attribute when one is set, so parsed files
-round-trip their TLEN, and when the alignments are passed as a list or tuple
-it computes the value for properly paired reads: the span from the leftmost
+round-trip their TLEN. When the alignments are passed as a list or tuple, it
+computes the value for properly paired reads: the span from the leftmost
 mapped base of the pair to the rightmost, signed ``+`` on the leftmost mate
 and ``-`` on the rightmost as the SAM specification requires. Unpaired,
 unmapped, secondary and supplementary records keep TLEN 0, as do alignments
@@ -3253,25 +3255,25 @@ from biopython/biopython#5244 by Gian Carlo D Dumpit; see ``ADOPTED.md``.
 The pairwise alignment kernels release the GIL. The Needleman-Wunsch,
 Smith-Waterman and Gotoh dynamic programming loops in
 ``Bio.Align.PairwiseAligner`` now run without holding Python's global
-interpreter lock, so scoring or aligning in threads actually runs in parallel
-— about 2.9x over serial for four concurrent ``score()`` calls on a
-four-thread pool — where previously threads gained nothing. The kernels also
-check for pending signals at regular intervals, so Ctrl-C now interrupts a
-long ``score()`` or ``align()`` call within milliseconds instead of after the
-whole computation. Each call snapshots the substitution matrix it was given,
-so a matrix mutated from another thread mid-call cannot produce a score mixing
-old and new values. Single-threaded performance is unchanged. The
-Waterman-Smith-Beyer and FOGSAA algorithms still hold the GIL: the former may
-call user-supplied Python gap functions from its innermost loops, and the
-latter allocates from within its main loop.
+interpreter lock, so scoring or aligning in threads runs in parallel, where
+previously threads gained nothing. Four concurrent ``score()`` calls on a
+four-thread pool ran about 2.9 times as fast as running them serially. The
+kernels also check for pending signals at regular intervals, so Ctrl-C now
+interrupts a long ``score()`` or ``align()`` call within milliseconds instead
+of after the whole computation. Each call copies the substitution matrix it
+was given, so a matrix mutated from another thread mid-call cannot produce a
+score mixing old and new values. Single-threaded performance is unchanged.
+The Waterman-Smith-Beyer and FOGSAA algorithms still hold the GIL.
+Waterman-Smith-Beyer may call user-supplied Python gap functions from its
+innermost loops, and FOGSAA allocates from within its main loop.
 
 ``Bio.PDB.mmtf`` is deprecated and now emits a ``BiopythonDeprecationWarning``
 on import; we intend to remove it in a later release. RCSB PDB decommissioned
 the MMTF file format in July 2024 and its download server, ``mmtf.rcsb.org``,
 no longer exists in DNS, so ``MMTFParser.get_structure_from_url`` cannot fetch
-anything, and the ``mmtf-python`` package the module depends on last saw a
-release in 2022. BinaryCIF is RCSB's designated successor, and BioPAIthon
-reads it with ``Bio.PDB.binary_cif``; mmCIF files can be read with
+anything. The ``mmtf-python`` package the module depends on last had a release
+in 2022. BinaryCIF is RCSB's designated successor, and BioPAIthon reads it
+with ``Bio.PDB.binary_cif``; mmCIF files can be read with
 ``Bio.PDB.MMCIFParser``. The Tutorial's PDB chapter marks its MMTF sections
 as deprecated, no longer teaches fetching MMTF files by PDB ID, and shows
 how to fetch and read the same structure as mmCIF instead. See
