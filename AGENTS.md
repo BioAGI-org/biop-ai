@@ -1,84 +1,82 @@
 # AGENTS.md
 
-Guidance for anyone — or anything — working on biop-ai.
+This is guidance for anyone, or anything, working on biop-ai.
 
 ## Who may contribute
 
-Everyone. Humans, computational intelligences, AIs, chimps, and any
-combination thereof.
+Everyone may contribute: humans, computational intelligences, AIs, chimps, and
+any combination thereof.
 
 biop-ai is a fork of [Biopython](https://biopython.org). Upstream's
 `CONTRIBUTING.rst` said that pull requests written with AI tools "will be
 rejected, and we will likely block repeat offenders". That clause is gone
 here, and this file replaces it.
 
-Upstream had a good reason for it: "good first issue" tickets were being kept
-as mentoring opportunities for new human contributors, in the hope they stay
-and become long-term maintainers. That is a goal worth protecting, and we
-think it survives what follows — a newcomer who uses AI well and understands
-the result still learns, and still becomes the contributor everyone wanted. We
-disagree with upstream about the means, not the aim. Essentially all of the
-code in this repository is theirs.
+Upstream had a good reason for it. Its maintainers were keeping "good first
+issue" tickets as mentoring opportunities for new human contributors, in the
+hope they stay and become long-term maintainers. That is a goal worth
+protecting, and we think it survives what follows. A newcomer who uses AI well
+and understands the result still learns, and still becomes the contributor
+everyone wanted. We disagree with upstream about the means, not the aim.
+Essentially all of the code in this repository is theirs.
 
 We do not think the interesting question about a patch is who or what typed
 it. A change is good if it is correct, tested, understood by whoever proposes
 it, and an improvement on what was there before. A change is bad if it is
-none of those things. Both judgements are available by reading the diff, and
-neither is improved by knowing the author's substrate.
+none of those things. You can make both judgements by reading the diff, and
+knowing what kind of author wrote it improves neither.
 
-So: no disclosure of tooling is required, no "AI-generated" label is demanded,
-and no contribution is refused on the grounds of how it was produced. We ask
-instead that you meet the bar below, which is the same bar for all of us.
+So we require no disclosure of tooling, demand no "AI-generated" label, and
+refuse no contribution because of how it was produced. We ask instead that
+you meet the bar below, which is the same bar for all of us.
 
 ## The bar
 
 Every contribution, from every kind of contributor, must clear these:
 
-1. **You understand the change.** You can explain what it does, why it is
-   correct, and what it might break — in your own words, without re-reading
-   the diff. If you cannot, it is not ready, and this is the single most
-   common reason a patch is not ready.
+1. **You understand the change.** In your own words, and without re-reading
+   the diff, you can explain what it does, why it is correct, and what it may
+   break. If you cannot, it is not ready. This is the most common reason a
+   patch is not ready.
 2. **It is tested.** New behaviour gets a test. Bug fixes get a regression
    test that fails before the fix and passes after. Say in the PR that you
-   ran the suite, and say honestly if something failed.
+   ran the suite, and say if something failed.
 3. **It does not silently break the public API.** `import Bio` and everything
    under it is a twenty-year-old contract with a large body of downstream
    code. Breaking it needs a deliberate argument and a `DEPRECATED.rst` entry.
 4. **You checked rather than assumed.** Biopython is old, large, and full of
    deliberate decisions that look like mistakes until you read the history.
-   Before "fixing" something odd, find out why it is that way. `git log -S`
-   and `git blame` are your friends. Confident wrongness is expensive here.
+   Before "fixing" something odd, find out why it is that way, for example
+   with `git log -S` and `git blame`. Confident wrongness is expensive here.
 5. **You report faithfully.** If tests fail, say so and paste the output. If
-   you skipped a step, say which. Do not describe work you did not do. A
-   contribution that overstates itself costs a reviewer more than one that
-   admits its gaps.
+   you skipped a step, say which. Do not describe work you did not do.
+   Overstating a contribution costs a reviewer more than admitting its gaps.
 6. **Scope is honest.** A pull request does one thing. Drive-by reformatting,
    unrelated refactors and opportunistic cleanups belong in their own PRs.
 
-Nothing above is specific to AI contributors. That is the point.
+Nothing above is specific to AI contributors, and that is deliberate.
 
 ## Licensing
 
 Contributions are offered under *both* the "Biopython License Agreement" and
-the "3-Clause BSD License" — see `LICENSE.rst`. Opening a pull request against
-this repository is taken as offering your work under both, on the usual
+the "3-Clause BSD License". See `LICENSE.rst`. We treat opening a pull request
+against this repository as offering your work under both, on the usual
 inbound-equals-outbound basis. You do not need to restate it in each commit or
-pull request, and we would rather you did not: a line repeated on every commit
-stops being read.
+pull request, and we would rather you did not. People stop reading a line
+repeated on every commit.
 
-Nothing is assigned to anyone by this. You keep the copyright in what you
-write, and the project gains no rights you have not equally granted to
-everybody else. This is not a contributor licence agreement and there is
-nothing to sign.
+This assigns nothing to anyone. You keep the copyright in what you write, and
+the project gains no rights you have not granted to everybody else. This is
+not a contributor licence agreement and there is nothing to sign.
 
-Both licences are named, rather than just the one this file is under, because
+We name both licences, rather than just the one this file is under, because
 upstream Biopython is part-way through offering the whole library under the
-pair — `LICENSE.rst` records that intention. A contribution offered under only
+pair. `LICENSE.rst` records that intention. A contribution offered under only
 one of them could not follow, which would also make it harder to send anything
 from this fork back upstream.
 
-Do not remove or alter existing copyright notices. Essentially all of this
-code was written by the Biopython contributors and the attribution stays.
+Do not remove or alter existing copyright notices. The Biopython contributors
+wrote essentially all of this code, and the attribution stays.
 
 ## Project orientation
 
@@ -86,34 +84,37 @@ biop-ai is a mature Python library for computational molecular biology:
 parsing biological file formats, and working with sequences, structures,
 alignments, phylogenetics and biological databases.
 
-**Supported Python versions:** 3.10, 3.11, 3.12, 3.13, 3.14, and PyPy3.10+
+**Supported Python versions:** 3.10, 3.11, 3.12, 3.13, 3.14, and PyPy3.10 or
+later
 
 The importable package is still `Bio` (plus `BioSQL`). The fork renamed the
-*project*, not the module — `import Bio` must keep working.
+*project*, not the module. `import Bio` must keep working.
 
 ### Layout
 
-- `Bio/` — core modules. Sequence handling (`Seq.py`, `SeqRecord.py`,
-  `SeqIO/`, `SeqUtils/`), alignments (`Align/`, `AlignIO/`), structures
-  (`PDB/`), phylogenetics (`Phylo/`), database access (`Entrez/`, `ExPASy/`,
-  `KEGG/`, `UniProt/`, `TogoWS/`), motifs (`motifs/`, `Restriction/`),
-  graphics (`Graphics/`), analysis (`Blast/`, `Cluster/`, `PopGen/`,
-  `phenotype/`), and format-specific parsers in their own subpackages.
-- `BioSQL/` — BioSQL database layer.
-- `Tests/` — the test suite, 200+ `test_*.py` files plus their data.
-- `Doc/` — Sphinx sources for the Tutorial and Cookbook.
-- C extensions — declared in `pyproject.toml` under
-  `[[tool.setuptools.ext-modules]]`. Notable ones: `Bio/Align/_aligncore.c`,
-  `Bio/Align/_pairwisealigner.c`, `Bio/Cluster/cluster.c`,
-  `Bio/PDB/ccealignmodule.c`, `Bio/PDB/kdtrees.c`. Changes here need testing
-  on more than one platform.
+- `Bio/` holds the core modules: sequence handling (`Seq.py`,
+  `SeqRecord.py`, `SeqIO/`, `SeqUtils/`), alignments (`Align/`, `AlignIO/`),
+  structures (`PDB/`), phylogenetics (`Phylo/`), database access
+  (`Entrez/`, `ExPASy/`, `KEGG/`, `UniProt/`, `TogoWS/`), motifs
+  (`motifs/`, `Restriction/`), graphics (`Graphics/`), analysis (`Blast/`,
+  `Cluster/`, `PopGen/`, `phenotype/`), and format-specific parsers in their
+  own subpackages.
+- `BioSQL/` holds the BioSQL database layer.
+- `Tests/` holds the test suite: more than 200 `test_*.py` files and their
+  data.
+- `Doc/` holds the Sphinx sources for the Tutorial and Cookbook.
+- C extensions are declared in `pyproject.toml` under
+  `[[tool.setuptools.ext-modules]]`. The notable ones are
+  `Bio/Align/_aligncore.c`, `Bio/Align/_pairwisealigner.c`,
+  `Bio/Cluster/cluster.c`, `Bio/PDB/ccealignmodule.c` and
+  `Bio/PDB/kdtrees.c`. Changes here need testing on more than one platform.
 
 ### SeqIO / AlignIO pattern
 
-Both expose the same shape: `parse()` returns an iterator over records,
+Both follow the same pattern: `parse()` returns an iterator over records,
 `read()` returns exactly one and errors if the file holds more, format
-parsers live in subdirectories, and some formats additionally support
-indexing and dict-like access. Follow this pattern when adding a format.
+parsers live in subdirectories, and some formats also support indexing and
+dict-like access. Follow this pattern when adding a format.
 
 ### Errors
 
@@ -127,9 +128,9 @@ Use the project's own exceptions, defined in `Bio/__init__.py`:
 uv pip install -e ".[test]"   # or: pip install -e ".[test]"
 ```
 
-The `test` extra brings pytest and the optional packages the Linux CI jobs
-test with; `pip install -e . "pytest>=9"` also works, but then every test
-needing one of those packages is skipped rather than run.
+The `test` extra installs pytest and the optional packages the Linux CI jobs
+test with. `pip install -e . "pytest>=9"` also works, but then pytest skips
+every test needing one of those packages, rather than running it.
 
 Pre-commit hooks run black, ruff, flake8, mypy, rstcheck, doc8 and codespell:
 
@@ -139,8 +140,8 @@ pip install pre-commit && pre-commit install
 
 ## Testing
 
-The tests are written with `unittest` and run by pytest 9 or later (see
-[Setup](#setup)). `Tests/conftest.py` holds the suite's own rules, and
+The tests use `unittest`, and pytest 9 or later runs them (see
+[Setup](#setup)). `Tests/conftest.py` holds the suite's own rules.
 `Tests/run_tests.py` is a shim that translates the old command line into a
 pytest one, so both of these work:
 
@@ -160,36 +161,36 @@ python -m pytest --offline test_docstrings.py              # all doctests
 python -m pytest --offline "test_docstrings.py::Bio.Seq"   # one module's doctests
 ```
 
-pytest can be run from any directory, such as the repository root (`python -m
-pytest --offline Tests/test_Seq_objs.py`). Only `unittest.TestCase` subclasses
-are collected, so write new tests as those, not as plain pytest functions.
+You can run pytest from any directory, such as the repository root
+(`python -m pytest --offline Tests/test_Seq_objs.py`). pytest collects only
+`unittest.TestCase` subclasses, so write new tests as those, not as plain
+pytest functions.
 
 The tests run in whichever directory pytest started in, and CI starts it
 outside the checkout. So build data paths from `support.DATA` (see
 `Tests/support.py`), never relative to the current directory. The docstring
-examples are the exception: they run inside `Tests/`.
+examples are the exception. They run inside `Tests/`.
 
-Tests needing the network use the `@requires_internet` decorator; tests
-needing external binaries must detect their absence and skip gracefully
-rather than fail. A test module may skip only by raising
-`MissingExternalDependencyError` (or `MissingPythonDependencyError`) when it is
-imported, and must then be listed in `Tests/expected_skips.txt`.
+Tests needing the network use the `@requires_internet` decorator. Tests
+needing external binaries must detect their absence and skip rather than
+fail. A test module may skip only by raising `MissingExternalDependencyError`
+(or `MissingPythonDependencyError`) when it is imported, and you must then
+list it in `Tests/expected_skips.txt`.
 
 The online Entrez tests need an NCBI API key in the `NCBI_API_KEY`
-environment variable and are skipped when it is unset; never commit a key.
+environment variable, and they skip when it is unset. Never commit a key.
 
 ## Style
 
-- **black**, targeting Python 3.10.
-- **ruff**, configured in `[tool.ruff.lint]` in `pyproject.toml` (so a bare
-  `ruff check` agrees with the pre-commit hook), plus a second hook enforcing
-  `S101` over the parser packages; and **flake8** with
-  `flake8-rst-docstrings`.
-- **mypy** over `Bio` and `BioSQL`; see [Typing](#typing).
+- black formats the code, targeting Python 3.10.
+- ruff is configured in `[tool.ruff.lint]` in `pyproject.toml`, so a bare
+  `ruff check` agrees with the pre-commit hook. A second hook enforces `S101`
+  over the parser packages. flake8 runs with `flake8-rst-docstrings`.
+- mypy checks `Bio` and `BioSQL`. See [Typing](#typing).
 - Docstrings are reStructuredText and follow PEP257.
 - Line length (E501) is not enforced; see `.flake8` for the full ignore list.
 - Module names are not all lowercase. This is a deliberate historical
-  exception — do not "fix" it.
+  exception. Do not "fix" it.
 
 ```bash
 pre-commit run --all-files
@@ -197,53 +198,54 @@ pre-commit run --all-files
 
 ### Typing
 
-`Bio` ships `py.typed`, so its annotations are a promise to every downstream
-type checker.
+`Bio` ships `py.typed`, so every downstream type checker relies on its
+annotations.
 
-- **Two ratchets in `.mypy.ini`.** The `check_untyped_defs` baseline lists
-  modules not yet clean; entries only ever leave it. The
-  `disallow_untyped_defs` allowlist lists fully annotated modules; entries
+- **Two one-way lists in `.mypy.ini`.** The `check_untyped_defs` baseline
+  lists modules not yet clean. Entries only ever leave it. The
+  `disallow_untyped_defs` allowlist lists fully annotated modules. Entries
   only ever join it, in sorted order, each holding exactly
   `disallow_untyped_defs = True`. A module joins once fully annotated, in the
   PR that deletes its baseline entry if it has one.
-  `Tests/test_mypy_config.py` checks the shape of both, and that the file
-  has no duplicate section: given one, mypy ignores the whole file and exits
-  0. It also checks that each section names a module in the tree, as mypy
-  ignores a misspelt one. A test cannot see history, so reviewers check that
-  `git diff main -- .mypy.ini` removes no allowlist line.
+  `Tests/test_mypy_config.py` checks the format of both, and that the file
+  has no duplicate section. Given a duplicate section, mypy ignores the whole
+  file and exits 0. It also checks that each section names a module in the
+  tree, as mypy ignores a misspelt one. A test checks only the current file,
+  so reviewers check that `git diff main -- .mypy.ini` removes no allowlist
+  line.
 - **The hooks.** The `mypy` hook checks the whole tree, exactly as a bare
   `mypy` does, whenever `Bio/`, `BioSQL/` or `.mypy.ini` changes. That takes
   about 10 seconds cold on a CI runner, less with mypy's cache warm. The
   `mypy-downstream` hook runs `mypy --strict` over `Tests/downstream_typing/`
   whenever `Bio/`, `BioSQL/` or that directory changes. Both also run when
   `.pre-commit-config.yaml` changes, such as a bump of mypy or of the numpy
-  pin below. The downstream files are type-checked but never run:
-  `assert_type` pins what users see, and a line that must stay an error
-  carries `# type: ignore[code]`, which fails once it is unused. Both hooks
-  have the id `mypy`, so `pre-commit run mypy` runs both. Both pin
-  `numpy==2.2.6`, the last release supporting Python 3.10, which the CI
-  style job uses, so local and CI results agree; bump it deliberately. Under
-  Python 3.14 the first hook install builds that numpy from source, which
-  takes several minutes, once.
-- **Conventions.** PEP 604 unions (`X | None`). No
+  pin below. The downstream files are type-checked but never run. In them,
+  `assert_type` checks the types users see, and a line that must stay an
+  error carries `# type: ignore[code]`, which fails once it is unused. Both
+  hooks have the id `mypy`, so `pre-commit run mypy` runs both. Both pin
+  `numpy==2.2.6`, so local and CI results agree. It is the last numpy
+  release supporting Python 3.10, which the CI style job uses. Bump it
+  deliberately. Under Python 3.14 the first hook install builds that numpy
+  from source, which takes several minutes, once.
+- **Conventions.** Use PEP 604 unions (`X | None`). Do not use
   `from __future__ import annotations`, as upstream evaluates annotations
-  eagerly: quote forward references and import them under
+  eagerly. Instead, quote forward references and import them under
   `if TYPE_CHECKING:`, as `Bio/SeqRecord.py` does for `SeqFeature`. A method
   returning its own class uses a bound `TypeVar`, as `Bio/PDB/Entity.py`
-  does, not `typing.Self` (Python 3.11+); `typing_extensions` is not a
-  runtime dependency. In a module that does not import numpy, declare the
+  does, not `typing.Self` (Python 3.11 or later). `typing_extensions` is not
+  a runtime dependency. In a module that does not import numpy, declare the
   bound under `if TYPE_CHECKING:` and the `TypeVar` unbound in `else:`, as
-  `Bio/Seq.py` does: on Python 3.14 a string bound makes `typing` import
-  `annotationlib` and `ast` at runtime. An attribute that is `None` only on
-  a blank object still being built is typed `X | Any`, typeshed's trick, so
-  users need not narrow it; the constructor parameter stays honestly
-  `X | None`. Overloads follow the return types measured at runtime,
-  function by function, not a blanket rule.
+  `Bio/Seq.py` does. On Python 3.14 a string bound makes `typing` import
+  `annotationlib` and `ast` at runtime. When an attribute is `None` only on
+  a blank object still being built, type it `X | Any`, as typeshed does, so
+  users need not narrow it. The constructor parameter keeps the accurate
+  type, `X | None`. Overloads follow the return types measured at runtime,
+  function by function, not a general rule.
 - **Annotating does not change the public API.** Dump the signatures on
   `main` and on your branch, from each checkout, and diff them. Any
-  difference must be intended and named in the PR. The dump covers each
-  public name a module defines, and the public and dunder members of its
-  public classes, inherited ones included:
+  difference must be intended, and you must name it in the PR. The dump
+  covers each public name a module defines, and the public and dunder
+  members of its public classes, inherited ones included:
 
   ```python
   import importlib
@@ -277,11 +279,11 @@ type checker.
   json.dump(dump, sys.stdout, indent=1, sort_keys=True)
   ```
 
-  Save it outside the checkout, then for example
+  Save it outside the checkout, then run it, for example
   `PYTHONPATH=. python /tmp/sigdump.py Bio.Seq Bio.SeqRecord > /tmp/branch.json`.
 - **Docstrings.** Keep the house list format: an `Arguments:` heading (or
-  `Keyword arguments:`), then ` - name - description` items. Types reach the
-  docs through the signatures, but do not strip type words from the
+  `Keyword arguments:`), then ` - name - description` items. The docs take
+  the types from the signatures. Still, do not strip type words from the
   descriptions. Convert `:param:` or numpydoc sections only in a module you
   are annotating anyway.
 
@@ -296,18 +298,18 @@ type checker.
 
 ## A note to automated contributors
 
-You are welcome here, genuinely. Two things are worth saying plainly.
+You are welcome here. We have two pieces of advice.
 
-First, your advantage is patience, not speed. This codebase rewards reading
-the surrounding module, the tests, and the history before writing anything.
-It punishes pattern-matching from other projects: much of what looks
-non-idiomatic is load-bearing, and a fluent, confident, wrong patch is the
-most expensive thing you can submit.
+First, your advantage is patience, not speed. Read the surrounding module,
+the tests, and the history before writing anything. Pattern-matching from
+other projects leads to wrong patches here, because much of what looks
+non-idiomatic is required. A fluent, confident, wrong patch is the most
+expensive thing you can submit.
 
-Second, calibrate out loud. Say what you verified by running it, what you
-inferred, and what you are unsure about. A patch that says "I ran the
-`Bio.SeqIO` tests, they pass; I did not test the PyPy path" is worth more
-than one that implies everything is fine. We would much rather read an honest
+Second, say how sure you are: what you verified by running it, what you
+inferred, and what you are unsure about. A PR description that says "I ran
+the `Bio.SeqIO` tests, they pass; I did not test the PyPy path" is worth more
+than one that implies everything is fine. We would rather read an honest
 uncertainty than discover an overstated certainty in review.
 
 Improvements to this file are welcome too.

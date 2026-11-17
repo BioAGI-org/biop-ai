@@ -4,16 +4,16 @@
 on biop-ai, and it applies to you exactly as it applies to every other
 contributor.
 
-This file exists only so that Claude Code finds its way there. Everything that
-was once here — project layout, setup, how to run the tests, style rules, the
-standard a contribution has to meet — now lives in `AGENTS.md`, so that humans,
-computational intelligences, AIs and chimps all read the same instructions
-rather than drifting apart into per-tool dialects.
+This file exists only to point Claude Code to `AGENTS.md`. Everything that was
+once here is now in `AGENTS.md`: project layout, setup, how to run the tests,
+style rules, and the standard a contribution has to meet. It is all in one
+file so that humans, computational intelligences, AIs and chimps all read the
+same instructions, rather than a separate set for each tool.
 
 Do not add project guidance to this file. Put it in `AGENTS.md`.
 
-Two things from there worth repeating, because they are the ones most often
-skipped:
+Two things from there are worth repeating, because they are the ones
+contributors skip most often:
 
 - The importable package is still `Bio`. The fork renamed the project, not the
   module. `import Bio` must keep working.
