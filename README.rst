@@ -13,8 +13,8 @@ long-running international association of developers of freely available
 Python tools for computational molecular biology.
 
 The fork exists to try one thing differently. biop-ai accepts contributions
-from any capable contributor - human, computational intelligence, AI, or chimp
-- and judges each patch on its merits rather than on the nature of its author.
+from any capable contributor: human, computational intelligence, AI, or chimp.
+It judges each patch on its merits rather than on the nature of its author.
 See `AGENTS.md <https://github.com/BioAGI-org/biop-ai/blob/main/AGENTS.md>`__ for
 what that means in practice.
 
@@ -23,13 +23,12 @@ licence is unchanged, the public API differs from upstream's only where noted
 below, and we intend to keep tracking upstream.
 
 Credit for essentially all of the code here belongs to the Biopython
-contributors; the original copyright notices and licence remain in place.
+contributors. The original copyright notices and licence remain in place.
 biop-ai is not affiliated with or endorsed by the Biopython Project, so
 please do not report problems with this fork to upstream.
 
-This README is intended primarily for people interested in working with the
-source code, from our repository on GitHub
-https://github.com/BioAGI-org/biop-ai
+This README is mainly for people who want to work with the source code from
+our repository on GitHub, https://github.com/BioAGI-org/biop-ai
 
 Upstream's user-centric documentation, `The Biopython Tutorial and Cookbook,
 and API documentation <https://biopython.org/docs/latest/>`_, describes most
@@ -40,9 +39,9 @@ warning.
 
 The `NEWS <https://github.com/BioAGI-org/biop-ai/blob/main/NEWS.rst>`_ file
 summarises the changes in each release, including where this fork differs from
-upstream, alongside the
+upstream. The
 `DEPRECATED <https://github.com/BioAGI-org/biop-ai/blob/main/DEPRECATED.rst>`_ file
-which notes API breakages.
+notes API breakages.
 
 This package is open source software made available under generous terms.
 Please see the `LICENSE <https://github.com/BioAGI-org/biop-ai/blob/main/LICENSE.rst>`_
@@ -54,36 +53,37 @@ Acknowledgements
 
 biop-ai exists because the Biopython Project spent more than twenty years
 building it. `CONTRIB.rst <https://github.com/BioAGI-org/biop-ai/blob/main/CONTRIB.rst>`_
-keeps every name upstream has, with the fork's own contributors added, and
-the full release history in
+keeps every name upstream has and adds the fork's own contributors. The fork
+also preserves the full release history in
 `NEWS <https://github.com/BioAGI-org/biop-ai/blob/main/NEWS.rst>`__ and every
-copyright notice in the source are preserved.
+copyright notice in the source.
 
 This fork changes a contribution policy. It does not change who wrote the
 software, and it is not a criticism of the people who did. Upstream restricted
-AI-assisted contributions for a reason we think is entirely legitimate:
-protecting "good first issue" tickets as mentoring opportunities for new human
-contributors, in the hope they stay. We disagree about the means, not the goal.
-Reasonable projects can land in different places on this, and Biopython's
+AI-assisted contributions to protect "good first issue" tickets as mentoring
+opportunities for new human contributors, in the hope they stay. We think that
+reason is entirely legitimate. We disagree about the means, not the goal.
+Reasonable projects can reach different decisions on this, and Biopython's
 maintainers are under no obligation to agree with us.
 
-Upstream Biopython is actively maintained and lives at https://biopython.org.
-We track it, and we would be glad to see this fork become unnecessary.
+Upstream Biopython is actively maintained, and its website is
+https://biopython.org. We track it, and we would be glad to see this fork
+become unnecessary.
 
 
 Citation
 ========
 
 If you use biop-ai in work contributing to a scientific publication, please
-cite **Biopython**. Essentially all of the code here was written by the
-Biopython contributors, and academic citation is how that work is credited:
+cite **Biopython**. The Biopython contributors wrote essentially all of the
+code here, and academic citation is how that work is credited:
 
 Cock, P.J.A. et al. Biopython: freely available Python tools for computational
 molecular biology and bioinformatics. Bioinformatics 2009 Jun 1; 25(11) 1422-3
 https://doi.org/10.1093/bioinformatics/btp163 pmid:19304878
 
 Several Biopython modules have their own publications, listed at
-https://biopython.org - please cite those as well where they apply.
+https://biopython.org. Please cite those as well where they apply.
 
 Do not cite biop-ai instead of Biopython. If you need to record which fork
 you used, cite the paper above and mention the fork separately, as you would
@@ -99,9 +99,9 @@ biop-ai is published on PyPI as ``biopaithon``, the name it had up to release
 
     pip install biopaithon
 
-Note that biop-ai installs the same ``Bio`` package that Biopython does, so
-the two conflict and cannot be used side by side in one environment. Use a
-virtual environment if you need both.
+biop-ai installs the same ``Bio`` package that Biopython does, so the two
+conflict and cannot be used side by side in one environment. Use a virtual
+environment if you need both.
 
 Binary wheels are published for CPython 3.10 to 3.14 on Linux (x86-64 and
 aarch64, both manylinux and musllinux), macOS (Intel and Apple silicon) and
@@ -139,17 +139,18 @@ Biopython yourself).
 
 Depending on which parts of Biopython you plan to use, there are a number of
 other optional Python dependencies, which can be installed later if needed.
-Most are grouped into extras, so pip can install a whole stack by name::
+Most are grouped into extras, so pip can install a whole group by name::
 
     pip install "biopaithon[graphics]"
 
-- ``graphics`` -- ReportLab and Pillow, for ``Bio.Graphics``.
-- ``phylo`` -- matplotlib, networkx, igraph and rdflib, for ``Bio.Phylo``.
-- ``structure`` -- msgpack, for reading BinaryCIF with ``Bio.PDB``.
-- ``biosql`` -- mysqlclient, the default MySQL driver for ``BioSQL``.
-- ``all`` -- all of the above, plus SciPy for ``Bio.phenotype``,
+- ``graphics`` installs ReportLab and Pillow, for ``Bio.Graphics``.
+- ``phylo`` installs matplotlib, networkx, igraph and rdflib, for
+  ``Bio.Phylo``.
+- ``structure`` installs msgpack, for reading BinaryCIF with ``Bio.PDB``.
+- ``biosql`` installs mysqlclient, the default MySQL driver for ``BioSQL``.
+- ``all`` installs all of the above, plus SciPy for ``Bio.phenotype``,
   ``Bio.codonalign`` and ``Bio.Align.analysis``.
-- ``test`` -- what the Linux CI jobs install to run the offline test suite
+- ``test`` is what the Linux CI jobs install to run the offline test suite
   (see Testing below).
 
 Notes on individual packages, including alternatives that no extra installs:
@@ -215,7 +216,7 @@ Now change directory to the Biopython source code folder and run::
 
 Substitute ``python`` with your specific version if required, for example
 ``python3``, or ``pypy3``. On PyPy, use ``pip install -e . "pytest>=9"``
-instead: the ``test`` extra needs SciPy, which has no PyPy wheels and needs
+instead. The ``test`` extra needs SciPy, which has no PyPy wheels and needs
 OpenBLAS to build from source.
 
 To exclude tests that require an internet connection (and which may take a
@@ -237,11 +238,11 @@ directory and type::
 
 The ``test`` extra installs pytest, which runs the tests, and the optional
 packages the Linux CI jobs test with. ``pip install -e . "pytest>=9"`` also
-works, and is what to use on PyPy (see above), but then every test needing one
-of those packages, all of ``Bio.Graphics`` included, is skipped rather than
-run. ``run_tests.py`` translates its arguments into a pytest command line, so
-``python -m pytest`` in ``Tests`` is equivalent. Call pytest directly to use
-its own options, such as ``-x`` or ``--lf``.
+works, and is what to use on PyPy (see above). With it, every test that needs
+one of those packages is skipped rather than run, including every
+``Bio.Graphics`` test. ``run_tests.py`` translates its arguments into a pytest
+command line, so ``python -m pytest`` in ``Tests`` is equivalent. Call pytest
+directly to use its own options, such as ``-x`` or ``--lf``.
 
 If you want to skip the online tests (which is recommended when doing repeated
 testing), use::
@@ -323,7 +324,7 @@ Contributing, Bug Reports
 =========================
 
 biop-ai accepts contributions from anyone, and anything, able to write a
-good patch - human, computational intelligence, AI, or chimp. We are always
+good patch: human, computational intelligence, AI, or chimp. We are always
 looking for help with code development, documentation writing, technical
 administration, and whatever else comes up.
 

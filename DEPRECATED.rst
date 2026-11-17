@@ -94,8 +94,8 @@ packages declare file formats were renamed with the project, from
 The old groups are deprecated as of release 1.89. They are still read, and
 an entry point found only in an old group gives a
 ``BiopythonDeprecationWarning`` naming the group to use instead. To support
-releases before and after the rename, declare a format in both groups; it
-then gives no warning.
+releases before and after the rename, declare a format in both groups. A
+format declared in both gives no warning.
 
 Biopython modules, methods, functions
 =====================================
@@ -104,9 +104,9 @@ Names merely imported into a package, in its ``__all__``
 --------------------------------------------------------
 **This change is biop-ai's own; Biopython declares no ``__all__`` in
 these packages.** biop-ai 1.88 gave the packages that re-export their API
-from submodules an ``__all__``, and those lists also named 43 things the 17
-packages merely import from elsewhere in ``Bio``. As of biop-ai 1.89 they
-are out of the lists: ``Bio.Align`` no longer declares ``Seq``,
+from submodules an ``__all__``. Those lists also named 43 things that the 17
+packages merely import from elsewhere in ``Bio``. As of biop-ai 1.89 those
+names are out of the lists: ``Bio.Align`` no longer declares ``Seq``,
 ``MutableSeq``, ``SeqRecord``, ``translate``, ``reverse_complement``,
 ``SequenceDataAbstractBaseClass``, ``UndefinedSequenceError`` and
 ``BiopythonDeprecationWarning``; ``Bio.SeqIO`` and ``Bio.codonalign`` no
@@ -132,7 +132,7 @@ names: ``from Bio.Align import *`` gave ``Seq`` in every earlier release,
 because without an ``__all__`` a star import takes every public name,
 imported or not. And strict type checkers (mypy with
 ``--no-implicit-reexport``, part of ``--strict``; pyright) no longer accept
-``from Bio.Align import Seq``, as they did in 1.88 and only in 1.88: without
+``from Bio.Align import Seq``, as they did in 1.88 and only in 1.88. Without
 an ``__all__``, upstream Biopython never offered them that. Import each name
 from the module that defines it: ``Seq``, ``MutableSeq``, ``translate``,
 ``reverse_complement``, ``complement``, ``complement_rna``,
@@ -152,18 +152,19 @@ Bio.PopGen.GenePop.LargeFileParser
 **This deprecation is biop-ai's own; Biopython has not deprecated this
 module.** Deprecated in biop-ai 1.88. Nothing in biop-ai uses it,
 it had no tests, and the Tutorial does not mention it. Please use
-``Bio.PopGen.GenePop.read`` instead, or ``Bio.PopGen.GenePop.FileParser``
-(which takes a file name rather than a handle) to work through a large file
-without loading it all into memory. Code that calls the module's
-``get_indiv`` directly should note that it reports a missing allele as ``0``,
-whereas ``Bio.PopGen.GenePop.get_indiv`` reports it as ``None``.
+``Bio.PopGen.GenePop.read`` instead, or ``Bio.PopGen.GenePop.FileParser`` to
+work through a large file without loading it all into memory.
+``Bio.PopGen.GenePop.FileParser`` takes a file name rather than a handle. Code
+that calls the module's ``get_indiv`` directly should note that it reports a
+missing allele as ``0``, whereas ``Bio.PopGen.GenePop.get_indiv`` reports it as
+``None``.
 
 Bio.Blast.NCBIWWW and Bio.Blast.NCBIXML
 ---------------------------------------
 **This deprecation is biop-ai's own.** Biopython has not deprecated these
 modules, though since Biopython 1.89 it declares ``Bio.Blast.NCBIXML``
 obsolete (discouraged, but importing it raises no warning). Deprecated in
-biop-ai 1.88; the modules themselves have not been removed. Both are
+biop-ai 1.88. The modules themselves have not been removed. Both are
 superseded by ``Bio.Blast`` itself: ``Bio.Blast.qblast`` accepts all the
 arguments of ``Bio.Blast.NCBIWWW.qblast`` but returns a stream of ``bytes``
 rather than text, and ``Bio.Blast.read`` and ``Bio.Blast.parse`` parse the
@@ -177,32 +178,32 @@ Bio.PDB.mmtf
 **This deprecation is biop-ai's own; Biopython has not deprecated this
 module.** Deprecated in biop-ai 1.88. RCSB PDB decommissioned the MMTF
 file format in July 2024 and switched off its download server, so MMTF files
-can no longer be downloaded, and the ``mmtf-python`` package this module
-depends on last saw a release in 2022. Please use BinaryCIF files with
+can no longer be downloaded. The ``mmtf-python`` package this module depends
+on had its last release in 2022. Please use BinaryCIF files with
 ``Bio.PDB.binary_cif``, or mmCIF files with ``Bio.PDB.MMCIFParser``, instead.
 
 Bio.PDB.internal_coords
 -----------------------
 **This deprecation is biop-ai's own; Biopython has not deprecated this
 class.** The ``MissingAtomError`` exception was deprecated in biop-ai 1.88.
-Nothing has raised it since Biopython 1.80, which removed its only raise site;
-missing atoms are tolerated rather than treated as errors. Importing it, or
+Nothing has raised it since Biopython 1.80, which removed its only raise site.
+Missing atoms are tolerated rather than treated as errors. Importing it, or
 reading it as an attribute of ``Bio.PDB.internal_coords``, now gives a
 ``BiopythonDeprecationWarning``, and ``from Bio.PDB.internal_coords import *``
 no longer provides the name. An ``except MissingAtomError`` clause never runs,
-so it can simply be deleted.
+so it can be deleted.
 
 Bio.PDB.PDBList server argument
 -------------------------------
 **This change is biop-ai's own; Biopython adds /pub/pdb to every server.**
 Changed in biop-ai 1.89 without a deprecation period. A ``server`` given
 with a path is now taken to be the PDB archive itself, so ``/pub/pdb`` is no
-longer added after it; a bare host, such as the default
-``"https://files.wwpdb.org"``, still has ``/pub/pdb`` added. This is what
-lets ``PDBList`` use mirrors that keep the archive elsewhere, such as
+longer added after it. A bare host, such as the default
+``"https://files.wwpdb.org"``, still has ``/pub/pdb`` added. The change lets
+``PDBList`` use mirrors that keep the archive elsewhere, such as
 ``"https://ftp.ebi.ac.uk/pub/databases/pdb"``, which could not work at all
-before; a warning period would have kept those failing. Code that named a
-mirror whose archive sits in ``/pub/pdb`` below its path must now name the
+before. A warning period would have kept those failing. Code that named a
+mirror whose archive is in ``/pub/pdb`` below its path must now name the
 archive in full: ``server="http://host/mirror"`` becomes
 ``server="http://host/mirror/pub/pdb"``, and ``server="file:///data/wwpdb"``
 becomes ``server="file:///data/wwpdb/pub/pdb"``.
@@ -212,9 +213,9 @@ Bio.PDB.parse_pdb_header COMPND chain IDs
 **This change is biop-ai's own; Biopython lowercases these chain IDs.**
 Changed in biop-ai 1.89 without a deprecation period. The ``chain`` values
 of ``header["compound"]`` now keep the case the PDB file gives them, so a
-file saying ``CHAIN: A, B`` gives ``"A, B"``, not ``"a, b"``. A dictionary
+file with ``CHAIN: A, B`` gives ``"A, B"``, not ``"a, b"``. A dictionary
 value cannot warn when it is read, so a deprecation period would have
-reached almost nobody, while the lowercased values made chains ``A`` and
+reached almost nobody. The lowercased values also made chains ``A`` and
 ``a`` indistinguishable. Code that compared these values with
 ``chain.id.lower()`` must now compare ``chain.id`` itself.
 
@@ -249,40 +250,40 @@ format accepted by BLAST, treating any lines starting with '#', ';', or '!' as
 comment lines and ignoring them.
 
 The functions ``as_fasta`` and ``as_fasta_2line`` in ``Bio.SeqIO.FastaIO`` were
-deprecated in release 1.86, and removed in biop-ai 1.88 (upstream Biopython
-1.88 still ships them, deprecated). Please use ``format(record, "fasta")`` or
+deprecated in release 1.86, and removed in biop-ai 1.88. Upstream Biopython
+1.88 still ships them, deprecated. Please use ``format(record, "fasta")`` or
 ``format(record, "fasta-2line")`` instead.
 
 Bio.SeqIO.qualityIO
 -------------------
 The functions ``as_fastq``, ``as_fastq_solexa``, ``as_fastq_illumina``, and
 ``as_qual`` in ``Bio.SeqIO.QualityIO`` were deprecated in release 1.86, and
-removed in biop-ai 1.88 (upstream Biopython 1.88 still ships them,
-deprecated). Please use ``format(record, "fastq")``,
+removed in biop-ai 1.88. Upstream Biopython 1.88 still ships them,
+deprecated. Please use ``format(record, "fastq")``,
 ``format(record, "fastq-solexa")``, ``format(record, "fastq-illumina")``, or
 ``format(record, "qual")`` instead.
 
 Bio.SeqIO.TabIO
 -------------------
 The function ``as_tab`` in ``Bio.SeqIO.TabIO`` was deprecated in release 1.86,
-and removed in biop-ai 1.88 (upstream Biopython 1.88 still ships it,
-deprecated). Please use ``format(record, "tab")`` instead.
+and removed in biop-ai 1.88. Upstream Biopython 1.88 still ships it,
+deprecated. Please use ``format(record, "tab")`` instead.
 
 Bio.PDB.StructureAlignment
 --------------------------
 Passing a precomputed sequence alignment as the ``fasta_align`` argument of
 ``StructureAlignment`` was deprecated in Biopython 1.86, when that argument
-became optional: if it is left out, the alignment is computed from the two
-models with ``PairwiseAligner`` using BLASTP defaults. The warning says the
-signature ``StructureAlignment(fasta_align, m1, m2)`` will change in a future
-release, without saying how. Passing the models by keyword and leaving out
-``fasta_align``, as in ``StructureAlignment(m1=model1, m2=model2)``, raises no
-warning; passing ``fasta_align`` still works, by position or by keyword, but
-warns either way. Biopython 1.86 used the built-in ``DeprecationWarning``,
-which Python by default shows only for calls made from ``__main__``.
-biop-ai 1.88 raises ``BiopythonDeprecationWarning`` instead, so the
-warning is shown wherever the call is made; upstream Biopython still raises
-``DeprecationWarning``.
+became optional. If it is left out, ``StructureAlignment`` computes the
+alignment from the two models with ``PairwiseAligner`` using BLASTP defaults.
+The warning says the signature ``StructureAlignment(fasta_align, m1, m2)`` will
+change in a future release, without saying how. Passing the models by keyword
+and leaving out ``fasta_align``, as in
+``StructureAlignment(m1=model1, m2=model2)``, raises no warning. Passing
+``fasta_align`` still works, by position or by keyword, but warns either way.
+Biopython 1.86 used the built-in ``DeprecationWarning``, which Python by
+default shows only for calls made from ``__main__``. biop-ai 1.88 raises
+``BiopythonDeprecationWarning`` instead, so Python shows the warning wherever
+the call is made. Upstream Biopython still raises ``DeprecationWarning``.
 
 Bio.SeqIO.UniprotIO
 -------------------
@@ -296,15 +297,15 @@ name instead of a file handle.
 Bio.Align.PairwiseAligner.warn_defaults_changed
 -----------------------------------------------
 Removed in biop-ai 1.88 without a deprecation period. This method was
-transitional plumbing added in Biopython release 1.86 alongside the change of
-the default gap score from 0 to -1: calling it emitted a one-time
+transitional code added in Biopython release 1.86 alongside the change of
+the default gap score from 0 to -1. Calling it emitted a one-time
 ``UserWarning`` describing the new default, unless every gap score had been
-set explicitly, and it always returned ``None`` (its docstring incorrectly
-described a boolean return). Biopython's own calls to it were commented out
+set explicitly. It always returned ``None``, and its docstring incorrectly
+described a boolean return. Biopython's own calls to it were commented out
 before release 1.88, and the source marked the method itself for removal
 "once release 1.87 is out". It was never documented in the API documentation
-or Tutorial. Code that still calls it can simply delete the call; to silence
-the warning it emitted, set the aligner's gap scores explicitly.
+or Tutorial. Code that still calls it can delete the call. To silence the
+warning it emitted, set the aligner's gap scores explicitly.
 
 Bio.Align.PairwiseAligner positive gap scores in local mode
 -----------------------------------------------------------
@@ -312,12 +313,12 @@ Bio.Align.PairwiseAligner positive gap scores in local mode
 in biop-ai 1.89 without a deprecation period. In local mode, ``score()``
 and ``align()`` now raise ``ValueError`` if an internal gap score (opening or
 extending, insertion or deletion) is positive, or if a gap score function
-returns a positive score; the message names the score and its value. A
+returns a positive score. The message names the score and its value. A
 positive gap score rewards inserting gaps, so the best local alignment is not
-well defined: the aligner let a local alignment start with a gap, except along
+well defined. The aligner let a local alignment start with a gap, except along
 the first row and column of the matrix, but never end with one. A warning
 period would have kept returning those alignments. Zero, negative and NaN gap
-scores still work, as do positive end gap scores, which local mode does not
+scores still work. So do positive end gap scores, which local mode does not
 use, and positive gap scores in global mode. Code that used a positive gap
 score in local mode should use a gap score of 0 or less.
 
@@ -332,10 +333,10 @@ attribute and still does nothing. Either way, delete the argument.
 
 Bio.codonalign.BiopythonExperimentalWarning
 -------------------------------------------
-Removed in biop-ai 1.88 without a deprecation period. ``Bio.codonalign``
-(and ``Bio.CodonAlign`` before it) imported this class from ``Bio`` only to
+Removed in biop-ai 1.88 without a deprecation period. ``Bio.codonalign``,
+and ``Bio.CodonAlign`` before it, imported this class from ``Bio`` only to
 warn, on import, that the module was experimental. biop-ai 1.88 drops that
-warning and commits to the module's API, so the import went with it. Use
+warning and commits to the module's API, so it drops the import too. Use
 ``from Bio import BiopythonExperimentalWarning`` instead.
 
 Bio.Medline.read
@@ -344,7 +345,7 @@ Changed in biop-ai 1.88 without a deprecation period. ``read`` now enforces
 the exactly-one-record contract its docstring and the Tutorial always
 described, like ``Bio.SeqIO.read`` and the other ``read`` functions. A handle
 holding more than one record raises ``ValueError("More than one record found
-in handle")`` instead of silently returning the first record, and an empty
+in handle")`` instead of silently returning the first record. An empty
 handle raises ``ValueError("No records found in handle")`` instead of a bare
 ``StopIteration``. Code that relied on getting the first of several records
 should use ``next(Bio.Medline.parse(handle))``.
@@ -361,11 +362,11 @@ The ``search`` function was deprecated in Release 1.84, and removed in Release
 1.86.  The CGI API this wrapped is no longer available since SCOP moved to the
 EBI website.
 
-Changed in biop-ai 1.88 without a deprecation period: when the HIE file
+Changed in biop-ai 1.88 without a deprecation period. When the HIE file
 names a sunid missing from the DES file, ``Bio.SCOP.Scop`` now raises a
 ``ValueError`` naming the sunid, the same exception it already raised for a
 missing parent or child. It used to print the sunid to stdout and then raise
-a bare ``KeyError``; code catching ``KeyError`` for this case should catch
+a bare ``KeyError``. Code catching ``KeyError`` for this case should catch
 ``ValueError`` instead.
 
 Exceptions for malformed input
@@ -379,18 +380,18 @@ classes now subclass ``ValueError`` rather than ``Exception`` directly:
 ``Bio.CAPS.AlignmentHasDifferentLengthsError``. An ``except`` clause naming one
 of them still catches it, but so does ``except ValueError``. In a ``try``
 statement that has an ``except ValueError`` clause before a clause for one of
-these classes, the ``ValueError`` clause now wins. Code that must handle these
-apart from other ``ValueError`` exceptions should name the class in an
-``except`` clause before its ``except ValueError`` clause.
+these classes, the ``ValueError`` clause now catches the exception. Code that
+must handle these apart from other ``ValueError`` exceptions should name the
+class in an ``except`` clause before its ``except ValueError`` clause.
 
 Bio.AlignInfo
 -------------
 The ``pos_specific_score_matrix`` method of the ``SummaryInfo`` class and the
 ``PSSM`` class were deprecated in release 1.82, and removed in release 1.85.
 The ``SummaryInfo`` class itself was deprecated in release 1.86, and removed
-in biop-ai 1.88 (upstream Biopython 1.88 still ships it, deprecated).  It
+in biop-ai 1.88. Upstream Biopython 1.88 still ships it, deprecated.  It
 was the last remaining content of the ``Bio.Align.AlignInfo`` module, which
-is now shipped as a stub whose import raises ``ImportError`` naming the
+biop-ai now ships as a stub whose import raises ``ImportError`` naming the
 replacement, following the pattern used for ``Bio.Alphabet`` and
 ``Bio.Application``.  As an
 alternative, please use the ``alignment`` property of a ``MultipleSeqAlignment``
@@ -502,11 +503,11 @@ raises ``ImportError`` naming what the module provided and what to use
 instead. Upstream ships nothing under these names, so the same import raises
 ``ModuleNotFoundError`` there, which says only that a module is absent. A
 GitHub code search finds roughly 5,000 public Python files still importing
-them; see the `usage survey
+them. See the `usage survey
 <https://github.com/BioAGI-org/biop-ai/blob/main/IMPROVEMENTS.md#how-much-is-any-of-this-used>`__
-in the repository's ``IMPROVEMENTS.md``. This follows the pattern
+in the repository's ``IMPROVEMENTS.md``. The stubs follow the pattern
 already used for ``Bio.Alphabet``. Nothing that was unavailable becomes
-available: the stubs cannot be used, only read.
+available. The stubs cannot be used, only read.
 
 Bio.Index
 ---------
@@ -860,7 +861,7 @@ people port existing scripts written for the standalone version of
 GenomeDiagram.  However, these were deprecated in Release 1.55 final.
 Support for centre was removed in Release 1.62. The colour aliases gave no
 warning until biop-ai 1.88, which makes each of them raise a
-``BiopythonDeprecationWarning``; they will be removed in the release after
+``BiopythonDeprecationWarning``. They will be removed in the release after
 biop-ai 1.88. They are the ``colour`` argument (of
 ``ColorTranslator.translate``, ``Feature``, ``FeatureSet.add_feature``,
 ``GraphData``, ``GraphSet.new_graph`` and the drawing functions), the
@@ -1029,15 +1030,15 @@ The ``draw_graphviz`` function was removed in Release 1.79.
 Bio.pairwise2
 -------------
 The ``Bio.pairwise2`` module was deprecated in Release 1.80, and removed in
-biop-ai 1.88 (upstream Biopython 1.88 still ships it, deprecated).  It is
-now shipped as a stub whose import raises ``ImportError`` naming the
-replacement, following the pattern used for ``Bio.Alphabet`` and
-``Bio.Application``.  Please use ``Bio.Align.PairwiseAligner`` instead, and
-note that migration is not mechanical: the defaults and semantics differ.
+biop-ai 1.88. Upstream Biopython 1.88 still ships it, deprecated. biop-ai
+now ships ``Bio.pairwise2`` as a stub whose import raises ``ImportError``
+naming the replacement, following the pattern used for ``Bio.Alphabet`` and
+``Bio.Application``.  Please use ``Bio.Align.PairwiseAligner`` instead.
+Migration is not mechanical, because the defaults and semantics differ.
 In particular, ``Bio.pairwise2`` used a default gap score of 0, while the
 default gap score of ``PairwiseAligner`` has been -1 since Release 1.86 (see
-the ``Bio.Align`` entry above), so the two can rank alignments differently
-unless the match, mismatch and gap scores are all set explicitly.
+the ``Bio.Align`` entry above). The two can therefore rank alignments
+differently unless the match, mismatch and gap scores are all set explicitly.
 Upstream Biopython 1.89 adds, and biop-ai includes, the ``Bio.Align``
 convenience functions ``global_align`` and ``local_align``, with largely the
 same functionality and similar usage as the alignment functions provided in
@@ -1064,8 +1065,8 @@ As of Release 1.88, the ``Tm_NN``, ``Tm_GC`` and ``Tm_Wallace`` functions
 reject a sequence containing characters that are not valid for the chosen
 method, raising ``ValueError`` instead of silently discarding them. Previously
 ``Tm_Wallace`` ignored non-DNA characters entirely, and ``Tm_NN`` and ``Tm_GC``
-dropped any character outside their base set, so a sequence of the wrong type -
-or a ``SeqRecord`` passed by mistake, whose ``str()`` is a block of descriptive
-text - returned a plausible melting temperature for whatever survived the
-filter rather than an error. Pass ``check=False`` to skip validation and
-restore the previous permissive behaviour.
+dropped any character outside their base set. A sequence of the wrong type
+therefore returned a plausible melting temperature for the characters left
+after filtering, rather than an error. So did a ``SeqRecord`` passed by
+mistake, whose ``str()`` is a block of descriptive text. Pass ``check=False``
+to skip validation and restore the previous permissive behaviour.
