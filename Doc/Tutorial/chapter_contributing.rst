@@ -16,7 +16,7 @@ and issues or pull requests on GitHub.
 
 Additionally, if you think you’ve found a new bug, you can submit it to
 our issue tracker at https://github.com/BioAGI-org/biop-ai/issues. This
-way, it won’t get buried in anyone’s Inbox and forgotten about.
+way, it won't be forgotten in anyone's inbox.
 
 Mailing lists and helping newcomers
 -----------------------------------

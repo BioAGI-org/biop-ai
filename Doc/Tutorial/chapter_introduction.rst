@@ -103,7 +103,7 @@ Installing Biopython
 All of the installation information for Biopython was separated from
 this document to make it easier to keep updated.
 
-The short version is use ``pip install biopaithon``, see the `main
+The short version is to use ``pip install biopaithon``. See the `main
 README <https://github.com/BioAGI-org/biop-ai/blob/main/README.rst>`__
 file for other options.
 
@@ -254,7 +254,7 @@ Frequently Asked Questions (FAQ)
      1.59 onwards turns a list into a comma separated string
      automatically.
 
-#. | *Why doesn’t* ``Bio.Blast.qblast()`` *give the same results
+#. | *Why doesn't* ``Bio.Blast.qblast()`` *give the same results
      as the NCBI BLAST website?*
    | You need to specify the same options – the NCBI often adjust the
      default settings on the website, and they do not match the QBLAST

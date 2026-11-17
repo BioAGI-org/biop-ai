@@ -90,10 +90,11 @@ Reading files in the MMTF format (deprecated)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The ``Bio.PDB.mmtf`` module is deprecated, and we intend to remove it in a
-future release; importing it issues a ``BiopythonDeprecationWarning``. The
+future release. Importing it issues a ``BiopythonDeprecationWarning``. The
 RCSB PDB retired the MMTF format in July 2024 and switched off the server
-MMTF files were downloaded from, so structures can no longer be fetched in
-this format. Use mmCIF files instead; the examples below show how.
+that MMTF files were downloaded from, so structures can no longer be
+fetched in this format. Use mmCIF files instead. The examples below show
+how.
 
 Until the module is removed, ``MMTFParser`` can still read an MMTF file you
 already have:
@@ -104,7 +105,7 @@ already have:
    >>> structure = MMTFParser.get_structure("PDB/4CUP.mmtf")
 
 This gives you a Structure object as if read from a PDB or mmCIF file. To
-keep it once ``Bio.PDB.mmtf`` is gone, save it as an mmCIF file with
+keep it after ``Bio.PDB.mmtf`` is removed, save it as an mmCIF file with
 ``MMCIFIO`` (see section :ref:`sec:mmcif_writing`):
 
 .. code:: pycon
@@ -346,9 +347,9 @@ Writing MMTF files (deprecated)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``MMTFIO`` is part of the deprecated ``Bio.PDB.mmtf`` module (see section
-:ref:`sec:mmtf_reading`), and the RCSB PDB no longer distributes MMTF
-files. Unless you need MMTF output for a tool that cannot read anything
-else, write mmCIF files with ``MMCIFIO`` instead (see section
+:ref:`sec:mmtf_reading`). The RCSB PDB no longer distributes MMTF files.
+Unless you need MMTF output for a tool that cannot read anything else,
+write mmCIF files with ``MMCIFIO`` instead (see section
 :ref:`sec:mmcif_writing`).
 
 To write structures to the MMTF file format:
@@ -1761,9 +1762,10 @@ atoms of a structure:
 
 The ``search`` method takes a center point (a coordinate) and a radius in
 Ångström. To find the residues near a given residue, use the coordinates of
-one of its atoms as the center. With ``level="R"``, it returns every residue
-with at least one atom within the radius, instead of individual atoms
-(``"C"``, ``"M"`` and ``"S"`` return chains, models and structures):
+one of its atoms as the center. With ``level`` set to ``"C"``, ``"M"`` or
+``"S"``, ``search`` returns chains, models or structures instead of
+individual atoms. With ``level="R"``, it returns every residue with at least
+one atom within the radius:
 
 .. cont-doctest ../Tests/PDB lib:numpy
 
@@ -1794,9 +1796,9 @@ more than 5 Å from its CA:
    >>> sorted(res.id[1] for res in close_residues)
    [151, 152, 153, 154, 1001, 1027, 1035, 1054]
 
-The ``search_all`` method finds all pairs of entities within a
-given radius of each other. For example, all pairs of residues that have
-atoms within 4 Å of each other:
+The ``search_all`` method finds all pairs of entities within a given radius
+of each other. For example, this finds all pairs of residues that have atoms
+within 4 Å of each other:
 
 .. cont-doctest ../Tests/PDB lib:numpy
 
@@ -2212,11 +2214,11 @@ directory in which to store the downloaded PDB files.
 The ``retrieve_pdb_file`` method also has some options to specify the
 compression format used for the download, and the program used for local
 decompression (default ``.Z`` format and ``gunzip``). In addition, the
-server can be specified upon creation of the ``PDBList`` object. By
-default, the server of the Worldwide Protein Data Bank
-(https://files.wwpdb.org) is used. A server given as a bare host, such as
+server can be specified when you create the ``PDBList`` object. By
+default, ``PDBList`` uses the server of the Worldwide Protein Data Bank
+(https://files.wwpdb.org). A server given as a bare host, such as
 ``"https://ftp.pdbj.org"``, is taken to keep the archive under
-``/pub/pdb``; a server given with a path is taken to be the archive
+``/pub/pdb``. A server given with a path is taken to be the archive
 itself, so a mirror such as the EBI's can be used with
 ``PDBList(server="https://ftp.ebi.ac.uk/pub/databases/pdb")``. See the
 API documentation for more details. Thanks again to Kristian Rother

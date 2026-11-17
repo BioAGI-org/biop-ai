@@ -391,11 +391,11 @@ It is also possible to get dN and dS matrix or a tree from a
    gi|24657088|ref|NM_057410.3|    gi|24657104|ref|NM_057411.3|    gi|302179500|gb|HM749883.1| gi|47522839|ref|NM_214007.1|    gi|41327737|ref|NM_005228.3|    gi|6478867|gb|M37394.2|RATEGFR
 
 NG86, the default method, cannot give dS between the rat and the two
-Drosophila sequences: they have too many synonymous differences for its
+Drosophila sequences. They have too many synonymous differences for its
 correction for multiple substitutions. Those two entries of ``ds_matrix``
-are NaN, with a ``BiopythonWarning`` for each pair, and
-``aln.get_dn_ds_tree()`` raises ``ValueError``, as a tree needs every
-distance. LWL85 gives every distance for this alignment:
+are NaN, with a ``BiopythonWarning`` for each pair.
+``aln.get_dn_ds_tree()`` then raises ``ValueError``, because a tree needs
+every distance. LWL85 gives every distance for this alignment:
 
 .. code:: pycon
 

@@ -139,6 +139,6 @@ are a few examples from the api documentation
    /get/hsa:10458+ece:Z5100/aaseq      -> REST.kegg_get(["hsa:10458", "ece:Z5100"], "aaseq")
    /list/genome/animals                 -> REST.kegg_list("genome", option="animals")
 
-The one exception is ``kegg_list``, whose second argument is an organism
-for the pathway database only: subsets of other databases, such as a
+The one exception is ``kegg_list``. Its second argument is an organism,
+used only with the pathway database. Subsets of other databases, such as a
 group of genomes, are given as ``option``, as in the last example.

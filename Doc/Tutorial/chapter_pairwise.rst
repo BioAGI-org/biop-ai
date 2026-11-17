@@ -535,9 +535,9 @@ follow the suggestion by Waterman & Eggert
 [Waterman1987]_ and disallow such extensions.
 
 In local mode, gap scores must be 0 or less. A positive gap score rewards
-inserting gaps, so the best local alignment is no longer well defined, and
-``aligner.score`` and ``aligner.align`` raise a ``ValueError`` naming the
-positive score. A gap score function (see section
+inserting gaps, so the best local alignment is no longer well defined.
+``aligner.score`` and ``aligner.align`` then raise a ``ValueError`` naming
+the positive score. A gap score function (see section
 :ref:`sec:pairwise-general-gapscores`) is checked as it is called. Local
 alignments do not use the end gap scores, so these are not checked.
 
@@ -2245,9 +2245,9 @@ code point of each letter, so ``list("GATTACA")`` aligns exactly as
 ``"GATTACA"`` does. Any other item, such as ``"Asn"`` in a list of amino acid
 names, is given a number of its own, which never equals a letter's code point.
 Integer arrays are used as they are, so you can also pass the integers
-directly; as those numbers depend on the order in which items first appear,
-use integer arrays for both sequences rather than mixing them with lists of
-other items:
+directly. The numbers given to other items depend on the order in which the
+items first appear, so use integer arrays for both sequences rather than
+mixing them with lists of other items:
 
 .. doctest . lib:numpy
 
@@ -2432,7 +2432,10 @@ The ``CodonAligner`` class defines additional attributes that refer to a number 
    |                            | ``frameshift_plus_two_score``   |
    +----------------------------+---------------------------------+
 
-These parameters can be used as keyword arguments when creating the ``CodonAligner`` object; you can also use the following mnemonics shown in table :ref:`table:codonalign-mnemonics`. The parameter values can also be set afterwards as attributes to the ``CodonAligner`` object.
+You can pass these parameters as keyword arguments when you create the
+``CodonAligner`` object. You can also use the mnemonics shown in table
+:ref:`table:codonalign-mnemonics`. To change the parameter values afterwards,
+set them as attributes of the ``CodonAligner`` object.
 
 .. table:: Mnemonics to set codon alignment parameters
    :name: table:codonalign-mnemonics
@@ -2648,7 +2651,7 @@ To calculate the alignment score without calculating the alignment itself, the
    13.0
 
 As before, you can obtain the aligned amino acid sequence and nucleotide sequence by
-extracting rows from the alignment. Note that the nucleotide skipped by the +1
+extracting rows from the alignment. The nucleotide skipped by the +1
 frameshift is included in the aligned nucleotide sequence, with a gap at the
 corresponding position in the aligned amino acid sequence:
 
@@ -2918,7 +2921,7 @@ The ``YN00`` and ``ML`` methods need SciPy:
 
 The ``ML`` estimates come from a numerical optimization, so only their first
 three decimal places are shown. ``YN00`` gives the estimates of the ``yn00``
-program in PAML. It estimates them by iteration; if they have not converged
+program in PAML. It estimates them by iteration. If they have not converged
 after 20 rounds, ``calculate_dn_ds`` returns the last estimates with a
 ``BiopythonWarning``. If the two sequences have no synonymous sites, or no
 nonsynonymous sites, it returns ``nan`` for both, also with a warning.
