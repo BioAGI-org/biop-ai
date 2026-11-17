@@ -1,13 +1,13 @@
 Contributing to biop-ai
 ==========================
 
-We welcome pull requests to fix bugs or add new features, from anyone - and
-anything - able to write a good patch. See `AGENTS.md <AGENTS.md>`__ for what
+We welcome pull requests to fix bugs or add new features, from anyone, or
+anything, able to write a good patch. See `AGENTS.md <AGENTS.md>`__ for what
 that means in practice. This file is primarily concerned with the
 practicalities.
 
-biop-ai is a fork of Biopython, and most of the guidance below is inherited
-from that project. Upstream's general overview is still worth reading:
+biop-ai is a fork of Biopython, and most of the guidance below comes from
+that project. Upstream's general overview is still worth reading:
 http://biopython.org/wiki/Contributing
 
 
@@ -16,22 +16,21 @@ Licensing
 
 biop-ai inherits Biopython's licensing unchanged. Contributions are offered
 under *both* the original "Biopython License Agreement" and the more widely
-used "3-Clause BSD License" (see our LICENSE file for more details). Opening a
-pull request against this repository is taken as offering your work under
-both, on the usual inbound-equals-outbound basis; you do not need to restate it
-in each commit or pull request.
+used "3-Clause BSD License" (see our LICENSE file for more details). We treat
+opening a pull request against this repository as offering your work under
+both, on the usual inbound-equals-outbound basis. You do not need to restate
+it in each commit or pull request.
 
-Nothing is assigned to anyone by this. You keep the copyright in what you
-write, and the project gains no rights you have not equally granted to
-everybody else. This is not a contributor licence agreement and there is
-nothing to sign.
+This assigns nothing to anyone. You keep the copyright in what you write, and
+the project gains no rights you have not granted to everybody else. This is
+not a contributor licence agreement and there is nothing to sign.
 
-Both licences are named because upstream Biopython is part-way through
-offering the whole library under the pair, and a contribution offered under
-only one of them could not follow.
+We name both licences because upstream Biopython is part-way through offering
+the whole library under the pair. A contribution offered under only one of
+them could not follow.
 
-Do not remove or alter existing copyright notices. Essentially all of this
-code was written by the Biopython contributors, and that attribution stays.
+Do not remove or alter existing copyright notices. The Biopython contributors
+wrote essentially all of this code, and that attribution stays.
 
 
 Tagged issues
@@ -51,8 +50,8 @@ the hope they become long term open source contributors.
 
 Use whatever tools help you do that well, AI included. We ask only that you
 understand the change you are proposing, can explain why it is correct, and
-have run the tests. Those conditions apply identically to every contributor;
-see `AGENTS.md <AGENTS.md>`__.
+have run the tests. Those conditions are the same for every contributor; see
+`AGENTS.md <AGENTS.md>`__.
 
 The `help wanted
 <https://github.com/BioAGI-org/biop-ai/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22help%20wanted%22>`_
@@ -93,9 +92,9 @@ API documentation. We also use reStructuredText for files like ``README.rst``.
 To facilitate style checking, we make use of ``pre-commit`` to automatically
 run ``black``, ``ruff``, ``flake8`` and ``mypy`` on the Python code, and
 ``rstcheck`` and ``doc8`` on the RST files, among other checks. We also use
-continuous integration on GitHub to run these checks, but we strongly suggest
-you install and run ``pre-commit`` in your local machine (see the Setup
-section of `AGENTS.md <AGENTS.md>`__).
+continuous integration on GitHub to run these checks, but we urge you to
+install and run ``pre-commit`` in your local machine (see the Setup section of
+`AGENTS.md <AGENTS.md>`__).
 
 
 Testing
@@ -107,14 +106,14 @@ chapter in the Biopython Tutorial for more information on our test framework:
 http://biopython.org/DIST/docs/tutorial/Tutorial.html
 
 
-Local Development and Testing
+Local development and testing
 -----------------------------
 
 Please run the full test suite locally before submitting a pull request, and
-run ``pre-commit`` so the style checks pass before CI sees your change. How to
-install biop-ai for development, enable the ``pre-commit`` hooks, and run
-the test suite is described once, in the Setup and Testing sections of
-`AGENTS.md <AGENTS.md>`__; the README carries the same commands for users.
+run ``pre-commit`` so the style checks pass before CI runs on your change. The
+Setup and Testing sections of `AGENTS.md <AGENTS.md>`__ are the one place that
+describes how to install biop-ai for development, enable the ``pre-commit``
+hooks, and run the test suite. The README has the same commands for users.
 
 Continuous Integration
 ----------------------

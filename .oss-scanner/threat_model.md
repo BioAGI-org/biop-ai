@@ -5,7 +5,7 @@ biop-ai is a fork of Biopython. The importable package is still `Bio`
 
 ## What this project does and where untrusted input enters
 
-`Bio` is a Python library for computational molecular biology. Its main job
+`Bio` is a Python library for computational molecular biology. Its main use
 is reading biological file formats. Most of those files are downloaded from
 public databases (NCBI, UniProt, the PDB and others) or written by other
 programs. Treat every file, and every server response, as untrusted. The
@@ -21,13 +21,13 @@ Untrusted input enters through:
   `Bio.GenBank`, `Bio.SwissProt`, `Bio.Entrez` (NCBI XML), `Bio.motifs`,
   `Bio.Cluster.read`, `Bio.bgzf`, and the indexes (`SeqIO.index`,
   `SeqIO.index_db`).
-- DTDs and schemas named in a document: `Bio.Entrez.Parser` and the
+- DTDs and schemas named in a document. `Bio.Entrez.Parser` and the
   `Bio.Blast` XML parser resolve them from the copies in `Bio/Entrez/`, and
   `Bio.Entrez.Parser` can also download them from NCBI into a local cache.
 - Network clients, whose responses are parsed like files: `Bio.Entrez`,
   `Bio.ExPASy`, `Bio.Blast.qblast`, `Bio.PDB.PDBList`,
   `Bio.PDB.alphafold_db`, `Bio.TogoWS`, `Bio.UniProt`, `Bio.KEGG.REST`.
-- The C extensions, listed in `pyproject.toml`. Four are fed file content:
+- The C extensions, listed in `pyproject.toml`. Four receive file content:
   - `Bio.Align._aligncore` (`Bio/Align/_aligncore.c`): the printed
     alignment rows of most `Bio.Align` parsers.
   - `Bio.PDB._bcif_helper` (`Bio/PDB/bcifhelpermodule.c`): BinaryCIF
@@ -43,8 +43,8 @@ Untrusted input enters through:
 
 ## Components that matter most / least
 
-- Most: the C extensions, above all the four fed file content, and the
-  parsers of downloaded files.
+- Most: the C extensions, above all the four that receive file content, and
+  the parsers of downloaded files.
 - Less: the deprecated modules in `DEPRECATED.rst` (`Bio.PDB.mmtf`,
   `Bio.Blast.NCBIWWW`, `Bio.Blast.NCBIXML`,
   `Bio.PopGen.GenePop.LargeFileParser`), and `Scripts/` (examples, not
@@ -68,13 +68,13 @@ Untrusted input enters through:
   `rm -rf /src/build && CC="$CC -fsanitize=address -fsanitize=undefined" pip install --no-deps --no-build-isolation --upgrade --target /opt/asan /src`.
 - Tests: `cd /src/Tests && python -m pytest --offline test_SeqIO.py`, one
   module at a time. The whole offline suite is
-  `python -m pytest --offline -n 2`: about 3 minutes, and about 10 under
-  `python-asan`. Run it from `Tests/`, not `/src`.
+  `python -m pytest --offline -n 2`, which takes about 3 minutes, and about
+  10 under `python-asan`. Run it from `Tests/`, not `/src`.
 - `Tests/<Format>/` (`Tests/GenBank`, `Tests/PDB`, `Tests/Nexus`,
   `Tests/TwoBit`, ...) hold real sample files, good seeds for malformed
   ones.
-- Known open bugs are listed in `IMPROVEMENTS.md`. Please do not report
-  those again.
+- `IMPROVEMENTS.md` lists known open bugs. Please do not report those
+  again.
 
 ## How you rate severity
 
@@ -113,9 +113,9 @@ Untrusted input enters through:
 - Network tests (those that call `requires_internet.check()`), and live
   behaviour of the network clients. The scan has no network.
 - Small bugs in the deprecated modules listed above.
-- Unpickling: loading a pickle runs code by design.
+- Unpickling. Loading a pickle runs code by design.
 - The `BiopythonWarning` about importing from inside the source tree. This
   editable install sets it off.
-- LeakSanitizer, which `python-asan` turns off: its reports at exit are
-  dominated by CPython itself (see `.github/workflows/ci.yml`).
+- LeakSanitizer, which `python-asan` turns off. Most of its reports at exit
+  come from CPython itself (see `.github/workflows/ci.yml`).
   `Tests/test_C_extension_memory.py` measures leaks instead.
