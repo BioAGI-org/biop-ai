@@ -564,14 +564,14 @@ trying to save them all in a list.
 If you start iterating over the records *before* using ``blast_records`` as
 a list, the parser will first reset the file stream to the beginning of the
 data to ensure that all records are being read. List-like access after
-partial iteration is therefore supported only if the input data is seekable;
-if the stream cannot be rewound, a ``ValueError`` is raised. Whether the
-stream returned by ``qblast`` (see section :ref:`sec:running-www-blast`) can
-be rewound is an implementation property of the connection, so do not rely
-on it. In such cases, you can explicitly read the records into a list by
-calling ``blast_records = blast_records[:]`` before iterating over them.
-After reading in the records, it is safe to iterate over them or use them as
-a list.
+partial iteration is therefore supported only if the input data is seekable.
+If the stream cannot be rewound, the parser raises a ``ValueError``. Whether
+the stream that ``qblast`` returns (see section :ref:`sec:running-www-blast`)
+can be rewound depends on how the connection is implemented, so do not rely
+on it. In such cases, you can read the records into a list by calling
+``blast_records = blast_records[:]`` before iterating over them. After
+reading in the records, it is safe to iterate over them or use them as a
+list.
 
 Instead of opening the file yourself, you can just provide the file
 name:
@@ -1466,8 +1466,8 @@ Migrating from the older BLAST modules
 --------------------------------------
 
 For most of its history, Biopython provided BLAST support through the
-``Bio.Blast.NCBIWWW`` module (for running BLAST over the internet) and the
-``Bio.Blast.NCBIXML`` module (for parsing BLAST XML output). Older scripts,
+``Bio.Blast.NCBIWWW`` module, for running BLAST over the internet, and the
+``Bio.Blast.NCBIXML`` module, for parsing BLAST XML output. Older scripts,
 books, and course notes teach these modules. Both have been superseded by
 the ``Bio.Blast`` functions described in this chapter, and we intend to
 remove them in a future release. This section shows how to move existing
@@ -1476,8 +1476,8 @@ code over.
 Running BLAST over the internet
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Calls to ``NCBIWWW.qblast`` can be replaced directly, as ``Blast.qblast``
-accepts all the arguments of the old function:
+You can replace calls to ``NCBIWWW.qblast`` with calls to ``Blast.qblast``,
+which accepts all the arguments of the old function:
 
 .. code:: python
 
@@ -1489,7 +1489,7 @@ accepts all the arguments of the old function:
 
    result_stream = Blast.qblast("blastn", "nt", "8332116")
 
-Two differences to be aware of:
+There are two differences to be aware of:
 
 -  ``NCBIWWW.qblast`` returned a text (unicode) handle, while
    ``Blast.qblast`` returns a stream of ``bytes``. If you save the results,
@@ -1498,7 +1498,7 @@ Two differences to be aware of:
    section :ref:`subsec:saving-blast-results`.
 
 -  ``NCBIWWW.qblast`` documented ``format_type="ASN.1"`` as one of its
-   output formats; ``Blast.qblast`` instead documents ``"XML"`` (the
+   output formats. ``Blast.qblast`` instead documents ``"XML"`` (the
    default), ``"HTML"``, ``"Text"``, ``"XML2"``, ``"JSON2"``, and
    ``"Tabular"``.
 
@@ -1506,15 +1506,14 @@ Parsing BLAST output
 ~~~~~~~~~~~~~~~~~~~~
 
 ``NCBIXML.read`` and ``NCBIXML.parse`` map to ``Blast.read`` and
-``Blast.parse`` (see section :ref:`sec:parsing-blast`); note that the new
-functions require streams opened in binary mode. The objects returned are
-organized differently, however. ``NCBIXML`` returned record objects with
-``alignments`` and ``hsps`` attributes, while ``Bio.Blast`` returns
-``Record`` objects that behave as lists of ``Hit`` objects, which in turn
-behave as lists of ``HSP`` objects. The common lookups translate as
-follows, with ``record``, ``alignment``, and ``hsp`` referring to the old
-objects, and ``hit`` to the ``Bio.Blast.Hit`` object replacing
-``alignment``:
+``Blast.parse`` (see section :ref:`sec:parsing-blast`). The new functions
+require streams opened in binary mode. The objects returned are organized
+differently, however. ``NCBIXML`` returned record objects with
+``alignments`` and ``hsps`` attributes. ``Bio.Blast`` returns ``Record``
+objects that behave as lists of ``Hit`` objects, which in turn behave as
+lists of ``HSP`` objects. The table below translates the common lookups. In
+it, ``record``, ``alignment``, and ``hsp`` are the old objects, and ``hit``
+is the ``Bio.Blast.Hit`` object that replaces ``alignment``:
 
 ======================================== ==============================================
 ``Bio.Blast.NCBIXML`` (old)              ``Bio.Blast`` (new)
@@ -1538,8 +1537,8 @@ objects, and ``hit`` to the ``Bio.Blast.Hit`` object replacing
 ``hsp.query_start``, ``hsp.sbjct_start`` ``hsp.coordinates``
 ======================================== ==============================================
 
-Note that the old classes used 1-based coordinates (``hsp.query_start``,
-``hsp.query_end``, ``hsp.sbjct_start``, ``hsp.sbjct_end``), while the
+The old classes used 1-based coordinates in ``hsp.query_start``,
+``hsp.query_end``, ``hsp.sbjct_start``, and ``hsp.sbjct_end``. The
 ``coordinates`` attribute of a ``Bio.Blast.HSP`` uses Python-style 0-based
 coordinates, with the target coordinates in the first row and the query
 coordinates in the second row (see section :ref:`subsec:blast-hsp`).
@@ -1565,8 +1564,8 @@ becomes:
 Not everything has a direct counterpart. The legacy record classes defined
 in ``Bio.Blast.NCBIXML`` (``Blast``, ``PSIBlast``, and their component
 classes) mirrored Biopython's long-removed parser for BLAST plain-text
-output, and some of their attributes -- for example the ``PSIBlast``
-class's ``rounds``, recording which sequences were new or reused in each
-PSI-BLAST iteration -- were only ever filled in from plain-text output.
+output. Some of their attributes were only ever filled in from plain-text
+output. One example is the ``rounds`` attribute of the ``PSIBlast`` class.
+It records which sequences were new or reused in each PSI-BLAST iteration.
 The XML output that both the old and the new parser read does not contain
 that information, so it is not available from ``Bio.Blast`` either.

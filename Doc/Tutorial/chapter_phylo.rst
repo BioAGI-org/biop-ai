@@ -669,10 +669,10 @@ The rest of these methods are boolean checks:
    given targets. The targets should be terminals of the tree. For
    convenience, this method returns the common ancestor (MCRA) of the
    targets if they are monophyletic (instead of the value ``True``), and
-   ``False`` otherwise. The test reads the tree from its stored root; with
-   ``unrooted=True`` the targets also count as monophyletic when all the
-   other terminals form a complete subclade, and that other clade is then
-   returned.
+   ``False`` otherwise. The test reads the tree from its stored root. With
+   ``unrooted=True``, the targets also count as monophyletic when all the
+   other terminals form a complete subclade, and the method then returns
+   that other clade.
 
 ``is_parent_of``
    True if target is a descendent of this tree — not required to be a
@@ -740,8 +740,8 @@ tree intact, make a complete copy of the tree first, using Python’s
    If a bifurcating original root is dropped, its two branches become
    one, and the clade below keeps its own support, or takes the other
    branch's if it has none. If both branches carry support and the
-   values differ, the other value is dropped and a ``BiopythonWarning``
-   says so. The new root itself has no support.
+   values differ, the other value is dropped, with a
+   ``BiopythonWarning``. The new root itself has no support.
 
 ``root_at_midpoint``
    Reroot this tree at the calculated midpoint between the two most

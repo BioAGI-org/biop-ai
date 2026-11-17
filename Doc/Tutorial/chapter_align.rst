@@ -6043,9 +6043,9 @@ A package can instead declare the format as an entry point in the
 
 Then nobody needs to call ``register_format``. As in ``Bio.SeqIO``,
 ``Bio.Align`` looks for these entry points once per Python process, the
-first time it is given a format name it does not know, and imports the
+first time it is given a format name it does not know. It imports the
 module when the format is first used. The name is case-insensitive here
-too. An entry point naming a built-in format, or a name which two
-installed packages give different modules, is ignored with a warning.
+too. An entry point is ignored, with a warning, if it names a built-in
+format, or if two installed packages give its name different modules.
 ``register_format`` replaces a format from an entry point without
 ``replace=True``.

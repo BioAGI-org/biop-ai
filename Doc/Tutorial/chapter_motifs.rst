@@ -2330,7 +2330,7 @@ roughly :math:`1-0.239=0.761`.
 
 Both PSSMs need pseudocounts for this comparison. Without them, the
 log-odds score is ``-inf`` wherever a count is zero, as for most of the
-columns of ``m_reb1``; the Pearson correlation is then undefined, and
+columns of ``m_reb1``. The Pearson correlation is then undefined, and
 ``dist_pearson`` raises a ``ValueError``.
 
 .. _`sec:find`:

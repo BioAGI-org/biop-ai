@@ -27,8 +27,8 @@ and lots of other subdirectories which contain input files for the test
 suite.
 
 The tests need pytest 9 or later. Installing Biopython from its source
-folder with the ``test`` extra brings pytest and the optional packages
-the tests use:
+folder with the ``test`` extra also installs pytest and the optional
+packages the tests use:
 
 .. code:: console
 
@@ -74,16 +74,16 @@ online component by adding ``--offline``, e.g.
 ``--offline`` also makes any ``socket.connect`` call to another machine
 raise an error. ``urllib`` connects that way, so a test which goes
 online by mistake will usually fail rather than quietly use the
-network. This is a safety net, not a sandbox: DNS lookups and
-subprocesses, for example, are not blocked.
+network. ``--offline`` does not block all network access. DNS lookups
+and subprocesses, for example, are not blocked.
 
 By default, ``run_tests.py`` runs all tests, including the docstring
 tests.
 
-If an individual test is failing, you can also try running it directly
-(e.g. ``python test_SeqIO.py``), which may give you more information.
-This works from any directory, so from the top level source directory
-it is ``python Tests/test_SeqIO.py``.
+If an individual test is failing, you can also run it directly, for
+example with ``python test_SeqIO.py``. This may give you more
+information. A test script runs from any directory, so from the top
+level source directory the command is ``python Tests/test_SeqIO.py``.
 
 Tests based on Python’s standard ``unittest`` framework will
 ``import unittest`` and then define ``unittest.TestCase`` classes, each
@@ -101,9 +101,9 @@ its options. In the ``Tests`` directory,
 
    $ python -m pytest --offline
 
-is the same as ``python run_tests.py --offline``. pytest wants test
-files with their ``.py`` extension, and picks out tests whose names
-match an expression with ``-k``:
+is the same as ``python run_tests.py --offline``. pytest needs test file
+names with their ``.py`` extension. Its ``-k`` option selects the tests
+whose names match an expression:
 
 .. code:: console
 
@@ -137,8 +137,8 @@ of them, or just those of one module:
    $ python -m pytest test_docstrings.py::Bio.Seq
 
 With the editable install shown above, pytest also works from any other
-directory, given the path to the test files, such as from the top level
-source directory:
+directory if you give it the path to the test files. For example, from
+the top level source directory, run:
 
 .. code:: console
 
@@ -178,7 +178,7 @@ If you are interested in using Tox, you could start with the example
 
 Using the template above, executing ``tox`` will test your Biopython
 code against Python 3.10 to 3.14 and PyPy. It assumes that those
-Pythons’ executables are named ``python3.12`` for Python 3.12, and so
+Pythons' executables are named ``python3.12`` for Python 3.12, and so
 on. Each environment installs Biopython with the ``test`` extra, except
 PyPy, which gets just pytest because SciPy has no wheels for PyPy.
 Anything after ``--`` is passed on to pytest, so
@@ -220,10 +220,10 @@ That way your test passes however it is run, not only from inside
 whenever the tests are run from another directory, as our continuous
 integration does.
 
-Any script with a ``test_`` prefix in the ``Tests`` directory will be
-found and run by pytest. Only the tests in ``unittest.TestCase``
-subclasses are collected, so write your tests as those: a plain
-pytest-style ``def test_...()`` function is ignored. Below, we show an
+pytest finds and runs any script with a ``test_`` prefix in the ``Tests``
+directory. Only the tests in ``unittest.TestCase`` subclasses are
+collected, so write your tests as those. pytest ignores a plain
+pytest-style ``def test_...()`` function. Below, we show an
 example test script ``test_Biospam.py``. If you put this script in the
 Biopython ``Tests`` directory, then pytest will find it and execute the
 tests contained in it:
@@ -333,7 +333,7 @@ These are the key points of ``unittest``-based tests:
           unittest.main(testRunner=runner)
 
    to execute the tests when the script is run by itself (rather than
-   collected by pytest). If you run this script, then you’ll
+   collected by pytest). If you run this script, then you'll
    see something like the following:
 
    .. code:: console
@@ -439,34 +439,33 @@ framework <https://docs.python.org/3/library/doctest.html>`__ (included
 with Python) allows the developer to embed working examples in the
 docstrings, and have these examples automatically tested.
 
-Currently only part of Biopython includes doctests. The test suite
-takes care of running them: ``Tests/conftest.py`` imports every module
-in the ``Bio`` and ``BioSQL`` packages and collects each docstring
-which has examples as one test, under the file ``test_docstrings.py``.
-The tests are named after the module and then the object the docstring
-belongs to, such as
-``test_docstrings.py::Bio.Seq::Bio.Seq.translate``. So, if you’ve added
+Currently only part of Biopython includes doctests. The test suite runs
+them. ``Tests/conftest.py`` imports every module in the ``Bio`` and
+``BioSQL`` packages and collects each docstring which has examples as one
+test, under the file ``test_docstrings.py``. The tests are named after the
+module and then the object the docstring belongs to, such as
+``test_docstrings.py::Bio.Seq::Bio.Seq.translate``. So, if you've added
 some doctests to the docstrings in a Biopython module, they will be run
 without any change to the test suite. If an example fails, pytest shows
 its expected and actual output.
 
 The exceptions are named in two lists near the top of
-``Tests/conftest.py``.
-``EXCLUDE_DOCTEST_MODULES`` holds modules whose doctests are never run,
-such as the stubs left behind for modules removed from Biopython, which
-deliberately raise an ``ImportError`` naming their replacement.
-``ONLINE_DOCTEST_MODULES`` holds modules whose doctests need internet
-access, such as ``Bio.Entrez``. These are only left out when you use
-``--offline``, so add your module there if its doctests go online.
+``Tests/conftest.py``. ``EXCLUDE_DOCTEST_MODULES`` holds modules whose
+doctests are never run, such as the stubs left behind for modules removed
+from Biopython, which deliberately raise an ``ImportError`` naming their
+replacement. ``ONLINE_DOCTEST_MODULES`` holds modules whose doctests need
+internet access, such as ``Bio.Entrez``. These are only left out when you
+use ``--offline``, so add your module there if its doctests need internet
+access.
 
 Modules needing an optional dependency, such as ReportLab for
-``Bio.Graphics``, are not listed. Instead such a module raises
+``Bio.Graphics``, are not listed. Instead, such a module raises
 ``MissingPythonDependencyError`` (from ``Bio``) when it is imported
-without the dependency, and the test suite reports it as skipped rather
-than failed, in a "modules skipped at import" section at the end of the
-run. A ``test_XXX.py`` script can skip itself the same way, by raising
+without the dependency. The test suite reports it as skipped rather than
+failed, in a "modules skipped at import" section at the end of the run. A
+``test_XXX.py`` script can skip itself the same way, by raising
 ``MissingExternalDependencyError`` while it is being imported. Only an
-error raised during the import counts: the same exceptions raised later,
+error raised during the import counts. The same exceptions raised later,
 from the code being tested, are failures. The file
 ``Tests/expected_skips.txt`` lists the modules which may skip, one per
 line, as ``test_XXX`` for a test script or ``Bio.XXX`` for a module's
@@ -482,8 +481,8 @@ test.
 Note that if you want to write doctests involving file parsing, defining
 the file location complicates matters. Ideally use relative paths
 assuming the code will be run from the ``Tests`` directory, where the
-test suite runs each docstring's examples; see the ``Bio.SeqIO``
-doctests for an example of this.
+test suite runs each docstring's examples. See the ``Bio.SeqIO`` doctests
+for an example of this.
 
 To run the docstring tests only, use
 
