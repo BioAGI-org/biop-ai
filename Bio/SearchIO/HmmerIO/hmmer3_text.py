@@ -187,6 +187,11 @@ class Hmmer3TextParser:
             elif self.line.startswith("   [No hits detected that satisfy reporting"):
                 while True:
                     self.line = read_forward(self.handle)
+                    if not self.line:
+                        raise ValueError(
+                            "File ended after 'No hits detected' for query"
+                            f" {qid!r}, before the 'Internal pipeline' line"
+                        )
                     if self.line.startswith("Internal pipeline"):
                         if hit_attr_list:
                             raise ValueError(
