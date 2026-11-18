@@ -97,6 +97,8 @@ def parse(handle):
     # Skip blank lines at head of file
     while True:
         line = handle.readline()
+        if not line:
+            return  # End of file: empty or blank input holds no records
         if line.strip():
             break  # Starting a record
 
