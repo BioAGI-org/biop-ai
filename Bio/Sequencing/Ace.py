@@ -57,6 +57,8 @@ Thus an ace file does not entirerly suit the concept of iterating. If WA, CT, RT
 are needed, the 'read' function rather than the 'parse' function might be more appropriate.
 """
 
+from collections import defaultdict
+
 
 class rd:
     """RD (reads), store a read with its name, sequence etc.
@@ -530,50 +532,51 @@ class ACEFileRecord:
 
     def sort(self):
         """Sorts wr, rt and ct tags into the appropriate contig / read instance, if possible."""
-        ct = []
-        rt = []
-        wr = []
+
+        def take_misplaced(tags, owner, misplaced):
+            # Keep the tags naming owner, in place; file the rest by name.
+            kept = []
+            for tag in tags:
+                if tag.name != owner:
+                    misplaced[tag.name].append(tag)
+                else:
+                    kept.append(tag)
+            tags[:] = kept
+
+        # Misplaced tags by the name they carry, in file order. Looking
+        # them up by name, rather than comparing every tag with every
+        # contig or read, keeps this linear in the size of the file.
+        ct_by_name: defaultdict[str, list[ct]] = defaultdict(list)
+        rt_by_name: defaultdict[str, list[rt]] = defaultdict(list)
+        wr_by_name: defaultdict[str, list[wr]] = defaultdict(list)
         # search for tags that aren't in the right position
-        for i, c in enumerate(self.contigs):
+        for c in self.contigs:
             if c.wa:
                 if not self.wa:
                     self.wa = []
                 self.wa.extend(c.wa)
             if c.ct:
-                newcts = [ct_tag for ct_tag in c.ct if ct_tag.name != c.name]
-                for x in newcts:
-                    self.contigs[i].ct.remove(x)
-                ct.extend(newcts)
-            for j, r in enumerate(c.reads):
+                take_misplaced(c.ct, c.name, ct_by_name)
+            for r in c.reads:
                 if r.rt:
-                    newrts = [rt_tag for rt_tag in r.rt if rt_tag.name != r.rd.name]
-                    for x in newrts:
-                        self.contigs[i].reads[j].rt.remove(x)
-                    rt.extend(newrts)
+                    take_misplaced(r.rt, r.rd.name, rt_by_name)
                 if r.wr:
-                    newwrs = [wr_tag for wr_tag in r.wr if wr_tag.name != r.rd.name]
-                    for x in newwrs:
-                        self.contigs[i].reads[j].wr.remove(x)
-                    wr.extend(newwrs)
+                    take_misplaced(r.wr, r.rd.name, wr_by_name)
         # now sort them into their proper place
-        for i, c in enumerate(self.contigs):
-            for ct_tag in ct:
-                if ct_tag.name == c.name:
-                    if self.contigs[i].ct is None:
-                        self.contigs[i].ct = []
-                    self.contigs[i].ct.append(ct_tag)
-            if rt or wr:
-                for j, r in enumerate(c.reads):
-                    for rt_tag in rt:
-                        if rt_tag.name == r.rd.name:
-                            if self.contigs[i].reads[j].rt is None:
-                                self.contigs[i].reads[j].rt = []
-                            self.contigs[i].reads[j].rt.append(rt_tag)
-                    for wr_tag in wr:
-                        if wr_tag.name == r.rd.name:
-                            if self.contigs[i].reads[j].wr is None:
-                                self.contigs[i].reads[j].wr = []
-                            self.contigs[i].reads[j].wr.append(wr_tag)
+        for c in self.contigs:
+            if c.name in ct_by_name:
+                if c.ct is None:
+                    c.ct = []
+                c.ct.extend(ct_by_name[c.name])
+            for r in c.reads:
+                if r.rd.name in rt_by_name:
+                    if r.rt is None:
+                        r.rt = []
+                    r.rt.extend(rt_by_name[r.rd.name])
+                if r.rd.name in wr_by_name:
+                    if r.wr is None:
+                        r.wr = []
+                    r.wr.extend(wr_by_name[r.rd.name])
 
 
 def read(handle):
