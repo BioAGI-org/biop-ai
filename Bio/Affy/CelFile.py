@@ -8,6 +8,8 @@
 """Reading information from Affymetrix CEL files version 3 and 4."""
 
 import struct
+import sys
+from array import array
 
 try:
     import numpy as np
@@ -305,6 +307,38 @@ def _read_v4(f):
     return record
 
 
+def _read_v3_cells(record, cells):
+    # Make the intensity arrays from the cells stored while reading the
+    # INTENSITY section. They are made only once the cells are known to cover
+    # the whole array, so that a short file declaring large Rows and Cols
+    # cannot make the parser allocate memory for cells it does not hold.
+    index, intensities, stdevs, npix = cells
+    # A cell may be listed more than once; as before, the last line wins.
+    # np.unique gives the first line of each distinct cell, in cell order;
+    # on the lines reversed, that is the last.
+    last = np.unique(np.asarray(index)[::-1], return_index=True)[1]
+    if len(last) < record.nrows * record.ncols:
+        raise ParserError(
+            f"CEL version 3 file has {record.nrows} rows and {record.ncols} "
+            f"columns but values for {len(last)} cells"
+        )
+    last = len(index) - 1 - last
+    shape = (record.nrows, record.ncols)
+    record.intensities = np.asarray(intensities, float)[last].reshape(shape)
+    record.stdevs = np.asarray(stdevs, float)[last].reshape(shape)
+    record.npix = np.asarray(npix, int)[last].reshape(shape)
+
+
+def _read_v3_shape(record, section):
+    # MASKS, OUTLIERS and MODIFIED mark cells of the intensity array, whose
+    # size has been checked against the cells in the file.
+    if record.intensities is None:
+        raise ParserError(
+            f"CEL version 3 file has a {section} section before INTENSITY"
+        )
+    return record.intensities.shape
+
+
 def _read_v3(handle):
     # Needs error handling.
     # Needs to know the chip design.
@@ -313,27 +347,50 @@ def _read_v3(handle):
     # _read_v3 parsed the CEL section.
     record.version = 3
     section = ""
+    cells = None
     for line in handle:
         line = line.rstrip("\r\n")
         if not line:
             continue
+        if section == "INTENSITY" and line.startswith("["):
+            _read_v3_cells(record, cells)
         # Set current section
         if line.startswith("[HEADER]"):
+            if record.intensities is not None:
+                # Rows and Cols must not change once checked against the cells
+                raise ParserError(
+                    "CEL version 3 file has a HEADER section after INTENSITY"
+                )
             section = "HEADER"
         elif line.startswith("[INTENSITY]"):
             section = "INTENSITY"
-            record.intensities = np.zeros((record.nrows, record.ncols))
-            record.stdevs = np.zeros((record.nrows, record.ncols))
-            record.npix = np.zeros((record.nrows, record.ncols), int)
+            if record.nrows is None or record.ncols is None:
+                raise ParserError(
+                    "CEL version 3 file gives no Rows or Cols before INTENSITY"
+                )
+            # No file holds more than sys.maxsize cells, and the limit keeps
+            # the flat index of each cell within a 64-bit integer.
+            if not (
+                record.nrows >= 0
+                and record.ncols >= 0
+                and record.nrows * record.ncols <= sys.maxsize
+            ):
+                raise ParserError(
+                    f"CEL version 3 file has an invalid size of {record.nrows} "
+                    f"rows and {record.ncols} columns"
+                )
+            # The flat index, intensity, stdev and pixel count of each line,
+            # until the section ends; see _read_v3_cells.
+            cells = (array("q"), array("d"), array("d"), array("q"))
         elif line.startswith("[MASKS]"):
             section = "MASKS"
-            record.mask = np.zeros((record.nrows, record.ncols), bool)
+            record.mask = np.zeros(_read_v3_shape(record, section), bool)
         elif line.startswith("[OUTLIERS]"):
             section = "OUTLIERS"
-            record.outliers = np.zeros((record.nrows, record.ncols), bool)
+            record.outliers = np.zeros(_read_v3_shape(record, section), bool)
         elif line.startswith("[MODIFIED]"):
             section = "MODIFIED"
-            record.modified = np.zeros((record.nrows, record.ncols))
+            record.modified = np.zeros(_read_v3_shape(record, section))
         elif line.startswith("["):
             raise ParserError("Unknown section found in version 3 CEL file")
         else:  # read the data in a section
@@ -556,9 +613,15 @@ def _read_v3(handle):
                     words = line.split()
                     y = int(words[0])
                     x = int(words[1])
-                    record.intensities[x, y] = float(words[2])
-                    record.stdevs[x, y] = float(words[3])
-                    record.npix[x, y] = int(words[4])
+                    if not (0 <= x < record.nrows and 0 <= y < record.ncols):
+                        raise ParserError(
+                            f"CEL version 3 file has cell X={y} Y={x} outside "
+                            f"its {record.ncols} columns and {record.nrows} rows"
+                        )
+                    cells[0].append(x * record.ncols + y)
+                    cells[1].append(float(words[2]))
+                    cells[2].append(float(words[3]))
+                    cells[3].append(int(words[4]))
             elif section == "MASKS":
                 if line.startswith("NumberCells="):
                     key, value = line.split("=", 1)
@@ -607,6 +670,8 @@ def _read_v3(handle):
                     y = int(words[0])
                     x = int(words[1])
                     record.modified[x, y] = float(words[2])
+    if section == "INTENSITY":
+        _read_v3_cells(record, cells)
     return record
 
 

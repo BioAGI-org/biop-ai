@@ -318,6 +318,84 @@ class AffyTest(unittest.TestCase):
         self.assertEqual(record.DatHeader["filter-wavelength"], 570)
         self.assertEqual(record.DatHeader["image-orientation"], 6)
 
+    def testAffy3BadSizes(self):
+        # The version 3 parser used to size its arrays from Rows and Cols in
+        # the header alone. A short file declaring a big array came back as
+        # that many cells of zeros, and memory grew with the declared size,
+        # not with the file. Cells missing from the INTENSITY section were
+        # silently left as zero.
+        with open(self.affy3) as f:
+            data = f.read()
+        dims = "Cols=5\nRows=5\n"
+        last_cell = "  4\t  4\t168.0\t24.1\t 25\n"
+        self.assertIn(dims, data)
+        self.assertIn(last_cell, data)
+        start = data.index("[INTENSITY]\n")
+        intensity = data[start : data.index("[MASKS]")]
+        header_only = data[: start + len("[INTENSITY]\n")]
+        cases = [
+            (
+                data.replace(dims, "Cols=2000\nRows=2000\n"),
+                "has 2000 rows and 2000 columns but values for 25 cells",
+            ),
+            (
+                data.replace(last_cell, ""),
+                "has 5 rows and 5 columns but values for 24 cells",
+            ),
+            (header_only, "has 5 rows and 5 columns but values for 0 cells"),
+            (
+                data.replace(last_cell, "  5\t  4\t168.0\t24.1\t 25\n"),
+                "has cell X=5 Y=4 outside its 5 columns and 5 rows",
+            ),
+            (
+                data.replace(last_cell, " -1\t  4\t168.0\t24.1\t 25\n"),
+                "has cell X=-1 Y=4 outside its 5 columns and 5 rows",
+            ),
+            (data.replace(dims, "Cols=5\n"), "gives no Rows or Cols before INTENSITY"),
+            (
+                data.replace(dims, "Cols=5\nRows=-5\n"),
+                "has an invalid size of -5 rows and 5 columns",
+            ),
+            (
+                data.replace(dims, f"Cols={2**40}\nRows={2**40}\n"),
+                f"has an invalid size of {2**40} rows and {2**40} columns",
+            ),
+            # A second header could change the size after it had been checked
+            (
+                data.replace("[MASKS]", "[HEADER]\nCols=2000\nRows=2000\n[MASKS]"),
+                "has a HEADER section after INTENSITY",
+            ),
+            (data.replace(intensity, ""), "has a MASKS section before INTENSITY"),
+        ]
+        for bad, message in cases:
+            with self.subTest(message=message):
+                self.assertNotEqual(bad, data)
+                with self.assertRaisesRegex(
+                    CelFile.ParserError, f"^CEL version 3 file {message}$"
+                ):
+                    CelFile.read(io.StringIO(bad))
+
+    @unittest.skipIf(tracemalloc is None, "tracemalloc is not available")
+    def testAffy3SizeBeyondCellsMemory(self):
+        # The 3 kB example file declaring 2000 by 2000 cells made the old
+        # parser allocate 96 MB of arrays; the fixed one stops at the end of
+        # the INTENSITY section, having stored only the 29 cell lines.
+        with open(self.affy3) as f:
+            bad = f.read().replace("Cols=5\nRows=5\n", "Cols=2000\nRows=2000\n")
+        was_tracing = tracemalloc.is_tracing()
+        if not was_tracing:
+            tracemalloc.start()
+        try:
+            tracemalloc.reset_peak()
+            baseline = tracemalloc.get_traced_memory()[0]
+            with self.assertRaisesRegex(CelFile.ParserError, "values for 25 cells$"):
+                CelFile.read(io.StringIO(bad))
+            peak = tracemalloc.get_traced_memory()[1] - baseline
+        finally:
+            if not was_tracing:
+                tracemalloc.stop()
+        self.assertLess(peak, 2**20)
+
     def readV4Example(self, **changes):
         """Return the version 4 example file with some of its sizes changed.
 
