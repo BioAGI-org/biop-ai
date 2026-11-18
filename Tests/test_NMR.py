@@ -67,6 +67,34 @@ class NmrTests(unittest.TestCase):
             "0.49840 0",
         )
 
+    def test_data_table_residue_range(self):
+        """data_table keeps gap rows, and rejects a residue range far too wide."""
+        with open(support.DATA / "NMR" / "noed.xpk") as handle:
+            lines = handle.readlines()
+        header, peak = lines[:6], lines[-1]  # the peak of residue 10
+        self.assertTrue(peak.startswith("8  10.hn "), peak)
+
+        def table(*residues):
+            descriptor, path = tempfile.mkstemp(suffix=".xpk")
+            try:
+                with os.fdopen(descriptor, "w") as handle:
+                    handle.writelines(header)
+                    for residue in residues:
+                        handle.write(peak.replace("10.", f"{residue}."))
+                return xpktools.data_table([path], "H1.P", "H1")
+            finally:
+                os.remove(path)
+
+        # a residue with no peak in any file still gets a row of "*"
+        self.assertEqual(
+            table(1, 2, 4), ["1\t7.663\n", "2\t7.663\n", "3\t*\n", "4\t7.663\n"]
+        )
+        # one row per residue number from 1 to 1000001 is more than any real
+        # numbering spans; residues 1 and 10**9 used to need about 70 GB
+        with self.assertRaises(ValueError) as context:
+            table(1, 1_000_001)
+        self.assertIn("1 to 1000001", str(context.exception))
+
     def test_noetools(self):
         """Self test for NMR.NOEtools.
 

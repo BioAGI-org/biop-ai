@@ -6,6 +6,12 @@
 
 HEADERLEN = 6
 
+# data_table writes a row for every residue number between the lowest and the
+# highest, peak or no peak, so the numbers alone set the size of its output.
+# A million rows is far more than any real numbering spans, and still takes
+# well under a second.
+_MAX_TABLE_ROWS = 1_000_000
+
 
 class XpkEntry:
     """Provide dictionary access to single entry from nmrview .xpk file.
@@ -270,6 +276,13 @@ def data_table(fn_list, datalabel, keyatom):
     for dictionary in dict_list:
         maxr = max(maxr, dictionary["maxres"])
         minr = min(minr, dictionary["minres"])
+
+    if maxr - minr + 1 > _MAX_TABLE_ROWS:
+        raise ValueError(
+            f"Residue numbers run from {minr} to {maxr}; data_table writes a row "
+            f"for each number in that range, and will not write more than "
+            f"{_MAX_TABLE_ROWS}."
+        )
 
     res = minr
     while res <= maxr:  # s.t. res numbers
