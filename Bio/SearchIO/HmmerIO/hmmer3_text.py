@@ -107,6 +107,11 @@ class Hmmer3TextParser:
 
             while not regx:
                 self.line = read_forward(self.handle)
+                if not self.line:
+                    raise ValueError(
+                        "File ended before a 'Query:' line ending in the query"
+                        " length, such as [L=154] or [M=46]"
+                    )
                 regx = re.search(_QRE_ID_LEN, self.line)
 
             # get query id and length
