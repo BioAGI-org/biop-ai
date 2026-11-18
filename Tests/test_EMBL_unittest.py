@@ -76,6 +76,24 @@ class EMBLTests(unittest.TestCase):
                 [str(_.message) for _ in w], ["Malformed DR line in EMBL file."]
             )
 
+    def test_imgt_long_digit_run_in_location(self):
+        """Test an IMGT location with ">" and a long run of digits.
+
+        The IMGT parser rewrites a position like "12>" as ">12". The regular
+        expression doing this took time quadratic in the length of a run of
+        digits not followed by ">", so this location took minutes.
+        """
+        with open(support.DATA / "EMBL" / "A04195.imgt") as handle:
+            data = handle.read()
+        data = data.replace("10..51\n", "1>," + "1" * 150000 + "\n", 1)
+        data = data.replace("10..12\n", "10..12>\n", 1)
+        with self.assertWarnsRegex(
+            BiopythonParserWarning, "Could not parse feature location '>1,111"
+        ):
+            record = SeqIO.read(StringIO(data), "imgt")
+        self.assertIsNone(record.features[0].location)
+        self.assertEqual(str(record.features[1].location), "[9:>12](+)")
+
 
 class MalformedInputTests(unittest.TestCase):
     """Malformed EMBL and IMGT input raises ValueError.
