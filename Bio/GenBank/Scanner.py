@@ -1641,6 +1641,40 @@ class GenBankScanner(InsdcScanner):
         else:
             raise ValueError("Did not recognise the LOCUS line layout:\n" + line)
 
+    def _structured_comment_key(self, data):
+        """Return the name on a structured comment START line, or None (PRIVATE).
+
+        For example "##Assembly-Data-START##" gives "Assembly-Data", the text
+        between the last "#" and the "-START##" ending the line. This gives
+        the same result as re.search(r"([^#]+)-START##$", data).group(1), but
+        in linear rather than quadratic time. Header lines have no trailing
+        whitespace or newline, as parse_header strips them.
+        """
+        start = self.STRUCTURED_COMMENT_START
+        if not data.endswith(start):
+            return None
+        return data[: -len(start)].rpartition("#")[2] or None
+
+    def _split_structured_comment(self, data):
+        r"""Split a structured comment line into its key and value (PRIVATE).
+
+        For example "Assembly Method       :: SPAdes v. 3.1" gives
+        ("Assembly Method", "SPAdes v. 3.1"). This gives the same result as
+        re.search(r"(.+?)\s*::\s*(.*)", data).groups(), but in linear rather
+        than quadratic time: the key is the text before the first "::" that
+        follows the first character, less trailing whitespace but at least
+        one character long, and the value is the text after it, less leading
+        whitespace.
+        """
+        delim = self.STRUCTURED_COMMENT_DELIM.strip()
+        index = data.find(delim, 1)
+        if index == -1:
+            raise ValueError(
+                f"Malformed structured comment line, no key before {delim!r}: {data!r}"
+            )
+        key = data[:index].rstrip() or data[:1]
+        return key, data[index + len(delim) :].lstrip()
+
     def _feed_header_lines(self, consumer, lines):
         # Following dictionary maps GenBank lines to the associated
         # consumer methods - the special cases like LOCUS where one
@@ -1834,10 +1868,8 @@ class GenBankScanner(InsdcScanner):
                         print("Found comment")
                     comment_list = []
                     structured_comment_dict = defaultdict(dict)
-                    regex = rf"([^#]+){self.STRUCTURED_COMMENT_START}$"
-                    structured_comment_key = re.search(regex, data)
+                    structured_comment_key = self._structured_comment_key(data)
                     if structured_comment_key is not None:
-                        structured_comment_key = structured_comment_key.group(1)
                         if self.debug > 1:
                             print("Found Structured Comment")
                     else:
@@ -1848,25 +1880,19 @@ class GenBankScanner(InsdcScanner):
                         data = line[self.GENBANK_INDENT :]
                         if line[0 : self.GENBANK_INDENT] == self.GENBANK_SPACER:
                             if self.STRUCTURED_COMMENT_START in data:
-                                regex = rf"([^#]+){self.STRUCTURED_COMMENT_START}$"
-                                structured_comment_key = re.search(regex, data)
-                                if structured_comment_key is not None:
-                                    structured_comment_key = (
-                                        structured_comment_key.group(1)
-                                    )
-                                else:
+                                structured_comment_key = self._structured_comment_key(
+                                    data
+                                )
+                                if structured_comment_key is None:
                                     comment_list.append(data)
                             elif (
                                 structured_comment_key is not None
                                 and self.STRUCTURED_COMMENT_DELIM.strip() in data
                             ):
-                                match = re.search(
-                                    rf"(.+?)\s*{self.STRUCTURED_COMMENT_DELIM.strip()}\s*(.*)",
-                                    data,
-                                )
+                                field, value = self._split_structured_comment(data)
                                 structured_comment_dict[structured_comment_key][
-                                    match.group(1)
-                                ] = match.group(2)
+                                    field
+                                ] = value
                                 if self.debug > 2:
                                     print(
                                         "Structured Comment continuation [" + data + "]"
@@ -1889,9 +1915,9 @@ class GenBankScanner(InsdcScanner):
                                 # The current structured comment has a multiline value
                                 previous_value_line = structured_comment_dict[
                                     structured_comment_key
-                                ][match.group(1)]
+                                ][field]
                                 structured_comment_dict[structured_comment_key][
-                                    match.group(1)
+                                    field
                                 ] = (previous_value_line + " " + line.strip())
                             elif self.STRUCTURED_COMMENT_END in data:
                                 # End of structured comment
