@@ -21,6 +21,14 @@ from Bio.SeqRecord import SeqRecord
 from .Interfaces import _TextIOSource
 from .Interfaces import SequenceIterator
 
+# The GFA 1.0 standard gives the pattern for a float, in an f tag or a B tag,
+# as [-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?. Without a ".", its [0-9]* and
+# [0-9]+ can split a run of digits in many ways, and on a value that does not
+# match, Python's re tries every one: quadratic in the length of an f tag, and
+# exponential in the number of elements of a B tag. This pattern matches the
+# same strings, but each in only one way, so it is checked in linear time.
+_FLOAT = r"[-+]?(?:[0-9]+|[0-9]*\.[0-9]+)(?:[eE][-+]?[0-9]+)?"
+
 
 def _check_tags(seq, tags):
     """Check a segment line's tags for inconsistencies (PRIVATE)."""
@@ -65,7 +73,8 @@ def _tags_to_annotations(tags):
         annotations[parts[0]] = (parts[1], parts[2])
 
         # Check type of the tag and raise warning on a mismatch. These RegExs
-        # are part of the 1.0 standard.
+        # are part of the 1.0 standard, with the float pattern rewritten as
+        # _FLOAT.
         if parts[1] not in ("A", "i", "f", "Z", "J", "H", "B"):
             warnings.warn(f"Tag has invalid type: {parts[1]}", BiopythonParserWarning)
         elif parts[1] == "A" and re.fullmatch(r"[!-~]", parts[2]) is None:
@@ -78,11 +87,7 @@ def _tags_to_annotations(tags):
                 f"Tag has incorrect type. Expected signed integer, got {parts[2]}.",
                 BiopythonParserWarning,
             )
-        elif (
-            parts[1] == "f"
-            and re.fullmatch(r"[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?", parts[2])
-            is None
-        ):
+        elif parts[1] == "f" and re.fullmatch(_FLOAT, parts[2]) is None:
             warnings.warn(
                 f"Tag has incorrect type. Expected float, got {parts[2]}.",
                 BiopythonParserWarning,
@@ -104,10 +109,7 @@ def _tags_to_annotations(tags):
             )
         elif (
             parts[1] == "B"
-            and re.fullmatch(
-                r"[cCsSiIf](,[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?)+", parts[2]
-            )
-            is None
+            and re.fullmatch(rf"[cCsSiIf](?:,{_FLOAT})+", parts[2]) is None
         ):
             warnings.warn(
                 f"Tag has incorrect type. Expected array of integers or floats, got {parts[2]}.",
