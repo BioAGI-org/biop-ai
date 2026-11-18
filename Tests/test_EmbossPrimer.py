@@ -8,6 +8,7 @@
 """Tests for Primer-based programs in the Emboss suite."""
 
 # standard library
+import io
 import unittest
 
 import support
@@ -16,6 +17,18 @@ from Bio.Emboss import Primer3
 
 # local stuff
 from Bio.Emboss import PrimerSearch
+
+
+class _EndOfFileGuard(io.StringIO):
+    """StringIO that fails, rather than hangs, on repeated reads at end of file."""
+
+    def readline(self, *args):
+        line = super().readline(*args)
+        if not line:
+            self.reads_at_end = getattr(self, "reads_at_end", 0) + 1
+            if self.reads_at_end > 100:
+                raise AssertionError("readline() called over 100 times at end of file")
+        return line
 
 
 class Primer3ParseTest(unittest.TestCase):
@@ -38,6 +51,15 @@ class Primer3ParseTest(unittest.TestCase):
             # Now using parse...
             with open(file) as handle:
                 self.assertEqual(1, len(list(Primer3.parse(handle))))
+
+    def test_empty_or_blank_input(self):
+        """Empty or blank input gives no records, and read() raises ValueError."""
+        # The loop skipping leading blank lines used to spin forever here.
+        for text in ("", "\n", "\n  \n\t\n", "\r\n"):
+            with self.subTest(text=text):
+                self.assertEqual(list(Primer3.parse(_EndOfFileGuard(text))), [])
+                with self.assertRaisesRegex(ValueError, "^No records found in handle$"):
+                    Primer3.read(_EndOfFileGuard(text))
 
     def test_indepth_regular_parse(self):
         """Make sure we get the data from normal primer3 files okay."""
