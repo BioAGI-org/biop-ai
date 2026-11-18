@@ -413,6 +413,10 @@ class FastaM10Parser:
         """Parse hit on query identifier (PRIVATE)."""
         while True:
             line = self.handle.readline()
+            if not line:
+                raise ValueError(
+                    f"File ended before the first '>>' hit line of query {query_id!r}"
+                )
             if line.startswith(">>"):
                 break
 

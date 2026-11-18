@@ -6,6 +6,7 @@
 """Tests for SearchIO FastaIO parsers."""
 
 import unittest
+from io import StringIO
 
 import support
 
@@ -19,6 +20,34 @@ FMT = "fasta-m10"
 def get_file(filename):
     """Return the path of a test file."""
     return TEST_DIR / filename
+
+
+class EndOfFileGuard(StringIO):
+    """Text handle that fails if the parser keeps reading at end of file.
+
+    A parser stuck in a loop at end of file would otherwise hang the suite.
+    """
+
+    def __init__(self, text):
+        """Initialize the handle with the text to read."""
+        super().__init__(text)
+        self.reads_at_end = 0
+
+    def readline(self, *args):
+        """Read a line, failing after many reads at end of file."""
+        line = super().readline(*args)
+        if not line:
+            self.reads_at_end += 1
+            if self.reads_at_end > 100:
+                raise AssertionError("parser kept reading at end of file")
+        return line
+
+
+def truncated(filename, n):
+    """Return a handle on the first n lines of a test file."""
+    with open(get_file(filename)) as handle:
+        lines = handle.readlines()
+    return EndOfFileGuard("".join(lines[:n]))
 
 
 class Fasta34Cases(unittest.TestCase):
@@ -3131,6 +3160,32 @@ class Fasta36Cases(unittest.TestCase):
             hsp.hit.seq,
         )
         self.assertEqual(0, hsp.query_strand)
+
+
+class TruncatedCases(unittest.TestCase):
+    """A file cut off part way through raises ValueError, not a hang."""
+
+    def test_cut_before_first_hit(self):
+        """Test a query whose alignments end before the first '>>' hit."""
+        # In output001.m10, line 24 is ">>>gi|10955263|ref|NP_052604.1|, ...",
+        # which opens the alignments of the first query; its first hit is the
+        # ">>gi|152973457|..." on line 40. Line 121 opens the alignments of
+        # the second query, after a complete first query.
+        for n, query_id in (
+            (24, "gi|10955263|ref|NP_052604.1|"),
+            (30, "gi|10955263|ref|NP_052604.1|"),
+            (39, "gi|10955263|ref|NP_052604.1|"),
+            (121, "gi|10955264|ref|NP_052605.1|"),
+        ):
+            with self.subTest(lines=n):
+                handle = truncated("output001.m10", n)
+                with self.assertRaises(ValueError) as cm:
+                    list(parse(handle, FMT))
+                self.assertEqual(
+                    str(cm.exception),
+                    "File ended before the first '>>' hit line"
+                    f" of query {query_id!r}",
+                )
 
 
 if __name__ == "__main__":
