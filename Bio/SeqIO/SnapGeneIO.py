@@ -13,7 +13,7 @@ from GSL Biotech LLC.
 from datetime import datetime
 from re import sub
 from struct import unpack
-from xml.dom.minidom import parseString
+from xml.dom.expatbuilder import ExpatBuilderNS
 
 from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature
@@ -76,7 +76,7 @@ def _parse_notes_packet(length, data, record):
     This type of packet contains some metadata about the sequence. They
     are stored as a XML string with a 'Notes' root node.
     """
-    xml = parseString(data.decode("UTF-8"))
+    xml = _parse_xml(data)
     type = _get_child_value(xml, "Type")
     if type == "Synthetic":
         record.annotations["data_file_division"] = "SYN"
@@ -136,7 +136,7 @@ def _parse_features_packet(length, data, record):
     which are in a dedicated Primers packet). The data is a XML string
     starting with a 'Features' root node.
     """
-    xml = parseString(data.decode("UTF-8"))
+    xml = _parse_xml(data)
     for feature in xml.getElementsByTagName("Feature"):
         quals = {}
 
@@ -228,7 +228,7 @@ def _parse_primers_packet(length, data, record):
     since they are not shown to the user when the file is opened in SnapGene.
     For more details, see #5053.
     """
-    xml = parseString(data.decode("UTF-8"))
+    xml = _parse_xml(data)
     min_match_length = 0
     min_melting_temp = 0
     for param in xml.getElementsByTagName("HybridizationParams"):
@@ -286,6 +286,33 @@ _packet_handlers = {
 
 # Helper functions to process the XML data in
 # some of the segments
+
+
+class _ExpatBuilder(ExpatBuilderNS):
+    """Build a DOM as xml.dom.minidom.parseString does, but refuse entities.
+
+    SnapGene does not declare entities in its XML packets, and expanding
+    nested ones would let a packet of a few hundred bytes build a DOM of
+    hundreds of megabytes (the "billion laughs" attack).
+    """
+
+    def entity_decl_handler(
+        self,
+        entityName,
+        is_parameter_entity,
+        value,
+        base,
+        systemId,
+        publicId,
+        notationName,
+    ):
+        """Reject any entity declaration, general or parameter."""
+        raise ValueError("SnapGene XML packets must not declare entities")
+
+
+def _parse_xml(data):
+    """Parse the UTF-8 XML data of a packet into a DOM document."""
+    return _ExpatBuilder().parseString(data.decode("UTF-8"))
 
 
 def _decode(text):
