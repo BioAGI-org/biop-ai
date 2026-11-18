@@ -494,24 +494,18 @@ class LinearDrawer(AbstractDrawer):
                 )
             )
 
-        start, end = self._current_track_start_end()
         if track.scale_ticks:  # Ticks are required on the scale
             # Draw large ticks
             # I want the ticks to be consistently positioned relative to
             # the start of the sequence (position 0), not relative to the
             # current viewpoint (self.start and self.end)
 
+            # canvas_location puts fragment_bases bases across pagewidth
+            points_per_base = self.pagewidth / self.fragment_bases
             ticklen = track.scale_largeticks * trackheight
-            tickiterval = int(track.scale_largetick_interval)
-            # Note that we could just start the list of ticks using
-            # range(0,self.end,tickinterval) and the filter out the
-            # ones before self.start - but this seems wasteful.
-            # Using tickiterval * (self.start//tickiterval) is a shortcut.
-            for tickpos in range(
-                tickiterval * (self.start // tickiterval), int(self.end), tickiterval
+            for tickpos in self._scale_tick_positions(
+                "scale_largetick_interval", points_per_base
             ):
-                if tickpos <= start or end <= tickpos:
-                    continue
                 tick, label = self.draw_tick(
                     tickpos, ctr, ticklen, track, track.scale_largetick_labels
                 )
@@ -520,12 +514,9 @@ class LinearDrawer(AbstractDrawer):
                     scale_labels.append(label)
             # Draw small ticks
             ticklen = track.scale_smallticks * trackheight
-            tickiterval = int(track.scale_smalltick_interval)
-            for tickpos in range(
-                tickiterval * (self.start // tickiterval), int(self.end), tickiterval
+            for tickpos in self._scale_tick_positions(
+                "scale_smalltick_interval", points_per_base
             ):
-                if tickpos <= start or end <= tickpos:
-                    continue
                 tick, label = self.draw_tick(
                     tickpos, ctr, ticklen, track, track.scale_smalltick_labels
                 )

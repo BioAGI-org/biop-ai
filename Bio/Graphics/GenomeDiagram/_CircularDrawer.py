@@ -791,17 +791,13 @@ class CircularDrawer(AbstractDrawer):
             # the start of the sequence (position 0), not relative to the
             # current viewpoint (self.start and self.end)
 
+            # Ticks start on the scale circle, radius ctr, where canvas_angle
+            # puts self.length bases round self.sweep of the circumference
+            points_per_base = 2 * pi * ctr * self.sweep / self.length
             ticklen = track.scale_largeticks * trackheight
-            tickiterval = int(track.scale_largetick_interval)
-            # Note that we could just start the list of ticks using
-            # range(0,self.end,tickinterval) and the filter out the
-            # ones before self.start - but this seems wasteful.
-            # Using tickiterval * (self.start/tickiterval) is a shortcut.
-            for tickpos in range(
-                tickiterval * (self.start // tickiterval), int(self.end), tickiterval
+            for tickpos in self._scale_tick_positions(
+                "scale_largetick_interval", points_per_base
             ):
-                if tickpos <= start or end <= tickpos:
-                    continue
                 tick, label = self.draw_tick(
                     tickpos, ctr, ticklen, track, track.scale_largetick_labels
                 )
@@ -810,12 +806,9 @@ class CircularDrawer(AbstractDrawer):
                     scale_labels.append(label)
             # Draw small ticks
             ticklen = track.scale_smallticks * trackheight
-            tickiterval = int(track.scale_smalltick_interval)
-            for tickpos in range(
-                tickiterval * (self.start // tickiterval), int(self.end), tickiterval
+            for tickpos in self._scale_tick_positions(
+                "scale_smalltick_interval", points_per_base
             ):
-                if tickpos <= start or end <= tickpos:
-                    continue
                 tick, label = self.draw_tick(
                     tickpos, ctr, ticklen, track, track.scale_smalltick_labels
                 )
