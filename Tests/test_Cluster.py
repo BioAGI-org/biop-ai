@@ -2948,6 +2948,31 @@ class TestCluster(unittest.TestCase):
         self.assertAlmostEqual(matrix[2][0], 8.61571429, places=3)
         self.assertAlmostEqual(matrix[2][1], 21.24428571, places=3)
 
+    def test_kmedoids_one_dimensional_distances(self):
+        """Check kmedoids gives the same result for a 1-D distance matrix.
+
+        A 1-D array holds the n * (n - 1) / 2 distances between n items, but
+        kmedoids returned one cluster number per distance rather than per
+        item, so for four or more items it added cluster numbers that were
+        never set.
+        """
+        if TestCluster.module == "Bio.Cluster":
+            from Bio.Cluster import kmedoids
+
+            kmedoids = functools.partial(kmedoids, rng_seed=1)
+        elif TestCluster.module == "Pycluster":
+            from Pycluster import kmedoids
+
+        x = np.array([0.0, 0.5, 4.0, 4.5, 9.0, 9.2])
+        for n in range(3, len(x) + 1):
+            square = abs(x[:n, None] - x[None, :n])
+            condensed = square[np.tril_indices(n, -1)]
+            expected = kmedoids(square, nclusters=2, npass=10)
+            clusterid, error, nfound = kmedoids(condensed, nclusters=2, npass=10)
+            self.assertEqual(len(clusterid), n)
+            self.assertEqual(clusterid.tolist(), expected[0].tolist())
+            self.assertEqual((error, nfound), expected[1:])
+
     def test_pca_arguments(self):
         if TestCluster.module == "Bio.Cluster":
             from Bio.Cluster._cluster import pca
@@ -3837,6 +3862,53 @@ for shape in ((0, 1, 8), (2, 0, 8), (2, 1, 0)):
         assert str(error) == "celldata array is empty", error
     else:
         raise AssertionError(f"no ValueError for shape {shape}")
+print("OK")
+"""
+        )
+
+    def test_output_size(self):
+        """Check the size of the arrays kcluster, kmedoids and distancematrix fill.
+
+        The private functions checked the size of clusterid only if npass was
+        0, and the length of the list of distance matrix rows never, so the
+        kernels wrote past the end of one that was too short. The public
+        kmedoids also made clusterid one item too short for a 1-D distance
+        matrix holding the one distance between two items.
+        """
+        self.run_child(
+            """
+import numpy as np
+from Bio.Cluster import _cluster, kmedoids
+
+data = np.arange(32.0).reshape(4, 8)
+mask = np.ones(data.shape, np.intc)
+weight = np.ones(8)
+distance = abs(data[:, :1] - data[:, 0])
+for size in (3, 5):
+    expected = f"incorrect size ({size}, expected 4)"
+    clusterid = np.zeros(size, np.intc)
+    try:
+        _cluster.kcluster(data, 2, mask, weight, 0, 1, "a", "e", clusterid, 1)
+    except ValueError as error:
+        assert str(error) == expected, error
+    else:
+        raise AssertionError(f"kcluster: no ValueError for size {size}")
+    try:
+        _cluster.kmedoids(distance, 2, 1, clusterid, 1)
+    except ValueError as error:
+        assert str(error) == expected, error
+    else:
+        raise AssertionError(f"kmedoids: no ValueError for size {size}")
+    rows = [np.zeros(i) for i in range(size)]
+    try:
+        _cluster.distancematrix(data, mask, weight, 0, "e", rows)
+    except ValueError as error:
+        expected = f"distancematrix has incorrect size {size} (expected 4)"
+        assert str(error) == expected, error
+    else:
+        raise AssertionError(f"distancematrix: no ValueError for size {size}")
+clusterid, error, nfound = kmedoids(np.array([1.5]), nclusters=2, rng_seed=1)
+assert clusterid.tolist() == [0, 1], clusterid
 print("OK")
 """
         )

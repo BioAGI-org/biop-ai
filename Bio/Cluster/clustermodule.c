@@ -1539,6 +1539,11 @@ py_kcluster(PyObject* self, PyObject* args, PyObject* keywords)
             goto exit;
         }
     }
+    else if (clusterid.shape[0] != nitems) {
+        PyErr_Format(PyExc_ValueError, "incorrect size (%zd, expected %d)",
+                     clusterid.shape[0], nitems);
+        goto exit;
+    }
     Py_BEGIN_ALLOW_THREADS
     kcluster(nclusters,
              nrows,
@@ -1671,6 +1676,12 @@ py_kmedoids(PyObject* self, PyObject* args, PyObject* keywords)
     if (distances.n < nclusters) {
         PyErr_SetString(PyExc_ValueError,
                         "more clusters requested than items to be clustered");
+        goto exit;
+    }
+    if (npass > 0 && clusterid.shape[0] != distances.n) {
+        /* check_clusterid checked the size if npass == 0 */
+        PyErr_Format(PyExc_ValueError, "incorrect size (%zd, expected %d)",
+                     clusterid.shape[0], distances.n);
         goto exit;
     }
     Py_BEGIN_ALLOW_THREADS
@@ -2448,7 +2459,7 @@ py_distancematrix(PyObject* self, PyObject* args, PyObject* keywords)
     Py_buffer weight = {0};
     int transpose = 0;
     char dist = 'e';
-    int nrows, ncols, ndata;
+    int nrows, ncols, ndata, nitems;
     PyObject* result = NULL;
 
     /* -- Read the input variables --------------------------------------- */
@@ -2491,6 +2502,13 @@ py_distancematrix(PyObject* self, PyObject* args, PyObject* keywords)
         goto exit;
     }
     if (_convert_list_to_distancematrix(list, &distances) == 0) goto exit;
+    nitems = (transpose == 0) ? nrows : ncols;
+    if (distances.n != nitems) {
+        PyErr_Format(PyExc_ValueError,
+                     "distancematrix has incorrect size %d (expected %d)",
+                     distances.n, nitems);
+        goto exit;
+    }
 
     Py_BEGIN_ALLOW_THREADS
     distancematrix(nrows,
