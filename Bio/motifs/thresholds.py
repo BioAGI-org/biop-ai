@@ -39,20 +39,26 @@ class ScoreDistribution:
         else:
             mo_density = np.array(self.mo_density)
             bg_density = np.array(self.bg_density)
+            mo_type = bg_type = float
             for position in range(pssm.length):
-                mo_new = np.zeros(self.n_points)
-                bg_new = np.zeros(self.n_points)
+                shifts = []
+                mo_weights = []
+                bg_weights = []
                 lo = pssm[:, position]
                 for letter, score in lo.items():
                     bg = background[letter]
                     mo = pow(2, pssm[letter, position]) * bg
-                    d = self._index_diff(score)
-                    self._shift(mo_new, mo_density, d, mo)
-                    self._shift(bg_new, bg_density, d, bg)
-                mo_density = mo_new
-                bg_density = bg_new
-            self.mo_density = mo_density.tolist()
-            self.bg_density = bg_density.tolist()
+                    shifts.append(self._index_diff(score))
+                    mo_weights.append(mo)
+                    bg_weights.append(bg)
+                mo_density, mo_type = self._add_column(
+                    mo_density, mo_type, shifts, mo_weights
+                )
+                bg_density, bg_type = self._add_column(
+                    bg_density, bg_type, shifts, bg_weights
+                )
+            self.mo_density = self._as_list(mo_density, mo_type, shifts)
+            self.bg_density = self._as_list(bg_density, bg_type, shifts)
 
     def _index_diff(self, x, y=0.0):
         return int((x - y + 0.5 * self.step) // self.step)
@@ -75,18 +81,76 @@ class ScoreDistribution:
             np.add.at(new, np.zeros(-d, np.intp), density[:-d] * weight)
             new[: n + d] += density[-d:] * weight
 
+    def _add_column(self, density, value_type, shifts, weights):
+        """Return the density after one more column, and its value type.
+
+        The new density sums, over the column's letters, the density times
+        the letter's weight, moved up by the letter's shift (see _shift).
+        value_type is the type of the density's values, Python float at the
+        start. The per-bin loop summed ``density[i] * weight`` in the type
+        that Python and numpy give that expression, so float32 weights gave
+        float32 sums; the new density is summed in that type too, and so
+        gives the same thresholds.
+        """
+        total = 0.0
+        for weight in weights:
+            total += value_type(1) * weight
+        value_type = type(total)
+        dtype = np.dtype(value_type)
+        density = density.astype(dtype, copy=False)
+        new = np.zeros(self.n_points, dtype)
+        for d, weight in zip(shifts, weights):
+            self._shift(new, density, d, dtype.type(weight))
+        return new, value_type
+
+    def _as_list(self, density, value_type, shifts):
+        """Return the density as a list of values of value_type.
+
+        The threshold methods add these up one by one, so numpy scalars,
+        such as float32 ones, keep those sums in their own type. As in the
+        per-bin loop, the bins that none of the last column's shifts reach
+        hold the Python 0.0 they started as; for a rate too small for
+        value_type, a sum still at Python 0.0 compares differently.
+        """
+        if value_type is float:
+            return density.tolist()
+        values = list(density)
+        # Each shift d reaches bins 0 to n - 1 + d if d <= 0, or bins d to
+        # n - 1 if d >= 0, so the bins reached by none of them lie between.
+        n = self.n_points
+        shifts = [max(1 - n, min(n - 1, d)) for d in shifts]
+        start = max((n + d for d in shifts if d <= 0), default=0)
+        stop = min((d for d in shifts if d >= 0), default=n)
+        values[start:stop] = [0.0] * (stop - start)
+        return values
+
+    @staticmethod
+    def _value_type(density):
+        """Return the type of the density's values.
+
+        At most one end of the density holds bins left as Python 0.0 (see
+        _as_list), so this is the type of its first or last value.
+        """
+        first, last = type(density[0]), type(density[-1])
+        return last if first is float else first
+
     def modify(self, scores, mo_probs, bg_probs):
         """Modify motifs and background density."""
-        mo_density = np.array(self.mo_density)
-        bg_density = np.array(self.bg_density)
-        mo_new = np.zeros(self.n_points)
-        bg_new = np.zeros(self.n_points)
-        for k, v in scores.items():
-            d = self._index_diff(v)
-            self._shift(mo_new, mo_density, d, mo_probs[k])
-            self._shift(bg_new, bg_density, d, bg_probs[k])
-        self.mo_density = mo_new.tolist()
-        self.bg_density = bg_new.tolist()
+        shifts = [self._index_diff(v) for v in scores.values()]
+        mo_density, mo_type = self._add_column(
+            np.array(self.mo_density),
+            self._value_type(self.mo_density),
+            shifts,
+            [mo_probs[k] for k in scores],
+        )
+        bg_density, bg_type = self._add_column(
+            np.array(self.bg_density),
+            self._value_type(self.bg_density),
+            shifts,
+            [bg_probs[k] for k in scores],
+        )
+        self.mo_density = self._as_list(mo_density, mo_type, shifts)
+        self.bg_density = self._as_list(bg_density, bg_type, shifts)
 
     def threshold_fpr(self, fpr):
         """Approximate the log-odds threshold which makes the type I error (false positive rate)."""

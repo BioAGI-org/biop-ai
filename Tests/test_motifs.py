@@ -5711,12 +5711,24 @@ class TestScoreDistribution(unittest.TestCase):
         motif.pseudocounts = 0.5
         return motif.pssm
 
-    def columns(self, pssm):
+    def make_hand_made_pssm(self):
+        """Return a matrix whose columns' scores each have one sign."""
+        values = {
+            "A": [5.0, -10.0],
+            "C": [10.0, -9.0],
+            "G": [6.0, -9.5],
+            "T": [7.0, -9.2],
+        }
+        return PositionSpecificScoringMatrix("ACGT", values)
+
+    def columns(self, pssm, background=None):
         """Yield each column's scores, motif and background probabilities."""
+        if background is None:
+            background = self.background
         for position in range(pssm.length):
             scores = pssm[:, position]
-            mo_probs = {k: 2**v * self.background[k] for k, v in scores.items()}
-            yield scores, mo_probs, self.background
+            mo_probs = {k: 2**v * background[k] for k, v in scores.items()}
+            yield scores, mo_probs, background
 
     def start(self, distribution):
         """Return the density before the first column: all of it at score 0."""
@@ -5776,6 +5788,30 @@ class TestScoreDistribution(unittest.TestCase):
         )
         self.assertLess(calls, distribution.n_points)
 
+    def assert_same_as_per_bin_loop(self, pssm, precision, background):
+        """Assert that distribution() and modify() give the per-bin loop's.
+
+        The densities must hold the same values, to the last bit, and values
+        of the same types, as the threshold methods sum them in their types.
+        """
+        distribution = pssm.distribution(background, precision)
+        columns = list(self.columns(pssm, background))
+        expected = self.per_bin_loop(distribution, columns)
+        results = [(distribution.mo_density, distribution.bg_density)]
+        # modify() adds one column at a time; replay the matrix through it.
+        distribution.mo_density = self.start(distribution)
+        distribution.bg_density = self.start(distribution)
+        for column in columns:
+            distribution.modify(*column)
+        results.append((distribution.mo_density, distribution.bg_density))
+        for densities in results:
+            self.assertEqual(densities, expected)
+            for density, expected_density in zip(densities, expected):
+                self.assertEqual(
+                    [type(value) for value in density],
+                    [type(value) for value in expected_density],
+                )
+
     def test_same_as_per_bin_loop(self):
         """The densities are those of the per-bin loop, to the last bit.
 
@@ -5783,29 +5819,33 @@ class TestScoreDistribution(unittest.TestCase):
         where it piles up in the end bin. In the hand-made matrix, its first
         column moves every bin past the top end.
         """
-        values = {
-            "A": [5.0, -10.0],
-            "C": [10.0, -9.0],
-            "G": [6.0, -9.5],
-            "T": [7.0, -9.2],
-        }
         for pssm, precision in (
             (self.make_pssm(), 10**3),
-            (PositionSpecificScoringMatrix("ACGT", values), 10),
+            (self.make_hand_made_pssm(), 10),
         ):
-            distribution = pssm.distribution(self.background, precision)
-            expected = self.per_bin_loop(distribution, self.columns(pssm))
-            self.assertEqual(
-                (distribution.mo_density, distribution.bg_density), expected
-            )
-            # modify() adds one column at a time; replay the matrix through it.
-            distribution.mo_density = self.start(distribution)
-            distribution.bg_density = self.start(distribution)
-            for column in self.columns(pssm):
-                distribution.modify(*column)
-            self.assertEqual(
-                (distribution.mo_density, distribution.bg_density), expected
-            )
+            self.assert_same_as_per_bin_loop(pssm, precision, self.background)
+
+    def test_float32_background(self):
+        """A float32 background gives the per-bin loop's thresholds.
+
+        That loop summed float32 probabilities in float32, and the threshold
+        methods then summed its float32 densities in float32 as well. Here
+        0.7 + 0.1 is 0.8 in float32 but just under it in float64, so summing
+        in float64 made threshold_fpr(0.8) pass the score of 1 and give -1.
+        """
+        pssm = PositionSpecificScoringMatrix(
+            "ACGT", {"A": [1.0], "C": [1.0], "G": [-1.0], "T": [-1.0]}
+        )
+        background = dict(zip("ACGT", np.array([0.7, 0.1, 0.1, 0.1], np.float32)))
+        self.assertEqual(pssm.distribution(background).threshold_fpr(0.8), 1.0)
+        # The hand-made matrix's last column leaves its top bins unreached, and
+        # the per-bin loop left them as Python floats among float32 values.
+        background = dict.fromkeys("ACGT", np.float32(0.25))
+        for pssm, precision in (
+            (self.make_pssm(), 10**2),
+            (self.make_hand_made_pssm(), 10),
+        ):
+            self.assert_same_as_per_bin_loop(pssm, precision, background)
 
 
 # Run only while the GIL is off. A free-threaded build turns it back on when
