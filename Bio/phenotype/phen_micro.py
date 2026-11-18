@@ -729,9 +729,11 @@ class WellRecord:
                 stop = max(self.get_times())
                 # The last time point comes from the file, so check the
                 # grid's length before building it: a single time point of
-                # 1e9 hours would otherwise take tens of gigabytes.
+                # 1e9 hours would otherwise take tens of gigabytes. With a
+                # negative step the grid runs down to it, so a file whose
+                # times are all far below zero does the same.
                 step = 1 if time.step is None else time.step
-                if step > 0 and not (stop - start) / step <= _MAX_SLICE_POINTS:
+                if step != 0 and not (stop - start) / step <= _MAX_SLICE_POINTS:
                     raise ValueError(
                         f"Slice up to the last time point ({stop}) would give "
                         f"more than {_MAX_SLICE_POINTS} values; give an "

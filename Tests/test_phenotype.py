@@ -333,6 +333,29 @@ class TestPhenoMicro(unittest.TestCase):
         self.assertEqual(well[0:2], [well[0], well[1]])
         self.assertEqual(well[2e17:], [])
 
+    def test_WellRecord_negative_step_to_huge_last_time(self):
+        """Test a slice stepping down to a far negative last time raises ValueError."""
+        # With a negative step, a slice without a stop runs down from its
+        # start to the last time point. Here every time point is at -1e17
+        # hours or below, so well[::-1] used to build a grid of 1e17 points
+        # from 0 down to -1e17. As above, the old code fails at once with
+        # MemoryError rather than really allocating.
+        with open(SMALL_JSON_PLATE) as handle:
+            data = json.load(handle)
+        hours = data["measurements"]["Hour"]
+        data["measurements"]["Hour"] = [-1e17 * (1 + hour) for hour in hours]
+        plate = phenotype.read(StringIO(json.dumps(data)), "pm-json")
+        well = plate["A01"]
+        self.assertEqual(max(well.get_times()), -1e17)
+        for key in (slice(None, None, -1), slice(0, None, -0.5)):
+            with self.subTest(key=key):
+                with self.assertRaisesRegex(
+                    ValueError, "more than 1000000 values; give an explicit stop"
+                ):
+                    well[key]
+        # A negative step that starts below the last time point gives nothing.
+        self.assertEqual(well[-2e17::-1], [])
+
     def test_JsonIterator(self):
         """Test basic functionalities of JsonIterator file parser."""
         # Parse file content big enough to trigger issue #3783
