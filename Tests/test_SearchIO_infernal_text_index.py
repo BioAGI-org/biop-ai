@@ -503,6 +503,18 @@ Total CM hits reported:                                          5  (3.063e-05);
 """
         self.check_raw(filename, "U2", raw)
 
+    def test_infernal_text_many_hits(self):
+        """Test infernal-text raw string retrieval, cmsearch, query with many hits (U2_Yeast)."""
+        filename = support.DATA / "Infernal" / "cmsearch_114_U2_Yeast.txt"
+        # The query's line in the hit scores table, 40000 times
+        self.check_raw_repeated(
+            filename,
+            "U2",
+            b"  (1) !   5.9e-20   98.7   0.1  ENA|BK006936",
+            b"\n",
+            40000,
+        )
+
 
 class Hmmer3TextIndexCases(CheckIndex):
     fmt = "infernal-text"

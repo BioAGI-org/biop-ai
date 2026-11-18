@@ -9,6 +9,25 @@ import unittest
 
 import support
 from search_tests_common import CheckIndex
+from search_tests_common import CheckRaw
+
+
+class ExonerateTextRawCases(CheckRaw):
+    """Check exonerate-text get_raw method."""
+
+    fmt = "exonerate-text"
+
+    def test_exn_22_m_est2genome_long_alignment(self):
+        """Test exonerate-text raw string retrieval, query with a long alignment (exn_22_m_est2genome.exn)."""
+        filename = support.DATA / "Exonerate" / "exn_22_m_est2genome.exn"
+        # The alignment's second block, 4 lines, 10000 times
+        self.check_raw_repeated(
+            filename,
+            "gi|296143771|ref|NM_001180731.1|",
+            b"      57 : GCAAATGTTG",
+            b"\n\n",
+            10000,
+        )
 
 
 class ExonerateTextIndexCases(CheckIndex):

@@ -307,6 +307,18 @@ Domain search space  (domZ):               1  [number of targets reported over t
 """  # noqa : W291
         self.check_raw(filename, "gi|4885477|ref|NP_005359.1|", raw)
 
+    def test_hmmer3text_30_many_hits(self):
+        """Test hmmer3-text raw string retrieval, HMMER 3.0, query with many hits (text_30_hmmscan_001.out)."""
+        filename = support.DATA / "Hmmer" / "text_30_hmmscan_001.out"
+        # The query's hit line, 40000 times
+        self.check_raw_repeated(
+            filename,
+            "gi|4885477|ref|NP_005359.1|",
+            b"      6e-21   74.6   0.3    9.2e-21",
+            b"\n",
+            40000,
+        )
+
 
 class Hmmer3TextIndexCases(CheckIndex):
     fmt = "hmmer3-text"

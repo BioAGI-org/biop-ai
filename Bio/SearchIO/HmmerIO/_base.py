@@ -18,7 +18,7 @@ class _BaseHmmerTextIndexer(SearchIndexer):
     def get_raw(self, offset):
         """Return the raw record from the file as a bytes string."""
         handle = self._handle
-        qresult_raw = b""
+        lines = []
 
         # read header first
         if not self._preamble:
@@ -27,19 +27,19 @@ class _BaseHmmerTextIndexer(SearchIndexer):
                 line = handle.readline()
                 if line.startswith(self.qresult_start):
                     break
-                qresult_raw += line
+                lines.append(line)
         else:
-            qresult_raw += self._preamble
+            lines.append(self._preamble)
 
         # and read the qresult raw string
         handle.seek(offset)
         while True:
             # preserve whitespace, don't use read_forward
             line = handle.readline()
-            qresult_raw += line
+            lines.append(line)
 
             # break when we've reached qresult end
             if line.startswith(self.qresult_end) or not line:
                 break
 
-        return qresult_raw
+        return b"".join(lines)

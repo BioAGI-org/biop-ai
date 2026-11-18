@@ -752,6 +752,18 @@ class BlastXmlRawCases(CheckRaw):
 """
         self.check_raw(filename, "gi|11464971:4-101", raw)
 
+    def test_blastxml_2226_many_hits(self):
+        """Test blast-xml raw string retrieval, BLAST 2.2.26+, query with many hits (xml_2226_blastp_001.xml)."""
+        filename = support.DATA / "Blast" / "xml_2226_blastp_001.xml"
+        # The query's first <Hit>, 28 lines, 1400 times
+        self.check_raw_repeated(
+            filename,
+            "gi|16080617|ref|NP_391444.1|",
+            b"        <Hit>\n",
+            b"        </Hit>\n",
+            1400,
+        )
+
 
 class BlastXmlIndexCases(CheckIndex):
     fmt = "blast-xml"

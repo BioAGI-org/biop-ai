@@ -9,6 +9,21 @@ import unittest
 
 import support
 from search_tests_common import CheckIndex
+from search_tests_common import CheckRaw
+
+
+class ExonerateVulgarRawCases(CheckRaw):
+    """Check exonerate-vulgar get_raw method."""
+
+    fmt = "exonerate-vulgar"
+
+    def test_exn_22_o_vulgar_many_hits(self):
+        """Test exonerate-vulgar raw string retrieval, query with many hits (exn_22_o_vulgar.exn)."""
+        filename = support.DATA / "Exonerate" / "exn_22_o_vulgar.exn"
+        # The query's second vulgar line, 40000 times
+        self.check_raw_repeated(
+            filename, "sacCer3_dna", b"vulgar: sacCer3_dna 0 529 +", b"\n", 40000
+        )
 
 
 class ExonerateVulgarIndexCases(CheckIndex):

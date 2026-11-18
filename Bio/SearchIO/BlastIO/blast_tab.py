@@ -631,7 +631,7 @@ class BlastTabIndexer(SearchIndexer):
         """Return the raw bytes string of a single QueryResult from a noncommented file (PRIVATE)."""
         handle = self._handle
         handle.seek(offset)
-        qresult_raw = b""
+        lines = []
         key_idx = self._key_idx
         qresult_key = None
 
@@ -649,15 +649,15 @@ class BlastTabIndexer(SearchIndexer):
                 if curr_key != qresult_key:
                     break
             # append to the raw string as long as qresult is the same
-            qresult_raw += line
+            lines.append(line)
 
-        return qresult_raw
+        return b"".join(lines)
 
     def _get_raw_qresult_commented(self, offset):
         """Return the bytes raw string of a single QueryResult from a commented file (PRIVATE)."""
         handle = self._handle
         handle.seek(offset)
-        qresult_raw = b""
+        lines = []
         end_mark = b"# BLAST processed"
 
         # query mark is the line marking a new query
@@ -673,10 +673,10 @@ class BlastTabIndexer(SearchIndexer):
             elif line == query_mark or line.startswith(end_mark):
                 break
 
-            qresult_raw += line
+            lines.append(line)
             line = handle.readline()
 
-        return qresult_raw
+        return b"".join(lines)
 
 
 class BlastTabWriter:

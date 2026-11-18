@@ -57,6 +57,14 @@ U2                   RF00004   ENA|BK006937|BK006937.2 -          cm        1   
 """
         self.check_raw(filename, "ENA|BK006936|BK006936.2", raw)
 
+    def test_infernal_tab_many_hits(self):
+        """Test infernal-tab raw string retrieval, cmsearch, query with many hits (U2_Yeast)."""
+        filename = support.DATA / "Infernal" / "cmsearch_114_U2_Yeast.tbl"
+        # The query's hit line, 20000 times
+        self.check_raw_repeated(
+            filename, "U2", b"ENA|BK006936|BK006936.2 -         U2 ", b"\n", 20000
+        )
+
 
 class InfernalTabIndexCases(CheckIndex):
     def test_infernal_tab_1q(self):
