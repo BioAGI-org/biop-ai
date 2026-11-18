@@ -1113,13 +1113,24 @@ class Nexus:
                     refseq = iupac_seq
                 else:
                     if self.matchchar:
-                        while True:
-                            p = iupac_seq.find(self.matchchar)
-                            if p == -1:
-                                break
-                            iupac_seq = Seq(
-                                iupac_seq[:p] + refseq[p] + iupac_seq[p + 1 :]
+                        # Replace each matchchar by the reference character in
+                        # one pass, as that may be the matchchar itself (when
+                        # it is also the gap, missing or a state symbol)
+                        seq = str(iupac_seq)
+                        ref = str(refseq)
+                        if self.matchchar in seq[len(ref) :]:
+                            raise NexusError(
+                                "Taxon %s: matchchar %s past the end of the first "
+                                "taxon's sequence %s (check dimensions/interleaving)"
+                                % (id, self.matchchar, refseq)
                             )
+                        iupac_seq = Seq(
+                            "".join(
+                                r if c == self.matchchar else c
+                                for c, r in zip(seq, ref)
+                            )
+                            + seq[len(ref) :]
+                        )
 
                 # Check for invalid characters
                 for i, c in enumerate(iupac_seq):

@@ -1881,6 +1881,69 @@ class TestUnclosedQuote(unittest.TestCase):
                     Nexus.Nexus("#NEXUS\n" + text)
 
 
+class TestMatchchar(unittest.TestCase):
+    """A matchchar in the matrix stands for the first taxon's character."""
+
+    def setUp(self):
+        # Before the fix _matrix made a new Seq for every matchchar it
+        # replaced, and replaced a matchchar with itself forever when the
+        # first taxon had the matchchar at that position. Stop such a loop
+        # early so that the test fails instead.
+        made = 0
+
+        def bounded_seq(*args, **kwargs):
+            nonlocal made
+            made += 1
+            if made > 1000:
+                raise AssertionError("_matrix made more than 1000 Seq objects")
+            return Seq(*args, **kwargs)
+
+        patcher = mock.patch.object(Nexus, "Seq", bounded_seq)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def parse(self, matchchar, *rows, interleave=""):
+        """Return the matrix of a DNA data block as a dict of strings."""
+        nexus = Nexus.Nexus(
+            "#NEXUS\nbegin data;\ndimensions ntax=2 nchar=4;\n"
+            f"format datatype=dna matchchar={matchchar}{interleave};\n"
+            "matrix\n" + "\n".join(rows) + "\n;\nend;\n"
+        )
+        return {taxon: str(seq) for taxon, seq in nexus.matrix.items()}
+
+    def test_substitution(self):
+        """Each matchchar is replaced by the first taxon's character."""
+        self.assertEqual(
+            self.parse(".", "a ACGT", "b ..-T"), {"a": "ACGT", "b": "AC-T"}
+        )
+        # in an interleaved matrix, by the first taxon's in the same block
+        self.assertEqual(
+            self.parse(".", "a AC", "b .-", "a GT", "b A.", interleave=" interleave"),
+            {"a": "ACGT", "b": "A-AT"},
+        )
+
+    def test_matchchar_in_first_taxon(self):
+        """A matchchar that is also a gap, missing or state symbol parses."""
+        for matchchar, first, second, expected in (
+            ("-", "ACG-", "AC--", "ACG-"),
+            ("?", "ACG?", "ACG?", "ACG?"),
+            ("A", "ACGT", "ACGA", "ACGT"),
+        ):
+            with self.subTest(matchchar=matchchar):
+                self.assertEqual(
+                    self.parse(matchchar, "a " + first, "b " + second),
+                    {"a": first, "b": expected},
+                )
+
+    def test_matchchar_past_first_taxon(self):
+        """A matchchar past the end of the first taxon raises NexusError."""
+        with self.assertRaisesRegex(
+            Nexus.NexusError,
+            r"^Taxon b: matchchar \. past the end of the first taxon's sequence ",
+        ):
+            self.parse(".", "a ACGT", "b ACGTA.")
+
+
 @unittest.skipIf(cnexus is None, "C extension Bio.Nexus.cnexus not available")
 @unittest.skipUnless(
     sys.platform.startswith("linux") and sys.maxsize > 2**32,
