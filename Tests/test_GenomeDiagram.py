@@ -954,6 +954,36 @@ class DiagramTest(unittest.TestCase):
         """Circular scale ticks less than a point apart are skipped with a warning."""
         self.check_small_ticks_skipped("circular")
 
+    def check_lone_small_tick_drawn(self, fmt):
+        """Draw a narrow track window of a 1 Gbp diagram and check its ticks."""
+        # The small ticks would be under a point apart, but a window holding
+        # only one of them, or none, crowds nothing: the tick is drawn and
+        # there is no warning.
+        track = self.gdd.tracks[1]
+        track.new_set().add_feature(SeqFeature(SimpleLocation(0, 10**9)))
+        for start, end, ticks in [(9_999, 10_001, 1), (10_001, 19_999, 0)]:
+            with self.subTest(start=start, end=end):
+                track.start, track.end = start, end
+                lines = []
+                for scale_ticks in (0, 1):
+                    track.scale_ticks = scale_ticks
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter("always")
+                        self.gdd.draw(format=fmt)
+                    self.assertEqual([str(w.message) for w in caught], [])
+                    contents = self.gdd.drawing.contents
+                    lines.append(sum(isinstance(e, Line) for e in contents))
+                # The ticks are the only Lines that scale_ticks adds.
+                self.assertEqual(lines[1] - lines[0], ticks)
+
+    def test_linear_scale_tick_alone_in_window(self):
+        """A lone linear scale tick in a track window is drawn without a warning."""
+        self.check_lone_small_tick_drawn("linear")
+
+    def test_circular_scale_tick_alone_in_window(self):
+        """A lone circular scale tick in a track window is drawn without a warning."""
+        self.check_lone_small_tick_drawn("circular")
+
     def test_del_tracks(self):
         """Delete track."""
         self.gdd.del_track(1)
