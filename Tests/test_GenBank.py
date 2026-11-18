@@ -8120,6 +8120,55 @@ KEYWORDS    """,
                 str(caught[0].message),
             )
 
+    def read_noref_with_comment_lines(self, lines):
+        """Read GenBank/noref.gb with lines added at the end of its COMMENT."""
+        end = "AF035812.1.\n"
+        return self.read_noref_modified(
+            end, end + "".join(f"{'':12}{line}\n" for line in lines)
+        )
+
+    def test_structured_comment_long_lines(self):
+        """Parse long COMMENT lines in time linear in their length.
+
+        Regular expressions looking for "-START##" (on the first COMMENT
+        line, and on any later line holding it) and splitting a structured
+        comment line at "::" took time quadratic in the line length. Each
+        of these 100,000 character lines took 20 to 60 seconds to parse.
+        """
+        n = 100_000
+        first = "PROVISIONAL REFSEQ: This record has not yet been subject to final"
+        second = "NCBI review. The reference sequence was derived from AF035812.1."
+        with self.subTest(line="first COMMENT line"):
+            record = SeqIO.read(self.read_noref_modified(first, "x" * n), "genbank")
+            self.assertEqual(record.annotations["comment"], "x" * n + "\n" + second)
+        with self.subTest(line="-START## not at the end"):
+            line = "x" * n + "-START## is not at the end."
+            record = SeqIO.read(self.read_noref_with_comment_lines([line]), "genbank")
+            self.assertEqual(
+                record.annotations["comment"], f"{first}\n{second}\n{line}"
+            )
+        with self.subTest(line="key :: value"):
+            key = "x" + " " * n + "y"
+            handle = self.read_noref_with_comment_lines(
+                ["##Assembly-Data-START##", key + ":: z", "##Assembly-Data-END##"]
+            )
+            record = SeqIO.read(handle, "genbank")
+            self.assertEqual(
+                record.annotations["structured_comment"], {"Assembly-Data": {key: "z"}}
+            )
+
+    def test_structured_comment_line_without_key(self):
+        """A structured comment line starting with "::" raises ValueError."""
+        # This used to raise AttributeError, from calling .group() on the
+        # None returned by the regular expression that split the line.
+        handle = self.read_noref_with_comment_lines(
+            ["##Assembly-Data-START##", ":: SPAdes v. 3.1", "##Assembly-Data-END##"]
+        )
+        with self.assertRaises(ValueError) as cm:
+            SeqIO.read(handle, "genbank")
+        self.assertIn("no key before '::'", str(cm.exception))
+        self.assertIn(":: SPAdes v. 3.1", str(cm.exception))
+
     def test_unknown_description_genbank(self):
         """Read a DEFINITION line that is literally the SeqRecord default.
 
