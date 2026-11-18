@@ -279,6 +279,25 @@ class Hmmer(unittest.TestCase):
             parse_all_guarded(text + "stray trailing line\n", "hmmer3-text")
         self.assertIn("File ended before a 'Query:' line", str(cm.exception))
 
+    def test_hmmer3_file_ends_inside_alignment(self):
+        with open(support.DATA / "Hmmer" / "text_30_hmmscan_003.out") as handle:
+            text = handle.read()
+        header = "  == domain 1    score: 74.0 bits;  conditional E-value: 6.7e-25\n"
+        target_row = "  gi|4885477|ref|NP_005359.1|   7 EWQLV"
+        cuts = {
+            "after the domain header": text.index(header) + len(header),
+            "between the model and target rows": text.index(target_row),
+            "after the last alignment row": text.index("Internal pipeline"),
+        }
+        for where, cut in cuts.items():
+            with self.subTest(where=where):
+                with self.assertRaises(ValueError) as cm:
+                    parse_all_guarded(text[:cut], "hmmer3-text")
+                self.assertIn(
+                    "File ended inside the alignment of domain 1 for hit 'Globin'",
+                    str(cm.exception),
+                )
+
     def test_hmmer3_domtab_row_too_short(self):
         with open(support.DATA / "Hmmer" / "domtab_30_hmmscan_001.out") as handle:
             lines = handle.readlines()

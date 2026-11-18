@@ -378,6 +378,11 @@ class Hmmer3TextParser:
 
             # parse all the alignment blocks in the hsp
             while True:
+                if not self.line:
+                    raise ValueError(
+                        "File ended inside the alignment of domain"
+                        f" {dom_counter + 1} for hit {hid!r}"
+                    )
                 regx = None
 
                 # check for hit or query line
