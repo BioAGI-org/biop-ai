@@ -146,6 +146,11 @@ class InfernalTextParser(_BaseInfernalParser):
             qdesc = "<unknown description>"  # placeholder
             while not self.line.startswith(_DIV_HIT_SCORE_TABLE):
                 self.line = read_forward(self.handle)
+                if not self.line:
+                    raise ValueError(
+                        f"File ended after the 'Query:' line for {qid!r},"
+                        " before a 'Hit scores:' line"
+                    )
 
                 if self.line.startswith("Accession:"):
                     acc = self.line.strip().split(" ", 1)[1]

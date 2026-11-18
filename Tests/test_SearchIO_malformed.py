@@ -430,6 +430,40 @@ class Infernal(unittest.TestCase):
                     str(cm.exception),
                 )
 
+    def test_text_file_ends_before_hit_scores(self):
+        with open(
+            support.DATA / "Infernal" / "cmsearch_114_IRES_5S_U2_Yeast.txt"
+        ) as handle:
+            text = handle.read()
+        cuts = {
+            "after the Query line": text.index("Accession:   RF00061\n"),
+            "after the Accession line": text.index("Description: Hepatitis C"),
+            "inside the Description line": text.index(" entry site\nHit scores:"),
+            "after the Description line": text.index("Hit scores:"),
+        }
+        for where, cut in cuts.items():
+            with self.subTest(where=where):
+                with self.assertRaises(ValueError) as cm:
+                    parse_all_guarded(text[:cut], "infernal-text")
+                self.assertIn(
+                    "File ended after the 'Query:' line for 'IRES_HCV',"
+                    " before a 'Hit scores:' line",
+                    str(cm.exception),
+                )
+
+    def test_text_later_query_ends_before_hit_scores(self):
+        # The first result is complete; the file stops in the second header.
+        with open(
+            support.DATA / "Infernal" / "cmsearch_114_IRES_5S_U2_Yeast.txt"
+        ) as handle:
+            text = handle.read()
+        desc = "Description: 5S ribosomal RNA\n"
+        with self.assertRaises(ValueError) as cm:
+            parse_all_guarded(text[: text.index(desc) + len(desc)], "infernal-text")
+        self.assertIn(
+            "File ended after the 'Query:' line for '5S_rRNA'", str(cm.exception)
+        )
+
     def test_tab_hit_descriptions_differ(self):
         text = edited(
             support.DATA / "Infernal" / "cmsearch_114_5S_Yeast.tbl",
