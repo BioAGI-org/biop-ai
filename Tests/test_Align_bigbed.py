@@ -8099,6 +8099,85 @@ class TestAlign_malformed_chromosome_index(unittest.TestCase):
         self.check(nodes, 30)
 
 
+class TestAlign_malformed_data_index(unittest.TestCase):
+    """R tree indices of the data whose nodes do not form a tree."""
+
+    not_a_tree = (
+        "R tree index is not a tree: the node at offset {} is reached more than once"
+    )
+    no_children = "The non-leaf node at offset {} in the R tree index has no children"
+
+    def make_stream(self, nodes):
+        """Return bed3.bb with its R tree index replaced, and node offsets.
+
+        The new index is appended to the file. Each node is given as a list
+        of the indices of its child nodes in nodes, the first being the root,
+        or as None for a leaf holding the one data block of bed3.bb.
+        """
+        with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        # The offset of the R tree index is at byte 24 of the file header.
+        (index_offset,) = struct.unpack_from("<Q", data, 24)
+        # The R tree index header is 48 bytes; its root node follows it. In
+        # bed3.bb the root is a leaf holding one data block in 32 bytes.
+        index_header = data[index_offset : index_offset + 48]
+        leaf = data[index_offset + 48 : index_offset + 48 + 4 + 32]
+        # The item count in the header is the number of data blocks.
+        struct.pack_into("<Q", index_header, 8, nodes.count(None))
+        offsets = []
+        offset = len(data) + len(index_header)
+        for children in nodes:
+            offsets.append(offset)
+            if children is None:
+                offset += len(leaf)
+            else:
+                offset += 4 + len(children) * 24
+        struct.pack_into("<Q", data, 24, len(data))
+        data += index_header
+        for children in nodes:
+            if children is None:
+                data += leaf
+            else:
+                data += struct.pack("<?xH", False, len(children))
+                for child in children:
+                    # The chromosome range of the data block, then the offset.
+                    data += leaf[4:20] + struct.pack("<Q", offsets[child])
+        return SeekGuard(bytes(data)), offsets
+
+    def check(self, nodes, node, message):
+        stream, offsets = self.make_stream(nodes)
+        with self.assertRaises(ValueError) as cm:
+            Align.parse(stream, "bigbed")
+        self.assertEqual(str(cm.exception), message.format(offsets[node]))
+
+    def test_tree(self):
+        # A tree of three levels with three leaves, each holding the data
+        # block of bed3.bb, so its two alignments are read three times.
+        stream, _ = self.make_stream([[1, 2], [3, 4], [5], None, None, None])
+        with Align.parse(stream, "bigbed") as alignments:
+            self.assertEqual(len(alignments.targets), 1)
+            self.assertEqual(alignments.targets[0].id, "chr22")
+            self.assertEqual(len(list(alignments)), 6)
+
+    def test_root_child_of_itself(self):
+        # This used to loop for ever, using more memory on each pass.
+        self.check([[0]], 0, self.not_a_tree)
+
+    def test_cycle(self):
+        self.check([[1], [2], [1]], 1, self.not_a_tree)
+
+    def test_shared_child(self):
+        # Reaching each node twice from its parent used to double the work
+        # at each level, taking 2**30 steps here.
+        nodes = [[i + 1, i + 1] for i in range(30)] + [None]
+        self.check(nodes, 30, self.not_a_tree)
+
+    def test_no_children(self):
+        # These used to raise IndexError.
+        self.check([[]], 0, self.no_children)
+        self.check([[1], []], 1, self.no_children)
+
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     unittest.main(testRunner=runner)

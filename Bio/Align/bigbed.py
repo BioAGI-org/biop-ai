@@ -1894,6 +1894,12 @@ class _RTreeFormatter:
         root = NonLeaf(None, [], startChromIx, startBase, endChromIx, endBase, None)
         node = root
         itemsCounted = 0
+        # Offsets of the nodes reached so far, starting with the root. In a
+        # tree each node is reached once; reaching one again means a loop,
+        # which would never end, or a node shared by two parents, which can
+        # double the work at each level.
+        offset = stream.tell()
+        visited = {offset}
         while True:
             data = stream.read(formatter_node.size)
             isLeaf, count = formatter_node.unpack(data)
@@ -1941,6 +1947,11 @@ class _RTreeFormatter:
                     else:
                         break
             else:
+                if count == 0:
+                    raise ValueError(
+                        f"The non-leaf node at offset {offset} in the R tree index "
+                        "has no children"
+                    )
                 children = node.children
                 for i in range(count):
                     data = stream.read(formatter_nonleaf.size)
@@ -1963,7 +1974,14 @@ class _RTreeFormatter:
                     children.append(child)
                 parent = node
                 node = children[0]
-            stream.seek(node.dataOffset)
+            offset = node.dataOffset
+            if offset in visited:
+                raise ValueError(
+                    f"R tree index is not a tree: the node at offset {offset} "
+                    "is reached more than once"
+                )
+            visited.add(offset)
+            stream.seek(offset)
 
     def rTreeFromChromRangeArray(self, blockSize, items, endFileOffset):
         itemCount = len(items)
