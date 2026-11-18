@@ -7,6 +7,9 @@
 
 """Unit test for Scop."""
 
+import os
+import subprocess
+import sys
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
@@ -14,6 +17,7 @@ from unittest import mock
 
 import support
 
+import Bio
 from Bio.SCOP import cmp_sccs
 from Bio.SCOP import Node
 from Bio.SCOP import parse_domain
@@ -150,7 +154,39 @@ class ScopTests(unittest.TestCase):
 
         # The old pattern tried every way of splitting a whitespace run
         # around an empty sccs before it failed, which took time quadratic
-        # in the length of the run: several seconds for each of these.
+        # in the length of the run. It still raised ValueError in the end,
+        # so time it in a child process: these two headers take the old
+        # pattern about six minutes each and the new one milliseconds, and
+        # the timeout fails the test on the old pattern.
+        code = """\
+from Bio.SCOP import parse_domain
+for term in [
+    "d1tpt_1" + " " * 500_000 + "x",
+    "d1tpt_1" + " " * 200_000 + "(" + "1" * 200_000,
+]:
+    try:
+        parse_domain(term)
+    except ValueError:
+        print("ValueError")
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(result.stdout, "ValueError\nValueError\n", result.stderr)
+
+        # Shorter headers of the same two kinds, which the old pattern
+        # failed on in several seconds each, give the usual error message.
         for term in [
             "d1tpt_1" + " " * 100_000 + "x",
             "d1tpt_1" + " " * 20_000 + "(" + "1" * 20_000,
