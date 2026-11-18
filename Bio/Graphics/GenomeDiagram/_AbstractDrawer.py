@@ -590,12 +590,14 @@ class AbstractDrawer:
         inside the current track's start and end are returned, so a track
         limited to a small window of a long diagram costs only its own ticks.
 
-        If the ticks would be less than one point apart, none are returned
-        and a BiopythonWarning names the interval to raise. Ticks are lines
-        one point wide, so ticks that close only merge into a solid band,
-        and how many there are is set by the sequence coordinates rather
-        than by the page: a single feature ending at 1e11 in a small file
-        would ask for ten million of them.
+        If two or more ticks would be drawn less than one point apart, none
+        are returned and a BiopythonWarning names the interval to raise.
+        Ticks are lines one point wide, so ticks that close only merge into
+        a solid band, and how many there are is set by the sequence
+        coordinates rather than by the page: a single feature ending at 1e11
+        in a small file would ask for ten million of them. Zero or one tick
+        crowds nothing, so those are returned with no warning, however small
+        the spacing.
         """
         track = self._parent[self.current_track_level]
         interval = int(getattr(track, interval_name))
@@ -604,8 +606,9 @@ class AbstractDrawer:
         # interval of 0 raises ZeroDivisionError and a negative one draws
         # no ticks (the range below is then empty).
         first = (floor(start) // interval + 1) * interval
+        ticks = range(first, ceil(end), interval)
         spacing = interval * points_per_base
-        if interval > 0 and spacing < 1:
+        if interval > 0 and spacing < 1 and len(ticks) > 1:
             warnings.warn(
                 f"Not drawing the scale ticks every {interval} bases: they would "
                 f"be {spacing:.2g} points apart, too close to draw. Raise "
@@ -613,4 +616,4 @@ class AbstractDrawer:
                 BiopythonWarning,
             )
             return range(0)
-        return range(first, ceil(end), interval)
+        return ticks
