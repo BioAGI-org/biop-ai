@@ -675,6 +675,52 @@ if sqlite3:
             search = self.idx.search((3013219,), (3013319,))
             self.assertRaises(ValueError, next, search)
 
+    class TestSearchIndexAgreesWithWrongSize(unittest.TestCase):
+        """Test an existing index that agrees with a wrong 's' line size.
+
+        An existing index is not checked against the MAF file, so an index
+        and a MAF file that both claim a size far larger than the sequence
+        made get_spliced allocate an entry per claimed letter for every row.
+        """
+
+        def setUp(self):
+            self.tmpdir = tempfile.mkdtemp()
+            maf = os.path.join(self.tmpdir, "ucsc_mm9_chr10.maf")
+            index = os.path.join(self.tmpdir, "ucsc_mm9_chr10.mafindex")
+            shutil.copy(support.DATA / "MAF" / "ucsc_mm9_chr10.maf", maf)
+            MafIndex(index, maf, "mm9.chr10").close()
+            # Make the first block claim 100000 letters instead of 162, taking
+            # the extra digits from the padding so that no offset moves.
+            with open(maf, "rb") as handle:
+                data = handle.read()
+            old = b"mm9.chr10               3009319 162 +"
+            new = b"mm9.chr10            3009319 100000 +"
+            self.assertEqual(len(new), len(old))
+            self.assertEqual(data.count(old), 1)
+            with open(maf, "wb") as handle:
+                handle.write(data.replace(old, new))
+            con = sqlite3.connect(index)
+            con.execute(
+                "UPDATE offset_data SET bin = ?, end = ? WHERE start = 3009319;",
+                (MafIndex._ucscbin(3009319, 3109319), 3109318),
+            )
+            con.commit()
+            con.close()
+            self.idx = MafIndex(index, maf, "mm9.chr10")
+
+        def tearDown(self):
+            self.idx.close()
+            shutil.rmtree(self.tmpdir)
+
+        def test_search(self):
+            search = self.idx.search((3009319,), (3009320,))
+            with self.assertRaisesRegex(ValueError, r"expected 100000, found 162"):
+                next(search)
+
+        def test_get_spliced(self):
+            with self.assertRaisesRegex(ValueError, r"expected 100000, found 162"):
+                self.idx.get_spliced((3009319,), (3009320,))
+
     class TestSpliceGoodMAF(unittest.TestCase):
         """Test in silico splicing on a correctly-formatted MAF."""
 
