@@ -1,6 +1,8 @@
 """Tests for SeqIO TwoBitIO module."""
 
 import io
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -10,6 +12,7 @@ from unittest import mock
 import numpy as np
 import support
 
+import Bio
 from Bio import SeqIO
 from Bio.Seq import MutableSeq
 from Bio.Seq import Seq
@@ -105,6 +108,42 @@ class Parsing(unittest.TestCase):
         blocks = np.empty((0, 2), dtype="uint32")
         with self.assertRaises(ValueError):
             _twoBitIO.convert(b"\x00", 0, 4, 0, blocks, blocks)
+
+    def test_convert_block_ending_before_start(self):
+        """Check the C helper skips N and mask blocks that end before they start.
+
+        The parser rejects such blocks, but applyNs used to pass the negative
+        length of one to memset, writing far past the end of the sequence.
+        The calls run in a child process, so that on the old code a crash
+        fails this test rather than the whole test run.
+        """
+        code = """\
+import numpy as np
+from Bio.SeqIO import _twoBitIO
+data = bytes(4)  # 16 bases of T
+wrapped = np.array([[10, 4]], dtype="uint32")  # starts at 10, ends at 4
+empty = np.empty((0, 2), dtype="uint32")
+for start, end, step in ((0, 16, 1), (0, 16, 2), (15, -1, -1)):
+    print(_twoBitIO.convert(data, start, end, step, wrapped, empty))
+    print(_twoBitIO.convert(data, start, end, step, empty, wrapped))
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        expected = [repr(b"T" * 16)] * 2 + [repr(b"T" * 8)] * 2 + [repr(b"T" * 16)] * 2
+        self.assertEqual(result.stdout.splitlines(), expected, result.stderr)
 
     def test_sequence_long(self):
         path = support.DATA / "TwoBit" / "sequence.long.2bit"
