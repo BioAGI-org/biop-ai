@@ -12,6 +12,7 @@ Bio.Cluster and the underlying C Clustering Library is described in
 M. de Hoon et al. (2004) https://doi.org/10.1093/bioinformatics/bth078
 """
 
+import math
 import numbers
 import os
 from collections.abc import Sequence
@@ -301,7 +302,11 @@ def kmedoids(
      - nfound: the number of times this solution was found.
     """
     distance = __check_distancematrix(distance)
-    nitems = len(distance)
+    if isinstance(distance, np.ndarray) and distance.ndim == 1:
+        # It holds the m = n * (n - 1) / 2 distances between n items
+        nitems = (1 + math.isqrt(1 + 8 * len(distance))) // 2
+    else:
+        nitems = len(distance)
     clusterid, npass = __check_initialid(initialid, npass, nitems)
     rng_seed = __check_rng_seed(rng_seed)
     error, nfound = _cluster.kmedoids(distance, nclusters, npass, clusterid, rng_seed)
