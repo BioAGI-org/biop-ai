@@ -410,6 +410,26 @@ class Infernal(unittest.TestCase):
             str(cm.exception),
         )
 
+    def test_text_file_ends_after_no_hits(self):
+        with open(support.DATA / "Infernal" / "cmsearch_114_IRES_Yeast.txt") as handle:
+            text = handle.read()
+        no_hits = "   [No hits detected that satisfy reporting thresholds]\n"
+        first = text.index(no_hits) + len(no_hits)
+        cuts = {
+            "after the no hits line of the scores": first,
+            "after the no hits line of the alignments": text.index(no_hits, first)
+            + len(no_hits),
+            "before the pipeline statistics": text.index("Internal CM pipeline"),
+        }
+        for where, cut in cuts.items():
+            with self.subTest(where=where):
+                with self.assertRaises(ValueError) as cm:
+                    parse_all_guarded(text[:cut], "infernal-text")
+                self.assertIn(
+                    "File ended after 'No hits detected' for query 'IRES_HCV'",
+                    str(cm.exception),
+                )
+
     def test_tab_hit_descriptions_differ(self):
         text = edited(
             support.DATA / "Infernal" / "cmsearch_114_5S_Yeast.tbl",
