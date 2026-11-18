@@ -5,10 +5,12 @@
 """Tests for Cluster module."""
 
 import functools
+import io
 import os
 import subprocess
 import sys
 import sysconfig
+import tempfile
 import unittest
 
 try:
@@ -3950,6 +3952,167 @@ assert clusterid.tolist() == [0, 1], clusterid
 print("OK")
 """
         )
+
+
+class LimitedReads:
+    """Cluster numbers that fail the test when read too often.
+
+    Record.save used to look for cluster 0, 1, 2, ... in turn, reading
+    every cluster number each time, until it had written every item. If
+    that never happened it looped forever; this stops it.
+    """
+
+    def __init__(self, values, limit=1000):
+        """Hold the cluster numbers, and how many reads are allowed."""
+        self.values = values
+        self.reads = limit
+
+    def __len__(self):
+        return len(self.values)
+
+    def __getitem__(self, i):
+        self.reads -= 1
+        if self.reads < 0:
+            raise AssertionError("cluster numbers read too often; save is looping")
+        return self.values[i]
+
+
+class TestRecordSave(unittest.TestCase):
+    """Tests of Record.save, which writes files for Java TreeView."""
+
+    TEXT = (
+        "UNIQID\tNAME\tGORDER\tEXP1\tEXP2\tEXP3\n"
+        "EORDER\t\t\t2\t1\t1\n"
+        "G1\tn1\t2\t1.0\t2.0\t3.0\n"
+        "G2\tn2\t1\t4.0\t\t6.0\n"
+        "G3\tn3\t2\t7.0\t8.0\t9.0\n"
+        "G4\tn4\t1\t1.5\t2.5\t3.5\n"
+        "G5\tn5\t1\t4.5\t5.5\t6.5\n"
+    )
+
+    def setUp(self):
+        if TestCluster.module != "Bio.Cluster":
+            self.skipTest("these tests call Bio.Cluster")
+        from Bio.Cluster import read
+
+        self.record = read(io.StringIO(self.TEXT))
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.directory = directory.name
+        self.jobname = os.path.join(directory.name, "job")
+
+    def read_output(self, name):
+        with open(os.path.join(self.directory, name)) as stream:
+            return stream.read()
+
+    def test_kmeans(self):
+        """Check the files written for a k-means clustering solution.
+
+        The genes and samples go in order of cluster number, and within a
+        cluster in the order of gorder or eorder.
+        """
+        self.record.save(self.jobname, [1.0, 0.0, 1.0, 2.0, 0.0], [1, 0, 1])
+        self.assertEqual(
+            sorted(os.listdir(self.directory)),
+            ["job_K_A2.kag", "job_K_G3.kgg", "job_K_G3_A2.cdt"],
+        )
+        self.assertEqual(
+            self.read_output("job_K_G3.kgg"),
+            "UNIQID\tGROUP\nG2\t0\nG5\t0\nG1\t1\nG3\t1\nG4\t2\n",
+        )
+        self.assertEqual(
+            self.read_output("job_K_A2.kag"),
+            "ARRAY\tGROUP\nEXP2\t0\nEXP3\t1\nEXP1\t1\n",
+        )
+        self.assertEqual(
+            self.read_output("job_K_G3_A2.cdt"),
+            "UNIQID\tNAME\tGWEIGHT\tEXP2\tEXP3\tEXP1\n"
+            "EWEIGHT\t\t\t1.000000\t1.000000\t1.000000\n"
+            "G2\tn2\t1.000000\t\t6.0\t4.0\n"
+            "G5\tn5\t1.000000\t5.5\t6.5\t4.5\n"
+            "G1\tn1\t1.000000\t2.0\t3.0\t1.0\n"
+            "G3\tn3\t1.000000\t8.0\t9.0\t7.0\n"
+            "G4\tn4\t1.000000\t2.5\t3.5\t1.5\n",
+        )
+        # A large cluster number used to cost one pass over the genes for
+        # every smaller number.
+        self.record.save(self.jobname, LimitedReads([0, 10**9, 0, 0, 0]))
+        self.assertEqual(
+            self.read_output("job_K_G1000000001.kgg"),
+            "UNIQID\tGROUP\nG4\t0\nG5\t0\nG1\t0\nG3\t0\nG2\t1000000000\n",
+        )
+
+    def test_kmeans_bad_clusterids(self):
+        """Check save rejects cluster numbers it cannot write.
+
+        A negative or fractional cluster number, or NaN, never equalled the
+        number save was looking for, so it looped forever. Too many cluster
+        numbers were silently ignored, and too few raised IndexError.
+        """
+        nan = float("nan")
+        for geneclusters, expclusters, message in (
+            ([-1, 0, 0, 0, 0], None, "geneclusters contains negative values"),
+            (None, [0, -2, 0], "expclusters contains negative values"),
+            (
+                [0.5, 0, 0, 0, 0],
+                None,
+                "geneclusters contains values that are not integers",
+            ),
+            (
+                [0, nan, 0, 0, 0],
+                None,
+                "geneclusters contains values that are not integers",
+            ),
+            (
+                None,
+                [0, 1, float("inf")],
+                "expclusters contains values that are not integers",
+            ),
+            (
+                ["0", "1", "0", "1", "0"],
+                None,
+                "geneclusters contains values that are not integers",
+            ),
+            ([0, 0, 0], None, "geneclusters has incorrect size 3 (expected 5)"),
+            (None, [0, 0, 0, 0], "expclusters has incorrect size 4 (expected 3)"),
+            ([[0, 0, 0, 0, 0]], None, "geneclusters should be one-dimensional"),
+        ):
+            with self.subTest(geneclusters=geneclusters, expclusters=expclusters):
+                if geneclusters is not None:
+                    geneclusters = LimitedReads(geneclusters)
+                if expclusters is not None:
+                    expclusters = LimitedReads(expclusters)
+                with self.assertRaises(ValueError) as cm:
+                    self.record.save(self.jobname, geneclusters, expclusters)
+                self.assertEqual(str(cm.exception), message)
+                # Nothing is written for an invalid solution
+                self.assertEqual(os.listdir(self.directory), [])
+
+    def test_kmeans_short_order(self):
+        """Check save rejects a gorder or eorder of the wrong size.
+
+        The items missing from the order were never written, so save looped
+        forever. Cluster.read takes the EORDER values from the columns after
+        the last NAME, GWEIGHT or GORDER column, so a file with NAME between
+        two samples and an EORDER row gives an eorder one value short.
+        """
+        from Bio.Cluster import read
+
+        text = (
+            "UNIQID\tEXP1\tNAME\tEXP2\n"
+            "G1\t1.0\tn1\t3.0\n"
+            "G2\t2.0\tn2\t4.0\n"
+            "EORDER\t2\t\t1\n"
+        )
+        record = read(io.StringIO(text))
+        with self.assertRaises(ValueError) as cm:
+            record.save(self.jobname, expclusters=LimitedReads([1, 0]))
+        self.assertEqual(str(cm.exception), "eorder has incorrect size 1 (expected 2)")
+        record.gorder = [1.0]
+        with self.assertRaises(ValueError) as cm:
+            record.save(self.jobname, geneclusters=LimitedReads([1, 0]))
+        self.assertEqual(str(cm.exception), "gorder has incorrect size 1 (expected 2)")
+        self.assertEqual(os.listdir(self.directory), [])
 
 
 if __name__ == "__main__":

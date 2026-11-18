@@ -1210,6 +1210,7 @@ class Record:
             gid = 1
         elif geneclusters is not None:
             # This is a k-means clustering result.
+            geneclusters = self._checkkmeans(geneclusters, gorder, False)
             filename = jobname + "_K"
             k = max(geneclusters) + 1
             kggfilename = "%s_K_G%d.kgg" % (jobname, k)
@@ -1223,6 +1224,7 @@ class Record:
             aid = 1
         elif expclusters is not None:
             # This is a k-means clustering result.
+            expclusters = self._checkkmeans(expclusters, eorder, True)
             filename = jobname + "_K"
             k = max(expclusters) + 1
             kagfilename = "%s_K_A%d.kag" % (jobname, k)
@@ -1270,13 +1272,52 @@ class Record:
                 outputfile.write("\n")
         return index
 
-    def _savekmeans(
+    def _checkkmeans(
         self,
-        filename: str,
         clusterids: "Sequence[int | np.integer[Any]] | NDArray[Any]",
         order: "ArrayLike",
         transpose: bool,
-    ) -> "NDArray[np.int_]":
+    ) -> "NDArray[Any]":
+        """Check a k-means clustering solution, returning it as an array (PRIVATE)."""
+        if transpose:
+            name = "expclusters"
+            ordername = "eorder"
+            n = np.shape(self.data)[1]
+        else:
+            name = "geneclusters"
+            ordername = "gorder"
+            n = np.shape(self.data)[0]
+        clusterids = np.asarray(clusterids)
+        if clusterids.ndim != 1:
+            raise ValueError(f"{name} should be one-dimensional")
+        if len(clusterids) != n:
+            raise ValueError(
+                f"{name} has incorrect size {len(clusterids)} (expected {n})"
+            )
+        kind = clusterids.dtype.kind
+        if kind not in "biuf" or (
+            kind == "f"
+            and not (
+                np.isfinite(clusterids).all()
+                and (clusterids == np.floor(clusterids)).all()
+            )
+        ):
+            raise ValueError(f"{name} contains values that are not integers")
+        if (clusterids < 0).any():
+            raise ValueError(f"{name} contains negative values")
+        if np.shape(order) != (n,):
+            raise ValueError(
+                f"{ordername} has incorrect size {np.size(order)} (expected {n})"
+            )
+        return clusterids
+
+    def _savekmeans(
+        self,
+        filename: str,
+        clusterids: "NDArray[Any]",
+        order: "ArrayLike",
+        transpose: bool,
+    ) -> "NDArray[np.intp]":
         """Save the k-means clustering solution (PRIVATE)."""
         if transpose:
             label = "ARRAY"
@@ -1284,20 +1325,13 @@ class Record:
         else:
             label = self.uniqid
             names = self.geneid
+        index = np.argsort(order)
+        # In order of cluster number, and within a cluster in the given order
+        sortedindex = index[np.argsort(clusterids[index], kind="stable")]
         with open(filename, "w") as outputfile:
             outputfile.write(label + "\tGROUP\n")
-            index = np.argsort(order)
-            n = len(names)
-            sortedindex = np.zeros(n, int)
-            counter = 0
-            cluster = 0
-            while counter < n:
-                for j in index:
-                    if clusterids[j] == cluster:
-                        outputfile.write(f"{names[j]}\t{cluster}\n")
-                        sortedindex[counter] = j
-                        counter += 1
-                cluster += 1
+            for j in sortedindex:
+                outputfile.write(f"{names[j]}\t{int(clusterids[j])}\n")
         return sortedindex
 
     def _savedata(
