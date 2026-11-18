@@ -331,15 +331,17 @@ def nt_search(seq, subseq):
         else:
             pattern += f"[{value}]"
 
+    # Search on from just after each hit, rather than searching a slice of
+    # what is left: copying the rest of the sequence on every hit made the
+    # search take time proportional to the hits times the sequence length.
+    regex = re.compile(pattern)
     pos = -1
     result = [pattern]
     while True:
-        pos += 1
-        s = seq[pos:]
-        m = re.search(pattern, s)
+        m = regex.search(seq, pos + 1)
         if not m:
             break
-        pos += int(m.start(0))
+        pos = m.start()
         result.append(pos)
     return result
 
