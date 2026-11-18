@@ -3,8 +3,11 @@
 # license.  Please see the LICENSE file that should have been included
 # as part of this package.
 """Tests for Align.bigmaf module."""
+import struct
 import tempfile
 import unittest
+import zlib
+from io import BytesIO
 from io import StringIO
 
 import numpy as np
@@ -12895,6 +12898,118 @@ ornAna1.c  40046122 -------------  40046122
 """,
         )
         self.assertRaises(StopIteration, next, selected_alignments)
+
+
+class EndOfFileGuard(BytesIO):
+    """A binary stream that fails the test if read on and on at its end."""
+
+    def __init__(self, data):
+        """Hold the data, and count the reads made at its end."""
+        super().__init__(data)
+        self.reads_at_end = 0
+
+    def read(self, size=-1):
+        data = super().read(size)
+        if size != 0 and not data:
+            self.reads_at_end += 1
+            if self.reads_at_end > 100:
+                raise AssertionError("read called 100 times at end of file")
+        return data
+
+
+class TestAlign_malformed_first_block(unittest.TestCase):
+    """First data blocks that do not name the reference sequence.
+
+    Opening a bigMaf file reads the name of the reference sequence, hg16 in
+    ucsc_test.bb, from the first 's' line of the first data block.
+    """
+
+    no_s_line = (
+        "The first data block, at offset {}, has no 's' line naming the "
+        "reference sequence"
+    )
+
+    def make_stream(self, block, compressed):
+        """Return ucsc_test.bb with its data block replaced, and the block offset.
+
+        The new block is appended to the file, and the one leaf of the R tree
+        index points to it instead. If compressed is False, uncompressBufSize
+        in the file header is set to 0, which marks the file as uncompressed.
+        """
+        with open(support.DATA / "MAF" / "ucsc_test.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        if not compressed:
+            # uncompressBufSize is at byte 52 of the file header.
+            struct.pack_into("<I", data, 52, 0)
+        # The offset of the R tree index is at byte 24 of the file header.
+        (index_offset,) = struct.unpack_from("<Q", data, 24)
+        # The R tree index header is 48 bytes; its root node follows it. In
+        # ucsc_test.bb the root is a leaf holding one data block, and the
+        # offset and size of the block are the last 16 of its 4 + 32 bytes.
+        offset = len(data)
+        struct.pack_into("<QQ", data, index_offset + 48 + 20, offset, len(block))
+        data += block
+        return EndOfFileGuard(bytes(data)), offset
+
+    def make_block(self, mafBlock, compressed):
+        """Return a data block holding one item with the given MAF block."""
+        # Each item is the chromosome number, start and end, then the MAF
+        # block, with semicolons in place of newlines, ended by a NUL byte.
+        block = struct.pack("<III", 0, 27578828, 27578831) + mafBlock + b"\0"
+        if compressed:
+            block = zlib.compress(block)
+        return block
+
+    def check(self, mafBlock):
+        for compressed in (True, False):
+            with self.subTest(compressed=compressed):
+                block = self.make_block(mafBlock, compressed)
+                stream, offset = self.make_stream(block, compressed)
+                with self.assertRaises(ValueError) as cm:
+                    Align.parse(stream, "bigmaf")
+                self.assertEqual(str(cm.exception), self.no_s_line.format(offset))
+
+    def test_reference(self):
+        # The 's' line may come after the first 256 bytes of the block.
+        s_line = b";s mm10.chr7 27578828 3 + 158545518 AAA"
+        for a_line in (b"a score=0", b"a score=0" + b" pass=1" * 50):
+            for compressed in (True, False):
+                with self.subTest(a_line=a_line, compressed=compressed):
+                    block = self.make_block(a_line + s_line, compressed)
+                    stream, _ = self.make_stream(block, compressed)
+                    with Align.parse(stream, "bigmaf") as alignments:
+                        self.assertEqual(alignments.reference, "mm10")
+                        self.assertEqual(alignments.targets[0].id, "mm10.chr7")
+
+    def test_no_s_line(self):
+        # These used to read on and on at the end of the file.
+        self.check(b"a score=0")
+
+    def test_s_line_without_coordinates(self):
+        self.check(b"a score=0;s hg16.chr7")
+
+    def test_empty_block(self):
+        # The block ends the file, so reading it starts at the end of the file.
+        stream, offset = self.make_stream(b"", compressed=False)
+        with self.assertRaises(ValueError) as cm:
+            Align.parse(stream, "bigmaf")
+        self.assertEqual(str(cm.exception), self.no_s_line.format(offset))
+        stream, offset = self.make_stream(b"", compressed=True)
+        with self.assertRaises(ValueError) as cm:
+            Align.parse(stream, "bigmaf")
+        self.assertEqual(
+            str(cm.exception),
+            f"The compressed data block at offset {offset} is incomplete",
+        )
+
+    def test_bigbed_file(self):
+        # A bigBed file that is not a bigMaf file. Its one data block, at
+        # offset 685, holds two bed3 items, with no fields after chromEnd.
+        with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
+            stream = EndOfFileGuard(stream.read())
+        with self.assertRaises(ValueError) as cm:
+            Align.parse(stream, "bigmaf")
+        self.assertEqual(str(cm.exception), self.no_s_line.format(685))
 
 
 if __name__ == "__main__":

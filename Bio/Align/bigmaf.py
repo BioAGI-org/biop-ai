@@ -15,7 +15,6 @@ See https://genome.ucsc.edu/goldenPath/help/bigMaf.html
 
 import re
 import struct
-import zlib
 
 import numpy as np
 
@@ -187,25 +186,16 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
             else:
                 node = children[0]
         filepos = stream.tell()
-        stream.seek(node.dataOffset)
-        dataSize = 256
-        data = b""
-        compressed_data = b""
-        while True:
-            chunk = stream.read(dataSize)
-            if self._compressed:
-                compressed_data += chunk
-                decompressor = zlib.decompressobj()
-                data = decompressor.decompress(compressed_data)
-            else:
-                data += chunk
-            try:
-                i = data.index(b";s", size)
-            except ValueError:
-                continue
-            words = data[i + 1 :].split()
-            if len(words) > 2:
-                break
+        # Read the whole block, as iterating and searching do: reading on
+        # until an 's' line turned up never ended if the block had none.
+        data = self._read_block(stream, node)
+        i = data.find(b";s", size)
+        words = data[i + 1 :].split(maxsplit=2) if i >= 0 else []
+        if len(words) < 3:
+            raise ValueError(
+                f"The first data block, at offset {node.dataOffset}, has no "
+                "'s' line naming the reference sequence"
+            )
         name = words[1]
         stream.seek(filepos)
         reference, chromosome = name.split(b".", 1)
