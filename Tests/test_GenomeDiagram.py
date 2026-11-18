@@ -984,6 +984,39 @@ class DiagramTest(unittest.TestCase):
         """A lone circular scale tick in a track window is drawn without a warning."""
         self.check_lone_small_tick_drawn("circular")
 
+    def test_scale_ticks_beyond_maxsize(self):
+        """Scale ticks too many to count in a range are skipped, not an error."""
+        # 10**23 bases at the default 10 kbp small tick interval is more
+        # ticks than sys.maxsize, so len() of their range overflows.
+        track = self.gdd.tracks[1]
+        track.new_set().add_feature(SeqFeature(SimpleLocation(0, 10**23)))
+        for fmt in ("linear", "circular"):
+            with self.subTest(format=fmt):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    self.gdd.draw(format=fmt)
+                self.assertEqual(len(caught), 2, [str(w.message) for w in caught])
+
+    def test_scale_ticks_negative_interval(self):
+        """A negative tick interval draws no ticks, even past the diagram's end."""
+        track = self.gdd.tracks[1]
+        track.new_set().add_feature(SeqFeature(SimpleLocation(0, 1000)))
+        track.scale_smalltick_interval = -5
+        track.scale_largetick_interval = -50
+        # The diagram is drawn from 0 to 1000; a track window inside it, and
+        # one past its end
+        for start, end in [(0, 1000), (2000, 3000)]:
+            for fmt in ("linear", "circular"):
+                with self.subTest(start=start, end=end, format=fmt):
+                    track.start, track.end = start, end
+                    lines = []
+                    for scale_ticks in (0, 1):
+                        track.scale_ticks = scale_ticks
+                        self.gdd.draw(format=fmt, start=0, end=1000)
+                        contents = self.gdd.drawing.contents
+                        lines.append(sum(isinstance(e, Line) for e in contents))
+                    self.assertEqual(lines[1], lines[0])
+
     def test_del_tracks(self):
         """Delete track."""
         self.gdd.del_track(1)
