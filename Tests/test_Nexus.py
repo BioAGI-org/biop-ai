@@ -2164,6 +2164,33 @@ class TestRepeatedLabels(unittest.TestCase):
         self.assertEqual(nexus.taxlabels, renamed)
 
 
+class TestWideClade(unittest.TestCase):
+    """A clade with many children parses in linear time.
+
+    At each comma between two children of a clade, Tree._parse added up the
+    lengths of all the pieces of the clade's text before that comma, so the
+    time grew with the square of the number of children: the tree below, one
+    clade of 25,000 leaves, took about 100 seconds to parse, and now takes a
+    fraction of a second.
+    """
+
+    def test_star_tree(self):
+        """A NEXUS tree of one clade with 25,000 leaves."""
+        n = 25_000
+        # the commas inside the comments do not separate children
+        leaves = [(f"t{i}", float(i), f"[&r={{{i},{i}}}]") for i in range(n)]
+        newick = ",".join(
+            f"{taxon}{comment}:{length}" for taxon, length, comment in leaves
+        )
+        nexus = Nexus.Nexus(f"#NEXUS\nbegin trees;\ntree star = ({newick});\nend;\n")
+        tree = nexus.trees[0]
+        children = [tree.node(i).data for i in tree.node(tree.root).succ]
+        self.assertEqual(
+            [(data.taxon, data.branchlength, data.comment) for data in children],
+            leaves,
+        )
+
+
 @unittest.skipIf(cnexus is None, "C extension Bio.Nexus.cnexus not available")
 @unittest.skipUnless(
     sys.platform.startswith("linux") and sys.maxsize > 2**32,
