@@ -343,6 +343,9 @@ class AffyTest(unittest.TestCase):
                 "has 5 rows and 5 columns but values for 24 cells",
             ),
             (header_only, "has 5 rows and 5 columns but values for 0 cells"),
+            # Ends before the INTENSITY section; used to give no intensities
+            (data[:start], "has no INTENSITY section"),
+            (data[: data.index("[HEADER]")], "has no INTENSITY section"),
             (
                 data.replace(last_cell, "  5\t  4\t168.0\t24.1\t 25\n"),
                 "has cell X=5 Y=4 outside its 5 columns and 5 rows",

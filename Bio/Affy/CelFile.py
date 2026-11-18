@@ -672,6 +672,8 @@ def _read_v3(handle):
                     record.modified[x, y] = float(words[2])
     if section == "INTENSITY":
         _read_v3_cells(record, cells)
+    if record.intensities is None:
+        raise ParserError("CEL version 3 file has no INTENSITY section")
     return record
 
 
