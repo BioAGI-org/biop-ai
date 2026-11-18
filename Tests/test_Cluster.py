@@ -3797,6 +3797,50 @@ print("OK")
 """
         )
 
+    def test_somcluster_celldata_shape(self):
+        """Check the private somcluster checks the shape of celldata.
+
+        The rank of celldata was not checked, so the size of its third
+        dimension could be read from past the end of the shape of a smaller
+        array, and a grid with no cells was used as it was. So somcluster
+        wrote past the end of celldata, dereferenced NULL, or freed an
+        invalid pointer.
+        """
+        self.run_child(
+            """
+import numpy as np
+from Bio.Cluster import _cluster
+
+data = np.arange(32.0).reshape(4, 8)
+mask = np.ones(data.shape, np.intc)
+weight = np.ones(8)
+clusterids = np.zeros((4, 2), np.intc)
+for celldata in (
+    # Its strides, (8, 8), were read as a third dimension of 8, the
+    # number of data columns, so 16 values were written where 2 fit
+    np.zeros((2, 1)),
+    np.zeros(4),
+    np.array(0.0),
+    np.zeros((2, 1, 8, 1)),
+):
+    try:
+        _cluster.somcluster(clusterids, celldata, data, mask, weight, 0, 0.02, 5, "e", 1)
+    except ValueError as error:
+        expected = f"celldata array has incorrect rank {celldata.ndim} (expected 3)"
+        assert str(error) == expected, error
+    else:
+        raise AssertionError(f"no ValueError for shape {celldata.shape}")
+for shape in ((0, 1, 8), (2, 0, 8), (2, 1, 0)):
+    try:
+        _cluster.somcluster(clusterids, np.zeros(shape), data, mask, weight, 0, 0.02, 5, "e", 1)
+    except ValueError as error:
+        assert str(error) == "celldata array is empty", error
+    else:
+        raise AssertionError(f"no ValueError for shape {shape}")
+print("OK")
+"""
+        )
+
 
 if __name__ == "__main__":
     TestCluster.module = "Bio.Cluster"
