@@ -3,6 +3,7 @@
 # license.  Please see the LICENSE file that should have been included
 # as part of this package.
 """Tests for Bio.Align.hhr module."""
+import io
 import unittest
 from tempfile import NamedTemporaryFile
 
@@ -10024,6 +10025,55 @@ class Align_hhr_allx_badtotal_tconsensus(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 next(alignments)
         self.assertEqual(str(cm.exception), "Failed to parse total length 30")
+
+
+class Align_hhr_allx_too_long(unittest.TestCase):
+    """Reject a total length too large to pad the annotations to."""
+
+    path = support.DATA / "HHsuite" / "allx.hhr"
+
+    def setUp(self):
+        with open(self.path) as stream:
+            self.text = stream.read()
+
+    def edit(self, old, new):
+        self.assertIn(old, self.text)
+        return io.StringIO(self.text.replace(old, new, 1))
+
+    def test_target_at_limit(self):
+        stream = self.edit(
+            "T 1klr_A           24 T   24 (30)",
+            "T 1klr_A           24 T   24 (1000000)",
+        )
+        with Align.parse(stream, "hhr") as alignments:
+            alignment = next(alignments)
+        self.assertEqual(len(alignment.target.seq), 1000000)
+        self.assertEqual(len(alignment.target.letter_annotations["Consensus"]), 1000000)
+
+    def test_target_too_long(self):
+        stream = self.edit(
+            "T 1klr_A           24 T   24 (30)",
+            "T 1klr_A           24 T   24 (1000001)",
+        )
+        with Align.parse(stream, "hhr") as alignments:
+            with self.assertRaises(ValueError) as cm:
+                next(alignments)
+        self.assertEqual(
+            str(cm.exception), "Target length 1000001 exceeds the maximum of 1000000"
+        )
+
+    def test_query_too_long(self):
+        self.text = self.text.replace("Match_columns 39", "Match_columns 1000001")
+        stream = self.edit(
+            "Q Only             39 X   39 (39)",
+            "Q Only             39 X   39 (1000001)",
+        )
+        with Align.parse(stream, "hhr") as alignments:
+            with self.assertRaises(ValueError) as cm:
+                next(alignments)
+        self.assertEqual(
+            str(cm.exception), "Query length 1000001 exceeds the maximum of 1000000"
+        )
 
 
 class Align_hhr_4p79_hhsearch_server_NOssm(unittest.TestCase):
