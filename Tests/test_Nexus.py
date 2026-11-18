@@ -2003,6 +2003,48 @@ class TestIndexRange(unittest.TestCase):
                     self.parse(commands)
 
 
+class TestNcharBound(unittest.TestCase):
+    """A stated nchar must fit in the input, as the matrix needs that many."""
+
+    def test_nchar_larger_than_input(self):
+        """An nchar that no matrix in the input could hold raises NexusError."""
+        # with no matrix, nchar was only a number from the file, and a
+        # charset range up to it was expanded in full: nchar=200000000 in a
+        # 101-byte file needed about 18 GB
+        no_matrix = (
+            "#NEXUS\nbegin data;\ndimensions ntax=1 nchar=1000;\nend;\n"
+            "begin sets;\ncharset c = 1 - 1000;\nend;\n"
+        )
+        # a later dimensions command after a real matrix did the same
+        after_matrix = (
+            "#NEXUS\nbegin data;\ndimensions ntax=1 nchar=4;\n"
+            "format datatype=dna;\nmatrix\nt1 ACGT\n;\nend;\n"
+            "begin characters;\ndimensions nchar=1000;\nend;\n"
+            "begin sets;\ncharset c = 1 - 1000;\nend;\n"
+        )
+        for text in (no_matrix, after_matrix):
+            for source in (text, StringIO(text)):
+                with self.subTest(text=text, source=type(source).__name__):
+                    with self.assertRaisesRegex(
+                        Nexus.NexusError,
+                        r"^Dimensions nchar=1000 is larger than the whole "
+                        rf"input \({len(text)} characters\)\.$",
+                    ):
+                        Nexus.Nexus(source)
+
+    def test_sets_before_matrix(self):
+        """Charset and charlabels before the matrix, as Mesquite writes them."""
+        nexus = Nexus.Nexus(
+            "#NEXUS\nbegin characters;\ndimensions ntax=2 nchar=4;\n"
+            "format datatype=dna;\ncharset c = 2 - 4;\ncharlabels 1 a, 4 d;\n"
+            "matrix\nt1 ACGT\nt2 ACGA\n;\nend;\n"
+        )
+        self.assertEqual(nexus.nchar, 4)
+        self.assertEqual(nexus.charsets, {"c": [1, 2, 3]})
+        self.assertEqual(nexus.charlabels, {0: "a", 3: "d"})
+        self.assertEqual(str(nexus.matrix["t2"]), "ACGA")
+
+
 @unittest.skipIf(cnexus is None, "C extension Bio.Nexus.cnexus not available")
 @unittest.skipUnless(
     sys.platform.startswith("linux") and sys.maxsize > 2**32,

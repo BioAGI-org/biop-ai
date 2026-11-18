@@ -761,6 +761,9 @@ class Nexus:
                 self.filename = "input_string"
             else:
                 raise NexusError(f"Unrecognized input: {input[:100]} ...") from None
+        # a matrix needs at least one character of input per column, so
+        # _dimensions rejects an nchar larger than this
+        self._input_length = len(file_contents)
         file_contents = file_contents.strip()
         if file_contents.startswith("#NEXUS"):
             file_contents = file_contents[6:]
@@ -835,7 +838,16 @@ class Nexus:
         if "ntax" in options:
             self.ntax = int(options["ntax"], 10)
         if "nchar" in options:
-            self.nchar = int(options["nchar"], 10)
+            nchar = int(options["nchar"], 10)
+            # character sets are checked against nchar alone and expanded in
+            # full, so an nchar that no matrix could fill would let a tiny
+            # file use gigabytes
+            if nchar > self._input_length:
+                raise NexusError(
+                    f"Dimensions nchar={nchar} is larger than the whole input "
+                    f"({self._input_length} characters)."
+                )
+            self.nchar = nchar
 
     def _format(self, options):
         # print options
