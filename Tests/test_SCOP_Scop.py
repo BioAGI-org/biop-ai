@@ -137,6 +137,28 @@ class ScopTests(unittest.TestCase):
 
         self.assertRaises(ValueError, parse_domain, "Totally wrong")
 
+    def test_parse_domain_whitespace(self):
+        """parse_domain fails fast on a header with a long whitespace run."""
+        # With no sccs, two or more whitespace characters precede the
+        # residues, as Domain.__str__ writes them; one is not enough.
+        s = "d1tpt_1  (1tpt 1-70) Thymidine phosphorylase {E. coli}"
+        dom = parse_domain(s)
+        self.assertEqual(dom.sccs, "")
+        self.assertEqual(s, str(dom))
+        with self.assertRaisesRegex(ValueError, r"^Domain: d1tpt_1 \(1-70\)"):
+            parse_domain("d1tpt_1 (1-70) Thymidine phosphorylase")
+
+        # The old pattern tried every way of splitting a whitespace run
+        # around an empty sccs before it failed, which took time quadratic
+        # in the length of the run: several seconds for each of these.
+        for term in [
+            "d1tpt_1" + " " * 100_000 + "x",
+            "d1tpt_1" + " " * 20_000 + "(" + "1" * 20_000,
+        ]:
+            with self.subTest(length=len(term)):
+                with self.assertRaisesRegex(ValueError, "^Domain: d1tpt_1   "):
+                    parse_domain(term)
+
     def testConstructFromDirectory(self):
         scop = Scop(dir_path=support.DATA / "SCOP", version="test")
         self.assertIsInstance(scop, Scop)

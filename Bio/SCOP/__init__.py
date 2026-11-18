@@ -134,7 +134,10 @@ def cmp_sccs(sccs1, sccs2):
     return 0
 
 
-_domain_re = re.compile(r">?([\w_\.]*)\s+([\w\.]*)\s+\(([^)]*)\) (.*)")
+# With no sccs, two or more whitespace characters precede the residues. The
+# two branches keep each whitespace run to one way of matching, so a header
+# that does not match fails in linear rather than quadratic time.
+_domain_re = re.compile(r">?([\w_\.]*)(?:\s+([\w\.]+)\s+|\s{2,})\(([^)]*)\) (.*)")
 
 
 def parse_domain(term):
@@ -156,7 +159,7 @@ def parse_domain(term):
 
     dom = Domain()
     dom.sid = m.group(1)
-    dom.sccs = m.group(2)
+    dom.sccs = m.group(2) or ""
     dom.residues = Residues.Residues(m.group(3))
     if not dom.residues.pdbid:
         dom.residues.pdbid = dom.sid[1:5]
