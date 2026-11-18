@@ -5,6 +5,8 @@
 # as part of this package.
 """Approximate calculation of appropriate thresholds for motif finding."""
 
+import numpy as np
+
 
 class ScoreDistribution:
     """Class representing approximate score distribution for a given motif.
@@ -35,37 +37,56 @@ class ScoreDistribution:
             for lo, mo in zip(motif.log_odds(), motif.pwm()):
                 self.modify(lo, mo, motif.background)
         else:
+            mo_density = np.array(self.mo_density)
+            bg_density = np.array(self.bg_density)
             for position in range(pssm.length):
-                mo_new = [0.0] * self.n_points
-                bg_new = [0.0] * self.n_points
+                mo_new = np.zeros(self.n_points)
+                bg_new = np.zeros(self.n_points)
                 lo = pssm[:, position]
                 for letter, score in lo.items():
                     bg = background[letter]
                     mo = pow(2, pssm[letter, position]) * bg
                     d = self._index_diff(score)
-                    for i in range(self.n_points):
-                        mo_new[self._add(i, d)] += self.mo_density[i] * mo
-                        bg_new[self._add(i, d)] += self.bg_density[i] * bg
-                self.mo_density = mo_new
-                self.bg_density = bg_new
+                    self._shift(mo_new, mo_density, d, mo)
+                    self._shift(bg_new, bg_density, d, bg)
+                mo_density = mo_new
+                bg_density = bg_new
+            self.mo_density = mo_density.tolist()
+            self.bg_density = bg_density.tolist()
 
     def _index_diff(self, x, y=0.0):
         return int((x - y + 0.5 * self.step) // self.step)
 
-    def _add(self, i, j):
-        return max(0, min(self.n_points - 1, i + j))
+    def _shift(self, new, density, d, weight):
+        """Add density times weight to new, moved up by d bins.
+
+        This is ``new[max(0, min(n - 1, i + d))] += density[i] * weight`` for
+        each bin i in turn, done by numpy. Bins moved past either end pile up
+        in the end bin, added in the same order as by that loop, so that the
+        sums are the same to the last bit.
+        """
+        n = self.n_points
+        # A shift of n - 1 bins already moves every bin to the end bin.
+        d = max(1 - n, min(n - 1, d))
+        if d >= 0:
+            new[d:] += density[: n - d] * weight
+            np.add.at(new, np.full(d, n - 1), density[n - d :] * weight)
+        else:
+            np.add.at(new, np.zeros(-d, np.intp), density[:-d] * weight)
+            new[: n + d] += density[-d:] * weight
 
     def modify(self, scores, mo_probs, bg_probs):
         """Modify motifs and background density."""
-        mo_new = [0.0] * self.n_points
-        bg_new = [0.0] * self.n_points
+        mo_density = np.array(self.mo_density)
+        bg_density = np.array(self.bg_density)
+        mo_new = np.zeros(self.n_points)
+        bg_new = np.zeros(self.n_points)
         for k, v in scores.items():
             d = self._index_diff(v)
-            for i in range(self.n_points):
-                mo_new[self._add(i, d)] += self.mo_density[i] * mo_probs[k]
-                bg_new[self._add(i, d)] += self.bg_density[i] * bg_probs[k]
-        self.mo_density = mo_new
-        self.bg_density = bg_new
+            self._shift(mo_new, mo_density, d, mo_probs[k])
+            self._shift(bg_new, bg_density, d, bg_probs[k])
+        self.mo_density = mo_new.tolist()
+        self.bg_density = bg_new.tolist()
 
     def threshold_fpr(self, fpr):
         """Approximate the log-odds threshold which makes the type I error (false positive rate)."""
