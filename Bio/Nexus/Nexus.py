@@ -1449,12 +1449,12 @@ class Nexus:
                         f"Unknown character identifier: {identifier}"
                     ) from None
             else:
-                if n <= self.nchar:
+                if 1 <= n <= self.nchar:
                     return n - 1
                 else:
                     raise NexusError(
-                        "Illegal character identifier: %d>nchar (=%d)."
-                        % (identifier, self.nchar)
+                        f"Illegal character identifier: {n}, "
+                        f"not between 1 and nchar (={self.nchar})."
                     )
         elif set_type == TAXSET:
             try:
@@ -1474,8 +1474,8 @@ class Nexus:
                     return self.taxlabels[n - 1]
                 else:
                     raise NexusError(
-                        "Illegal taxon identifier: %d>ntax (=%d)."
-                        % (identifier, self.ntax)
+                        f"Illegal taxon identifier: {n}, "
+                        f"not between 1 and ntax (={self.ntax})."
                     )
         else:
             raise NexusError(f"Unknown set specification: {set_type}.")

@@ -1944,6 +1944,65 @@ class TestMatchchar(unittest.TestCase):
             self.parse(".", "a ACGT", "b ACGTA.")
 
 
+class TestIndexRange(unittest.TestCase):
+    """Character and taxon numbers must lie between 1 and nchar or ntax."""
+
+    def parse(self, commands, charlabels=""):
+        """Return a Nexus object of one taxon and two characters."""
+        return Nexus.Nexus(
+            "#NEXUS\nbegin data;\ndimensions ntax=1 nchar=2;\nformat datatype=dna;\n"
+            f"{charlabels}matrix\nt1 AC\n;\nend;\nbegin sets;\n{commands}end;\n"
+        )
+
+    def test_valid_numbers(self):
+        """Numbers from 1 to nchar or ntax read as before."""
+        nexus = self.parse(
+            "charset c = 1 - 2;\ncharset d = 2 1 - 2\\2;\n"
+            "charpartition p = a: 1, b: 2;\ntaxset t = 1;\n",
+            charlabels="charlabels 1 x, 2 y;\n",
+        )
+        self.assertEqual(nexus.charsets, {"c": [0, 1], "d": [0, 1]})
+        self.assertEqual(nexus.charpartitions, {"p": {"a": [0], "b": [1]}})
+        self.assertEqual(nexus.taxsets, {"t": ["t1"]})
+        self.assertEqual(nexus.charlabels, {0: "x", 1: "y"})
+
+    def test_character_number_out_of_range(self):
+        """A character number below 1 or above nchar raises NexusError."""
+        for commands, charlabels, number in (
+            # a quoted negative number was accepted, so '-200000000' - 0 was
+            # a list of 200 million numbers
+            ("charset c = '-5' - 2;\n", "", -5),
+            ("charset c = 0;\n", "", 0),
+            ("charset c = 1 - 3;\n", "", 3),
+            ("charpartition p = a: '-5' - 1, b: 2;\n", "", -5),
+            ("codonposset p = N: '-5' - 1, 1: 2;\n", "", -5),
+            ("", "charlabels '-3' x;\n", -3),
+            ("", "charlabels 3 x;\n", 3),
+        ):
+            with self.subTest(commands=commands, charlabels=charlabels):
+                with self.assertRaisesRegex(
+                    Nexus.NexusError,
+                    rf"^Illegal character identifier: {number}, "
+                    r"not between 1 and nchar \(=2\)\.$",
+                ):
+                    self.parse(commands, charlabels)
+
+    def test_taxon_number_out_of_range(self):
+        """A taxon number below 1 or above ntax raises NexusError."""
+        for commands, number in (
+            ("taxset t = 0;\n", 0),
+            ("taxset t = 2;\n", 2),
+            ("taxpartition p = a: '-1';\n", -1),
+        ):
+            with self.subTest(commands=commands):
+                with self.assertRaisesRegex(
+                    Nexus.NexusError,
+                    rf"^Illegal taxon identifier: {number}, "
+                    r"not between 1 and ntax \(=1\)\.$",
+                ):
+                    self.parse(commands)
+
+
 @unittest.skipIf(cnexus is None, "C extension Bio.Nexus.cnexus not available")
 @unittest.skipUnless(
     sys.platform.startswith("linux") and sys.maxsize > 2**32,
