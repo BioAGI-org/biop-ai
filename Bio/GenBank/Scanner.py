@@ -1130,7 +1130,10 @@ class _ImgtScanner(EmblScanner):
         while self.line.rstrip() in self.FEATURE_START_MARKERS:
             self.line = self.handle.readline()
 
-        bad_position_re = re.compile(r"([0-9]+)>")
+        # The lookbehind starts a match only at the first digit of a run, so a
+        # long run of digits without ">" after it costs linear, not quadratic,
+        # time. The matches, and so the result of sub(), are unchanged.
+        bad_position_re = re.compile(r"(?<![0-9])([0-9]+)>")
 
         features = []
         line = self.line
