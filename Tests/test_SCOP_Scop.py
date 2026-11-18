@@ -224,6 +224,54 @@ class ScopTests(unittest.TestCase):
                     ):
                         scop.getRoot().getDescendents("px")
 
+    def test_get_ascendent_not_a_tree(self):
+        """getAscendent and toClaRecord raise ValueError on a parent cycle."""
+        with open(support.DATA / "SCOP" / "dir.cla.scop.txt_test") as f:
+            cla = f.read()
+        with open(support.DATA / "SCOP" / "dir.des.scop.txt_test") as f:
+            des = f.read()
+        with open(support.DATA / "SCOP" / "dir.hie.scop.txt_test") as f:
+            hie = f.read()
+
+        # Without the check the walk never ends; stop it if so.
+        get_parent = Node.getParent
+        calls = 0
+
+        def bounded_get_parent(node):
+            nonlocal calls
+            calls += 1
+            if calls > 1000:
+                raise AssertionError("walk up the hierarchy did not terminate")
+            return get_parent(node)
+
+        for old, new, node_type, sunid in [
+            # sp 46465 gives itself as its parent
+            ("46465\t46464\t", "46465\t46465\t", "cf", 46465),
+            # dm 46464 gives its child sp 46465 as its parent
+            ("46464\t46463\t", "46464\t46465\t", "cf", 46465),
+            # cl 46456 gives its child cf 46457 as its parent, so a walk up
+            # to the root (as toClaRecord makes) never reaches it
+            ("46456\t0\t", "46456\t46457\t", "ro", 46457),
+        ]:
+            with self.subTest(new=new):
+                self.assertIn(old, hie)
+                broken = StringIO(hie.replace(old, new, 1))
+                scop = Scop(StringIO(cla), StringIO(des), broken)
+                domain = scop.getDomainBySid("d1hbia_")
+                message = (
+                    f"not a tree: walking up from node 14996 reaches node {sunid} twice"
+                )
+                with mock.patch.object(Node, "getParent", bounded_get_parent):
+                    calls = 0
+                    with self.assertRaisesRegex(ValueError, message):
+                        domain.getAscendent(node_type)
+                    calls = 0
+                    with self.assertRaisesRegex(ValueError, message):
+                        domain.toClaRecord()
+                    calls = 0
+                    with self.assertRaisesRegex(ValueError, "not a tree"):
+                        scop.write_cla(StringIO())
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)

@@ -688,10 +688,19 @@ class Node:
             if n.type == node_type:
                 return None
 
+            # In a tree no node is reached twice; a HIE file giving a node
+            # itself or one of its descendants as parent would loop here.
+            seen = {id(n)}
             while n.type != node_type:
                 if n.type == "ro":
                     return None  # Fell of the top of the hierarchy
                 n = n.getParent()
+                if id(n) in seen:
+                    raise ValueError(
+                        f"SCOP hierarchy is not a tree: walking up from "
+                        f"node {self.sunid} reaches node {n.sunid} twice"
+                    )
+                seen.add(id(n))
 
             return n
 
@@ -744,9 +753,16 @@ class Domain(Node):
         rec.sunid = self.sunid
 
         n = self
+        seen = {id(n)}  # As in getAscendent, guard against a parent cycle
         while n.sunid != 0:  # Not root node
             rec.hierarchy[n.type] = str(n.sunid)
             n = n.getParent()
+            if id(n) in seen:
+                raise ValueError(
+                    f"SCOP hierarchy is not a tree: walking up from "
+                    f"node {self.sunid} reaches node {n.sunid} twice"
+                )
+            seen.add(id(n))
 
         # Order does not matter in the hierarchy field. For more info, see
         # http://scop.mrc-lmb.cam.ac.uk/legacy/release-notes.html
