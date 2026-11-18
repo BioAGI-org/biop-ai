@@ -141,6 +141,30 @@ class TruncatedCases(unittest.TestCase):
                 )
 
 
+class LongLineCases(unittest.TestCase):
+    """Long query lines are indexed in linear time."""
+
+    def test_query_line_without_length(self):
+        """Test a query line without its '- <length> aa' ending."""
+        # Line 8 of output001.m10 is the first query line, "  1>>>gi|...
+        # [Escherichia coli O157:H7 s 107 aa - 107 aa". With its "- 107 aa"
+        # replaced by spaces, the old regular expression took about 7 seconds
+        # to reject it, then the indexer failed with AttributeError.
+        line = lines("output001.m10", 7, 8).replace(b" - 107 aa\n", b" " * 600 + b"\n")
+        data = lines("output001.m10", 0, 7) + line
+        with mock.patch(
+            "Bio.SearchIO._index._open_for_random_access",
+            return_value=EndOfFileGuard(data),
+        ):
+            with self.assertRaises(ValueError) as cm:
+                SearchIO.index("test.m10", "fasta-m10")
+        self.assertEqual(
+            str(cm.exception),
+            "Expected a query line '>>>ID DESCRIPTION - LENGTH aa' (or nt),"
+            f" found:\n{line!r}",
+        )
+
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     unittest.main(testRunner=runner)

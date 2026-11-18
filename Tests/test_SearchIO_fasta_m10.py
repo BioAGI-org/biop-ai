@@ -3243,6 +3243,51 @@ class TruncatedCases(unittest.TestCase):
                 )
 
 
+class LongLineCases(unittest.TestCase):
+    """Long query and sequence lines are parsed in linear time."""
+
+    def test_query_line_without_length(self):
+        """Test a query line without its '- <length> aa' ending."""
+        # Line 8 of output001.m10 is the first query line, "  1>>>gi|...
+        # [Escherichia coli O157:H7 s 107 aa - 107 aa". With its "- 107 aa"
+        # replaced by spaces, the old regular expression took about 7 seconds
+        # to reject it, then the parser failed with AttributeError.
+        with open(get_file("output001.m10")) as handle:
+            lines = handle.readlines()
+        line = lines[7].replace(" - 107 aa\n", " " * 600 + "\n")
+        handle = EndOfFileGuard("".join(lines[:7]) + line)
+        with self.assertRaises(ValueError) as cm:
+            list(parse(handle, FMT))
+        self.assertEqual(
+            str(cm.exception),
+            "Expected a query line '>>>ID DESCRIPTION - LENGTH aa' (or nt),"
+            f" found:\n{line!r}",
+        )
+
+    def test_long_run_of_gaps(self):
+        """Test an aligned sequence that starts with a long run of gaps."""
+        # Line 59 of output001.m10 starts the aligned query of the first HSP
+        # with 26 '-' filling its flank; the parser trims them off. With 40000
+        # more, trimming took the old code about 5 seconds.
+        with open(get_file("output001.m10")) as handle:
+            text = handle.read()
+        flank = "\n" + "-" * 26 + "MTKRSGSNT"
+        self.assertEqual(text.count(flank), 1)
+        padded = text.replace(flank, "\n" + "-" * 40000 + flank[1:])
+        expected = [qresult.hsps for qresult in parse(StringIO(text), FMT)]
+        found = [qresult.hsps for qresult in parse(EndOfFileGuard(padded), FMT)]
+        self.assertEqual([len(hsps) for hsps in found], [len(h) for h in expected])
+        for hsps, hsps_expected in zip(found, expected):
+            for hsp, hsp_expected in zip(hsps, hsps_expected):
+                self.assertEqual(hsp.query.seq, hsp_expected.query.seq)
+                self.assertEqual(hsp.hit.seq, hsp_expected.hit.seq)
+                self.assertEqual(hsp.query_range, hsp_expected.query_range)
+                self.assertEqual(hsp.hit_range, hsp_expected.hit_range)
+        hsp = found[0][0]
+        self.assertEqual((4, 103), hsp.query_range)
+        self.assertEqual("SGSNT-RRRAISRPVRLTAEED---QEIRKRAAEC", hsp.query.seq[:35])
+
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     unittest.main(testRunner=runner)
