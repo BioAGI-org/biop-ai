@@ -189,6 +189,27 @@ class _TwoBitSequenceData(SequenceDataAbstractBaseClass):
         return data
 
 
+def _check_blocks(kind, blocks, name, dnaSize):
+    """Check that each N or mask block of a sequence lies inside it.
+
+    The file stores 32-bit block starts and sizes, and the block ends are
+    computed as 32-bit integers, so a block running past 2**32 wraps round
+    to an end before its start. The C code that applies the blocks relies
+    on every block ending after its start and inside the sequence.
+    """
+    starts = blocks[:, 0]
+    ends = blocks[:, 1]
+    bad = (ends < starts) | (ends > dnaSize)
+    if bad.any():
+        i = bad.argmax()
+        start = int(starts[i])
+        size = (int(ends[i]) - start) % 2**32
+        raise ValueError(
+            "Found %s block of size %u at position %u for sequence %s, "
+            "which has length %u" % (kind, size, start, name, dnaSize)
+        )
+
+
 class TwoBitIterator(SequenceIterator):
     """Parser for UCSC twoBit (.2bit) files."""
 
@@ -242,6 +263,7 @@ class TwoBitIterator(SequenceIterator):
         filesize = stream.tell()
         unclaimed = filesize  # bytes not yet taken by a block table
         records = {}
+        blocks = []  # (kind, table, name, dnaSize), checked after the loop
         for name, (stream, offset) in sequences.items():
             if offset in records:
                 sequences[name] = records[offset]
@@ -264,6 +286,7 @@ class TwoBitIterator(SequenceIterator):
             sequence.nBlocks = np.empty((nBlockCount, 2), dtype="uint32")
             sequence.nBlocks[:, 0] = nBlockStarts
             sequence.nBlocks[:, 1] = nBlockStarts + nBlockSizes
+            blocks.append(("N", sequence.nBlocks, name, dnaSize))
             data = _read(stream, 4)
             maskBlockCount = int.from_bytes(data, byteorder, signed=False)
             size = 8 * maskBlockCount
@@ -278,6 +301,7 @@ class TwoBitIterator(SequenceIterator):
             sequence.maskBlocks = np.empty((maskBlockCount, 2), dtype="uint32")
             sequence.maskBlocks[:, 0] = maskBlockStarts
             sequence.maskBlocks[:, 1] = maskBlockStarts + maskBlockSizes
+            blocks.append(("mask", sequence.maskBlocks, name, dnaSize))
             data = _read(stream, 4)
             reserved = int.from_bytes(data, byteorder, signed=False)
             if reserved != 0:
@@ -285,6 +309,10 @@ class TwoBitIterator(SequenceIterator):
             sequence.offset = stream.tell()
             sequence = Seq(sequence)
             sequences[name] = records[offset] = sequence
+        # Check the blocks only now, so that the block counts of every record
+        # have been checked against the file size first.
+        for kind, table, name, dnaSize in blocks:
+            _check_blocks(kind, table, name, dnaSize)
         self._names = iter(self.sequences)
 
     def __next__(self):

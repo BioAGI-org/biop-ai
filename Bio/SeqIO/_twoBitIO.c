@@ -307,6 +307,7 @@ applyNs(char sequence[], Py_ssize_t start, Py_ssize_t end, Py_buffer *nBlocks)
     for (i = 0; i < nBlockCount; i++) {
         Py_ssize_t nBlockStart = nBlockPositions[2*i];
         Py_ssize_t nBlockEnd = nBlockPositions[2*i+1];
+        if (nBlockEnd <= nBlockStart) continue;
         if (nBlockEnd < start) continue;
         if (end < nBlockStart) break;
         if (nBlockStart < start) nBlockStart = start;
@@ -328,6 +329,7 @@ applyMask(char sequence[], Py_ssize_t start, Py_ssize_t end,
         Py_ssize_t j;
         Py_ssize_t maskBlockStart = maskBlockPositions[2*i];
         Py_ssize_t maskBlockEnd = maskBlockPositions[2*i+1];
+        if (maskBlockEnd <= maskBlockStart) continue;
         if (maskBlockEnd < start) continue;
         if (end < maskBlockStart) break;
         if (maskBlockStart < start) maskBlockStart = start;
