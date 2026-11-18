@@ -556,6 +556,17 @@ class PhdTrimLine(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     SeqIO.read(self.make_phd(trim), "phd")
 
+    def test_long_digit_run(self):
+        """Check a long run of digits is rejected without a slow regex."""
+        # Checking for a split exponent took time quadratic in the length of
+        # a digit run with no "e" after it: minutes for this 100 KB line.
+        trim = "1 2 " + "0" * 100_000 + " 3"
+        message = re.escape(
+            f"TRIM line must have three values (first last prob), got {trim!r}"
+        )
+        with self.assertRaisesRegex(ValueError, f"^{message}$"):
+            Phd.read(self.make_phd(trim))
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
