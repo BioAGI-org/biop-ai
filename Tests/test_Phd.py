@@ -4,13 +4,17 @@
 # as part of this package.
 """Tests for Phd module."""
 
+import os
 import re
+import subprocess
+import sys
 import unittest
 import warnings
 from io import StringIO
 
 import support
 
+import Bio
 from Bio import BiopythonParserWarning
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -559,13 +563,43 @@ class PhdTrimLine(unittest.TestCase):
     def test_long_digit_run(self):
         """Check a long run of digits is rejected without a slow regex."""
         # Checking for a split exponent took time quadratic in the length of
-        # a digit run with no "e" after it: minutes for this 100 KB line.
-        trim = "1 2 " + "0" * 100_000 + " 3"
-        message = re.escape(
-            f"TRIM line must have three values (first last prob), got {trim!r}"
+        # a digit run with no "e" after it: over a minute for 100,000 digits,
+        # and 16 times as long for the 400,000 here. The old code still
+        # raised the right ValueError in the end, so the line is read in a
+        # child process, and the timeout fails the test on the old code.
+        trim = "1 2 " + "0" * 400_000 + " 3"
+        code = """\
+import sys
+from io import StringIO
+from Bio.Sequencing import Phd
+try:
+    Phd.read(StringIO(sys.stdin.read()))
+except ValueError as exception:
+    print(exception)
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
         )
-        with self.assertRaisesRegex(ValueError, f"^{message}$"):
-            Phd.read(self.make_phd(trim))
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                input=self.make_phd(trim).getvalue(),
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("rejecting a TRIM line with a long digit run took over 60 s")
+        self.assertEqual(
+            result.stdout,
+            f"TRIM line must have three values (first last prob), got {trim!r}\n",
+            result.stderr,
+        )
 
 
 if __name__ == "__main__":
