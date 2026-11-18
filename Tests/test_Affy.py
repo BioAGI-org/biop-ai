@@ -7,6 +7,7 @@
 import io
 import os
 import struct
+import tempfile
 import unittest
 
 try:
@@ -18,6 +19,12 @@ except ImportError:
     raise MissingPythonDependencyError(
         "Install NumPy if you want to use Bio.Affy.CelFile"
     ) from None
+
+try:
+    import tracemalloc
+except ImportError:
+    # PyPy has no _tracemalloc.
+    tracemalloc = None
 
 import support
 
@@ -310,6 +317,99 @@ class AffyTest(unittest.TestCase):
         self.assertEqual(record.DatHeader["array-type"], "Tgondii_SNP1.1sq")
         self.assertEqual(record.DatHeader["filter-wavelength"], 570)
         self.assertEqual(record.DatHeader["image-orientation"], 6)
+
+    def readV4Example(self, **changes):
+        """Return the version 4 example file with some of its sizes changed.
+
+        cellNo and headerLen replace the values in the binary pre-header.
+        Rows and Cols replace the values in the text header, and the header
+        length in the pre-header changes to match unless headerLen is given.
+        """
+        with open(self.affy4, "rb") as f:
+            data = f.read()
+        cellNo, headerLen = struct.unpack_from("<ii", data, 16)
+        for key in ("Rows", "Cols"):
+            if key in changes:
+                old = b"\n%s=5\n" % key.encode()
+                new = b"\n%s=%i\n" % (key.encode(), changes[key])
+                self.assertIn(old, data)
+                data = data.replace(old, new, 1)
+                headerLen += len(new) - len(old)
+        cellNo = changes.get("cellNo", cellNo)
+        headerLen = changes.get("headerLen", headerLen)
+        return data[:16] + struct.pack("<ii", cellNo, headerLen) + data[24:]
+
+    def testAffy4BadSizes(self):
+        # A version 4 file gives its number of cells and its header length
+        # in the binary pre-header, and its rows and columns in the text
+        # header. The parser used to trust them: 2**31 - 1 cells in a 1 kB
+        # file made it allocate three arrays of 16 GiB each before finding
+        # the cells missing, then fail with struct.error. A row count of -1
+        # was accepted silently, and a header length of -1 read the rest of
+        # the file as header.
+        with open(self.affy4, "rb") as f:
+            data = f.read()
+        dims = "has 5 rows and 5 columns but"
+        short = "ends early: expected"
+        cases = [
+            (self.readV4Example(cellNo=2**31 - 1), f"{dims} 2147483647 cells"),
+            (self.readV4Example(cellNo=-1), f"{dims} -1 cells"),
+            (
+                self.readV4Example(Rows=-5, Cols=-5),
+                "has -5 rows and -5 columns but 25 cells",
+            ),
+            (self.readV4Example(Rows=-1), "has -1 rows and 5 columns but 25 cells"),
+            (self.readV4Example(Cols=6), "has 5 rows and 6 columns but 25 cells"),
+            (self.readV4Example(headerLen=-1), "has a negative header length"),
+            # Rows and columns that agree with the cell count, but no cells
+            (
+                self.readV4Example(Rows=46340, Cols=46340, cellNo=46340**2),
+                f"{short} {10 * 46340**2} bytes of cell data, found 250",
+            ),
+            (
+                self.readV4Example(headerLen=2**31 - 1),
+                f"{short} 2147483647 bytes of header, found 1055",
+            ),
+            (data[:-5], f"{short} 250 bytes of cell data, found 245"),
+        ]
+        for bad, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(
+                    CelFile.ParserError, f"^CEL version 4 file {message}$"
+                ):
+                    CelFile.read(io.BytesIO(bad), version=4)
+
+    @unittest.skipIf(tracemalloc is None, "tracemalloc is not available")
+    def testAffy4SizesBeyondEndOfFileMemory(self):
+        # From a real file, as opposed to io.BytesIO, a single read(n) sets
+        # aside n bytes before it reads any. A 1 kB file declaring 20 GiB of
+        # cells or a 2 GiB header must not make the parser ask for that much.
+        # The old code asked for 68 GiB for the cells (three arrays and the
+        # read) and 2 GiB for the header; the fixed code peaks at about
+        # 1 MiB, the most it reads at once.
+        cases = {
+            "cell data": self.readV4Example(Rows=46340, Cols=46340, cellNo=46340**2),
+            "header": self.readV4Example(headerLen=2**31 - 1),
+        }
+        for what, bad in cases.items():
+            with self.subTest(what=what), tempfile.TemporaryFile() as handle:
+                handle.write(bad)
+                handle.seek(0)
+                was_tracing = tracemalloc.is_tracing()
+                if not was_tracing:
+                    tracemalloc.start()
+                try:
+                    tracemalloc.reset_peak()
+                    baseline = tracemalloc.get_traced_memory()[0]
+                    with self.assertRaisesRegex(
+                        CelFile.ParserError, f"ends early: expected .* of {what},"
+                    ):
+                        CelFile.read(handle, version=4)
+                    peak = tracemalloc.get_traced_memory()[1] - baseline
+                finally:
+                    if not was_tracing:
+                        tracemalloc.stop()
+                self.assertLess(peak, 2**24)
 
     def testAffyWrongModeReadV3(self):
         with self.assertRaises(ValueError):

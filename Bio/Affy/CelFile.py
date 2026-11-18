@@ -157,6 +157,24 @@ def read(handle, version=None):
     return _read_v4(handle)
 
 
+def _read_v4_bytes(f, size, what):
+    # Read exactly size bytes, at most 1 MiB at a time. On a file handle a
+    # single f.read(size) sets aside size bytes before reading any, so a
+    # small file declaring a huge size would make it ask for gigabytes.
+    chunks = []
+    remaining = size
+    while remaining > 0:
+        chunk = f.read(min(remaining, 1 << 20))
+        if not chunk:
+            raise ParserError(
+                f"CEL version 4 file ends early: expected {size} bytes of "
+                f"{what}, found {size - remaining}"
+            )
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
 def _read_v4(f):
     # We follow the documentation here:
     # http://www.affymetrix.com/estore/support/developer/powertools/changelog/gcos-agcc/cel.html.affx
@@ -174,7 +192,9 @@ def _read_v4(f):
     except struct.error:
         raise ParserError("Failed to parse CEL version 4 file") from None
 
-    char = f.read(preHeadersMap["headerLen"])
+    if preHeadersMap["headerLen"] < 0:
+        raise ParserError("CEL version 4 file has a negative header length")
+    char = _read_v4_bytes(f, preHeadersMap["headerLen"], "header")
     header = char.decode("ascii", "ignore")
     for line in header.split("\n"):
         if "=" in line:
@@ -198,6 +218,15 @@ def _read_v4(f):
     # record.npix are set below
     record.nrows = int(headersMap["Rows"])
     record.ncols = int(headersMap["Cols"])
+    if not (
+        record.nrows >= 0
+        and record.ncols >= 0
+        and record.nrows * record.ncols == record.NumberCells
+    ):
+        raise ParserError(
+            f"CEL version 4 file has {record.nrows} rows and {record.ncols} "
+            f"columns but {record.NumberCells} cells"
+        )
 
     # These cannot be reliably set in v4, because of discrepancies between real
     # data and the documented format.
@@ -252,12 +281,15 @@ def _read_v4(f):
     # There are 10 bytes in our struct.
     structSize = 10
 
+    # Read the cells before allocating arrays for them, so that a file
+    # declaring more cells than it holds fails before asking for memory.
+    b = _read_v4_bytes(f, structSize * record.NumberCells, "cell data")
+
     # We initialize the most important: intensities, stdevs and npixs.
     record.intensities = np.empty(record.NumberCells, dtype=float)
     record.stdevs = np.empty(record.NumberCells, dtype=float)
     record.npix = np.empty(record.NumberCells, dtype=int)
 
-    b = f.read(structSize * record.NumberCells)
     for i in range(record.NumberCells):
         binaryFragment = b[i * structSize : (i + 1) * structSize]
         intensity, stdevs, npix = structa.unpack(binaryFragment)
