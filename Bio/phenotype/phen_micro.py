@@ -54,6 +54,10 @@ _csvData = "csv_data"
 _measurements = "measurements"
 #
 
+# Most values a WellRecord slice without a stop may give (a one-second grid
+# over eleven days), as such a slice ends at the last time point in the file
+_MAX_SLICE_POINTS = 10**6
+
 
 class PlateRecord:
     """PlateRecord object for storing Phenotype Microarray plates data.
@@ -607,6 +611,10 @@ class WellRecord:
     >>> well[1:5:0.5]
     [16.0, 19.0, 20.0, 18.0, 18.0, 18.0, 15.0, 18.0]
 
+    A slice without a stop ends at the last time point. So that a malformed
+    file cannot make it huge, such a slice gives at most a million values;
+    give the stop explicitly for more.
+
     If a time point was not present in the input file but it's between the
     minimum and maximum time point, the interpolated signal is returned,
     otherwise a nan value:
@@ -719,6 +727,16 @@ class WellRecord:
 
             if time.stop is None:
                 stop = max(self.get_times())
+                # The last time point comes from the file, so check the
+                # grid's length before building it: a single time point of
+                # 1e9 hours would otherwise take tens of gigabytes.
+                step = 1 if time.step is None else time.step
+                if step > 0 and not (stop - start) / step <= _MAX_SLICE_POINTS:
+                    raise ValueError(
+                        f"Slice up to the last time point ({stop}) would give "
+                        f"more than {_MAX_SLICE_POINTS} values; give an "
+                        "explicit stop to allow this"
+                    )
             else:
                 stop = time.stop
 
