@@ -6,6 +6,7 @@
 """Module for the support of Motif Alignment and Search Tool (MAST)."""
 
 import xml.etree.ElementTree as ET
+from xml.parsers import expat
 
 from Bio.motifs import meme
 
@@ -54,8 +55,8 @@ def read(handle):
     """Parse a MAST XML format handle as a Record object."""
     record = Record()
     try:
-        xml_tree = ET.parse(handle)
-    except ET.ParseError:
+        xml_tree = ET.parse(handle, parser=meme._XMLParser())
+    except expat.ExpatError:
         raise ValueError(
             "Improper MAST XML input file. XML root tag should start with <mast version= ..."
         )
