@@ -66,6 +66,20 @@ extract_single_character(PyObject* object, const char variable[],
     return 0;
 }
 
+/* Return 1 if the C code may write into view. The converters do not ask for
+ * a writable buffer, as most arrays are only read, so check each array the
+ * C code writes into before it does. If it is read-only, return 0 with a
+ * ValueError set. */
+static int
+check_writable(const Py_buffer* view, const char name[])
+{
+    if (view->readonly) {
+        PyErr_Format(PyExc_ValueError, "%s is read-only", name);
+        return 0;
+    }
+    return 1;
+}
+
 static int
 distance_converter(PyObject* object, void* pointer)
 {
@@ -527,6 +541,24 @@ exit:
         PyMem_Free(values);
     }
     return 0;
+}
+
+/* As check_writable, for a distance matrix given as an array or as a list
+ * of rows. */
+static int
+check_distancematrix_writable(const Distancematrix* distances)
+{
+    int i;
+
+    if (!distances->views)
+        return check_writable(&distances->view, "distancematrix");
+    for (i = 0; i < distances->n; i++) {
+        if (distances->views[i].readonly) {
+            PyErr_Format(PyExc_ValueError, "row %d is read-only", i);
+            return 0;
+        }
+    }
+    return 1;
 }
 
 /* -- celldata ------------------------------------------------------------- */
@@ -1229,6 +1261,7 @@ PyTree_cut(PyTree* self, PyObject* args)
      * buffer can call into Python. */
     if (!PyArg_ParseTuple(args, "O&i",
                           index_converter, &indices, &nclusters)) goto exit;
+    if (!check_writable(&indices, "indices")) goto exit;
     if (nclusters < 1) {
         PyErr_SetString(PyExc_ValueError,
                         "requested number of clusters should be positive");
@@ -1293,6 +1326,7 @@ PyTree_sort(PyTree* self, PyObject* args)
     if (!PyArg_ParseTuple(args, "O&O&",
                           index_converter, &indices,
                           vector_converter, &order)) goto exit;
+    if (!check_writable(&indices, "indices")) goto exit;
     Py_BEGIN_CRITICAL_SECTION(self);
     ok = PyTree_sort_impl(self, &indices, &order);
     Py_END_CRITICAL_SECTION();
@@ -1544,6 +1578,7 @@ py_kcluster(PyObject* self, PyObject* args, PyObject* keywords)
                      clusterid.shape[0], nitems);
         goto exit;
     }
+    if (!check_writable(&clusterid, "clusterid")) goto exit;
     Py_BEGIN_ALLOW_THREADS
     kcluster(nclusters,
              nrows,
@@ -1684,6 +1719,7 @@ py_kmedoids(PyObject* self, PyObject* args, PyObject* keywords)
                      clusterid.shape[0], distances.n);
         goto exit;
     }
+    if (!check_writable(&clusterid, "clusterid")) goto exit;
     Py_BEGIN_ALLOW_THREADS
     kmedoids(nclusters,
              distances.n,
@@ -1900,6 +1936,9 @@ py_treecluster(PyObject* self, PyObject* args, PyObject* keywords)
                             "when specifying the distance matrix");
             goto exit;
         }
+        /* Single linkage only reads the distance matrix */
+        if (method != 's' && !check_distancematrix_writable(&distances))
+            goto exit;
         nitems = distances.n;
         Py_BEGIN_ALLOW_THREADS
         nodes = treecluster(nitems,
@@ -2085,6 +2124,8 @@ py_somcluster(PyObject* self, PyObject* args, PyObject* keywords)
                      "(%zd, expected %d)", indices.shape[0], nitems);
         goto exit;
     }
+    if (!check_writable(&indices, "clusterids")) goto exit;
+    if (!check_writable(&celldata.view, "celldata")) goto exit;
     Py_BEGIN_ALLOW_THREADS
     somcluster(nrows,
                ncols,
@@ -2383,6 +2424,8 @@ py_clustercentroids(PyObject* self, PyObject* args, PyObject* keywords)
                      "(%zd, expected %d)", cmask.view.shape[1], ncols);
         goto exit;
     }
+    if (!check_writable(&cdata.view, "cdata")) goto exit;
+    if (!check_writable(&cmask.view, "cmask")) goto exit;
     Py_BEGIN_ALLOW_THREADS
     ok = getclustercentroids(nclusters,
                              data.nrows,
@@ -2517,6 +2560,7 @@ py_distancematrix(PyObject* self, PyObject* args, PyObject* keywords)
                      distances.n, nitems);
         goto exit;
     }
+    if (!check_distancematrix_writable(&distances)) goto exit;
 
     Py_BEGIN_ALLOW_THREADS
     distancematrix(nrows,
@@ -2629,6 +2673,10 @@ py_pca(PyObject* self, PyObject* args)
                      eigenvalues.shape[0], nmin);
         goto exit;
     }
+    if (!check_writable(&mean, "columnmean")) goto exit;
+    if (!check_writable(&coordinates.view, "coordinates")) goto exit;
+    if (!check_writable(&pc.view, "pc")) goto exit;
+    if (!check_writable(&eigenvalues, "eigenvalues")) goto exit;
     if (nrows >= ncols) {
         u = coordinates.values;
         v = pc.values;
