@@ -768,6 +768,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             self._compressed = True
         else:
             self._compressed = False
+        self._uncompressBufSize = header.uncompressBufSize
 
         stream.seek(header.chromosomeTreeOffset)
         self.targets = _BPlusTreeFormatter(byteorder).read(stream)
@@ -835,6 +836,30 @@ class AlignmentIterator(interfaces.AlignmentIterator):
 
             self._custom_fields.append([field_name, converter])
 
+    def _read_block(self, stream, node):
+        # Return the data block of a leaf of the R tree index, decompressed
+        # if the file is compressed. The writer sets uncompressBufSize in the
+        # file header to the size of the largest block once decompressed, so
+        # decompress no more than that: without a limit, a block of a few
+        # kilobytes could expand to gigabytes.
+        offset = node.dataOffset
+        stream.seek(offset)
+        data = stream.read(node.dataSize)
+        if self._compressed:
+            uncompressBufSize = self._uncompressBufSize
+            decompressor = zlib.decompressobj()
+            data = decompressor.decompress(data, uncompressBufSize)
+            if decompressor.unconsumed_tail:
+                raise ValueError(
+                    f"The data block at offset {offset} decompresses to more "
+                    f"than uncompressBufSize ({uncompressBufSize}) bytes"
+                )
+            if not decompressor.eof:
+                raise ValueError(
+                    f"The compressed data block at offset {offset} is incomplete"
+                )
+        return data
+
     def _iterate_index(self, stream):
         # Supplemental Table 12: Binary BED-data format
         # chromId     4 bytes, unsigned
@@ -848,15 +873,14 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             try:
                 children = node.children
             except AttributeError:
-                stream.seek(node.dataOffset)
-                data = stream.read(node.dataSize)
-                if self._compressed > 0:
-                    data = zlib.decompress(data)
-                while data:
-                    chromId, chromStart, chromEnd = formatter.unpack(data[:size])
-                    i = data.index(0, size) + 1
-                    rest = data[size:i]
-                    data = data[i:]
+                data = self._read_block(stream, node)
+                i = 0
+                n = len(data)
+                while i < n:
+                    j = i + size
+                    chromId, chromStart, chromEnd = formatter.unpack(data[i:j])
+                    i = data.index(0, j) + 1
+                    rest = data[j:i]
                     yield (chromId, chromStart, chromEnd, rest, 0, len(rest))
                 while True:
                     parent = node.parent
@@ -891,10 +915,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             try:
                 children = node.children
             except AttributeError:
-                stream.seek(node.dataOffset)
-                data = stream.read(node.dataSize)
-                if self._compressed > 0:
-                    data = zlib.decompress(data)
+                data = self._read_block(stream, node)
                 if self.itemsPerSlot == 1:
                     child_chromIx, child_chromStart, child_chromEnd = formatter.unpack(
                         data[:size]

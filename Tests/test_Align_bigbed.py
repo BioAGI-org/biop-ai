@@ -3,10 +3,12 @@
 # license.  Please see the LICENSE file that should have been included
 # as part of this package.
 """Tests for Align.bigbed module."""
+import itertools
 import struct
 import sys
 import tempfile
 import unittest
+import zlib
 from io import BytesIO
 from io import StringIO
 
@@ -8176,6 +8178,109 @@ class TestAlign_malformed_data_index(unittest.TestCase):
         # These used to raise IndexError.
         self.check([[]], 0, self.no_children)
         self.check([[1], []], 1, self.no_children)
+
+
+class TestAlign_malformed_data_block(unittest.TestCase):
+    """Compressed data blocks larger than uncompressBufSize, or incomplete."""
+
+    # The one data block of bed3.bb, uncompressed. Each of its two items is
+    # the chromosome number, start and end, then the other fields, of which
+    # bed3 has none, ended by a NUL byte.
+    items = (
+        struct.pack("<III", 0, 1000, 5000)
+        + b"\0"
+        + struct.pack("<III", 0, 2000, 6000)
+        + b"\0"
+    )
+
+    too_large = (
+        "The data block at offset {} decompresses to more than "
+        "uncompressBufSize ({}) bytes"
+    )
+    incomplete = "The compressed data block at offset {} is incomplete"
+
+    def make_stream(self, block, uncompressBufSize=None):
+        """Return bed3.bb with its data block replaced, and the block offset.
+
+        The new block, given compressed, is appended to the file, and the one
+        leaf of the R tree index points to it instead. If uncompressBufSize is
+        given, it replaces the value of 16384 in the file header.
+        """
+        with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        if uncompressBufSize is not None:
+            # uncompressBufSize is at byte 52 of the file header.
+            struct.pack_into("<I", data, 52, uncompressBufSize)
+        # The offset of the R tree index is at byte 24 of the file header.
+        (index_offset,) = struct.unpack_from("<Q", data, 24)
+        # The R tree index header is 48 bytes; its root node follows it. In
+        # bed3.bb the root is a leaf holding one data block, and the offset
+        # and size of the block are the last 16 of its 4 + 32 bytes.
+        offset = len(data)
+        struct.pack_into("<QQ", data, index_offset + 48 + 20, offset, len(block))
+        data += block
+        return BytesIO(bytes(data)), offset
+
+    def check(self, block, uncompressBufSize, message):
+        stream, offset = self.make_stream(block, uncompressBufSize)
+        if uncompressBufSize is None:
+            uncompressBufSize = 16384
+        message = message.format(offset, uncompressBufSize)
+        # Iterating and searching read the data block alike.
+        with Align.parse(stream, "bigbed") as alignments:
+            with self.assertRaises(ValueError) as cm:
+                next(alignments)
+            self.assertEqual(str(cm.exception), message)
+            with self.assertRaises(ValueError) as cm:
+                next(alignments.search("chr22"))
+            self.assertEqual(str(cm.exception), message)
+
+    def test_fits(self):
+        # A block of exactly uncompressBufSize bytes reads as before.
+        stream, _ = self.make_stream(zlib.compress(self.items), len(self.items))
+        with Align.parse(stream, "bigbed") as alignments:
+            coordinates = [alignment.coordinates.tolist() for alignment in alignments]
+            self.assertEqual(
+                coordinates, [[[1000, 5000], [0, 4000]], [[2000, 6000], [0, 4000]]]
+            )
+            coordinates = [
+                alignment.coordinates.tolist()
+                for alignment in alignments.search("chr22", 4500, 5500)
+            ]
+            self.assertEqual(
+                coordinates, [[[1000, 5000], [0, 4000]], [[2000, 6000], [0, 4000]]]
+            )
+
+    def test_one_byte_too_large(self):
+        block = zlib.compress(self.items)
+        self.check(block, len(self.items) - 1, self.too_large)
+
+    def test_decompression_bomb(self):
+        # 1.3 MB of NUL bytes, which zlib compresses to 1.3 kB, are 100000
+        # empty items. Blocks used to be decompressed whatever their size, so
+        # a file of 274 kB used over 500 MB of memory on the first next().
+        block = zlib.compress(bytes(13 * 100000))
+        self.check(block, None, self.too_large)
+
+    def test_incomplete(self):
+        # These used to raise zlib.error.
+        block = zlib.compress(self.items)
+        self.check(block[:-1], None, self.incomplete)
+        self.check(b"", None, self.incomplete)
+
+    def test_large_block(self):
+        # A valid block of 300000 empty items, 3.9 MB in all, that fits in
+        # uncompressBufSize. Each item read used to copy the rest of the
+        # block, so the first 20000 items took 6 seconds, and walking the
+        # whole block 44 seconds, for a file of 17 kB.
+        data = bytes(13 * 300000)
+        stream, _ = self.make_stream(zlib.compress(data), len(data))
+        with Align.parse(stream, "bigbed") as alignments:
+            coordinates = [
+                alignment.coordinates.tolist()
+                for alignment in itertools.islice(alignments, 20000)
+            ]
+        self.assertEqual(coordinates, [[[0, 0], [0, 0]]] * 20000)
 
 
 if __name__ == "__main__":
