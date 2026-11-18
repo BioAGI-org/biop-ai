@@ -541,6 +541,12 @@ class InfernalTextIndexer(SearchIndexer):
             preamble = []
             while True:
                 line = handle.readline()
+                if not line:
+                    # The index no longer matches the file (truncated or
+                    # replaced after indexing)
+                    raise ValueError(
+                        f"File ended before the first {_DIV_QUERY_START!r} line"
+                    )
                 if line.startswith(_DIV_QUERY_START.encode()):
                     break
                 preamble.append(line)
