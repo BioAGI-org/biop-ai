@@ -298,6 +298,24 @@ class Hmmer(unittest.TestCase):
                     str(cm.exception),
                 )
 
+    def test_hmmer3_file_ends_after_no_hits(self):
+        with open(support.DATA / "Hmmer" / "text_30_hmmscan_002.out") as handle:
+            text = handle.read()
+        no_hits = "   [No hits detected that satisfy reporting thresholds]\n"
+        no_targets = "   [No targets detected that satisfy reporting thresholds]\n"
+        cuts = {
+            "after the no hits line": text.index(no_hits) + len(no_hits),
+            "after the no targets line": text.index(no_targets) + len(no_targets),
+        }
+        for where, cut in cuts.items():
+            with self.subTest(where=where):
+                with self.assertRaises(ValueError) as cm:
+                    parse_all_guarded(text[:cut], "hmmer3-text")
+                self.assertIn(
+                    "File ended after 'No hits detected' for query 'random_s00'",
+                    str(cm.exception),
+                )
+
     def test_hmmer3_domtab_row_too_short(self):
         with open(support.DATA / "Hmmer" / "domtab_30_hmmscan_001.out") as handle:
             lines = handle.readlines()
