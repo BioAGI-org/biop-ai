@@ -195,7 +195,7 @@ class Hmmer3TabIndexer(SearchIndexer):
         handle.seek(offset)
         query_id_idx = self._query_id_idx
         qresult_key = None
-        qresult_raw = b""
+        lines = []
         split_mark = b" "
 
         while True:
@@ -209,9 +209,9 @@ class Hmmer3TabIndexer(SearchIndexer):
                 curr_key = cols[query_id_idx]
                 if curr_key != qresult_key:
                     break
-            qresult_raw += line
+            lines.append(line)
 
-        return qresult_raw
+        return b"".join(lines)
 
 
 class Hmmer3TabWriter:

@@ -515,7 +515,7 @@ class ExonerateTextIndexer(_BaseExonerateIndexer):
         handle = self._handle
         handle.seek(offset)
         qresult_key = None
-        qresult_raw = b""
+        lines = []
 
         while True:
             line = handle.readline()
@@ -530,9 +530,9 @@ class ExonerateTextIndexer(_BaseExonerateIndexer):
                     if curr_key != qresult_key:
                         break
                 handle.seek(cur_pos)
-            qresult_raw += line
+            lines.append(line)
 
-        return qresult_raw
+        return b"".join(lines)
 
 
 # if not used as a module, run the doctest

@@ -9,6 +9,8 @@
 import gzip
 import os
 import unittest
+from io import BytesIO
+from unittest import mock
 
 try:
     import sqlite3
@@ -99,6 +101,34 @@ class CheckRaw(unittest.TestCase):
             # Do the tests again with the BGZF compressed file
             print(f"[BONUS {filename}.bgz]")
             self.check_raw(filename + ".bgz", id, raw, **kwargs)
+
+    def check_raw_repeated(self, filename, id, start, end, count, **kwargs):
+        """Check get_raw(id) on filename with some lines of record id repeated.
+
+        The lines run from the first start in the file to the next end after
+        it. They must occur once in the file, inside record id, and are
+        repeated count times to give a record of tens of thousands of lines.
+        get_raw used to build a record with bytes +=, in time quadratic in
+        its size: seconds to tens of seconds for these records, where it now
+        takes well under a second.
+        """
+        filename = os.fspath(filename)
+        with open(filename, "rb") as handle:
+            data = handle.read()
+        first = data.index(start)
+        lines = data[first : data.index(end, first) + len(end)]
+        self.assertEqual(data.count(lines), 1)
+        idx = SearchIO.index(filename, self.fmt, **kwargs)
+        raw = idx.get_raw(id)
+        idx.close()
+        self.assertEqual(raw.count(lines), 1)
+        handle = BytesIO(data.replace(lines, lines * count))
+        with mock.patch(
+            "Bio.SearchIO._index._open_for_random_access", return_value=handle
+        ):
+            idx = SearchIO.index(filename, self.fmt, **kwargs)
+        self.assertEqual(idx.get_raw(id), raw.replace(lines, lines * count))
+        idx.close()
 
 
 class CheckIndex(SearchTestBaseClass):

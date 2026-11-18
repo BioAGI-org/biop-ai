@@ -534,31 +534,32 @@ class InfernalTextIndexer(SearchIndexer):
     def get_raw(self, offset):
         """Return the raw record from the file as a bytes string."""
         handle = self._handle
-        qresult_raw = b""
 
         # read header
         if not self._preamble:
             handle.seek(0)
+            preamble = []
             while True:
                 line = handle.readline()
                 if line.startswith(_DIV_QUERY_START.encode()):
                     break
-                self._preamble += line
+                preamble.append(line)
+            self._preamble = b"".join(preamble)
 
-        qresult_raw += self._preamble
+        lines = [self._preamble]
 
         # read the qresult raw string
         handle.seek(offset)
         while True:
             # preserve whitespace, don't use read_forward
             line = handle.readline()
-            qresult_raw += line
+            lines.append(line)
 
             # break when we've reached qresult end
             if line.startswith(_DIV_QUERY_END.encode()) or not line:
                 break
 
-        return qresult_raw
+        return b"".join(lines)
 
 
 # if not used as a module, run the doctest

@@ -670,12 +670,12 @@ class BlastXmlIndexer(SearchIndexer):
         handle = self._handle
         handle.seek(offset)
 
-        qresult_raw = handle.readline()
-        if not qresult_raw.lstrip().startswith(self.qstart_mark):
-            raise ValueError(
-                f"Expected <Iteration> at offset {offset}, not:\n{qresult_raw!r}"
-            )
-        while qend_mark not in qresult_raw:
+        line = handle.readline()
+        if not line.lstrip().startswith(self.qstart_mark):
+            raise ValueError(f"Expected <Iteration> at offset {offset}, not:\n{line!r}")
+        lines = [line]
+        # readline splits only at newlines, so the end mark is within one line
+        while qend_mark not in line:
             line = handle.readline()
             if not line:
                 # The index no longer matches the file (truncated after
@@ -684,7 +684,8 @@ class BlastXmlIndexer(SearchIndexer):
                     "File ended before the </Iteration> closing the"
                     f" <Iteration> at offset {offset}"
                 )
-            qresult_raw += line
+            lines.append(line)
+        qresult_raw = b"".join(lines)
         if not qresult_raw.rstrip().endswith(qend_mark):
             raise ValueError(
                 f"Expected the <Iteration> at offset {offset} to end with"

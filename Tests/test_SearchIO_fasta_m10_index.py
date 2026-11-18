@@ -11,6 +11,7 @@ from unittest import mock
 
 import support
 from search_tests_common import CheckIndex
+from search_tests_common import CheckRaw
 
 from Bio import SearchIO
 
@@ -40,6 +41,24 @@ def lines(filename, start, stop):
     """Return lines start + 1 to stop of a test file, as bytes."""
     with open(support.DATA / "Fasta" / filename, "rb") as handle:
         return b"".join(handle.readlines()[start:stop])
+
+
+class FastaM10RawCases(CheckRaw):
+    """Check FASTA m10 get_raw method."""
+
+    fmt = "fasta-m10"
+
+    def test_output_001_many_hits(self):
+        """Test fasta-m10 raw string retrieval, fasta35, query with many hits (output001.m10)."""
+        filename = support.DATA / "Fasta" / "output001.m10"
+        # The query's first line in its table of best scores, 40000 times
+        self.check_raw_repeated(
+            filename,
+            "gi|10955263|ref|NP_052604.1|",
+            b"gi|152973457|ref|YP_001338508.1| ATPase with chape (",
+            b"\n",
+            40000,
+        )
 
 
 class FastaM10IndexCases(CheckIndex):

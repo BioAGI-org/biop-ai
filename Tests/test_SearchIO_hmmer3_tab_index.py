@@ -49,6 +49,14 @@ Ig_2                 PF13895.1  gi|126362951:116-221 -            3.5e-05   23.7
 """
         self.check_raw(filename, "gi|126362951:116-221", raw)
 
+    def test_hmmer3tab_30_many_hits(self):
+        """Test hmmer3-tab raw string retrieval, HMMER 3.0, query with many hits (tab_30_hmmscan_001.out)."""
+        filename = support.DATA / "Hmmer" / "tab_30_hmmscan_001.out"
+        # The query's first hit line, 25000 times
+        self.check_raw_repeated(
+            filename, "gi|126362951:116-221", b"Ig_3 ", b"\n", 25000
+        )
+
 
 class Hmmer3TabIndexCases(CheckIndex):
     fmt = "hmmer3-tab"

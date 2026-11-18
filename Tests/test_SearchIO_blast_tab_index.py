@@ -120,6 +120,31 @@ gi|11464971:4-101	gi|365982352|ref|XM_003667962.1|	30.77	52	27	1	12	54	3181	3336
 """
         self.check_raw(filename, "gi|11464971:4-101", raw, comments=True)
 
+    def test_blasttab_2226_many_hits(self):
+        """Test blast-tab raw string retrieval, BLAST 2.2.26+, query with many hits (tab_2226_tblastn_001.txt)."""
+        filename = support.DATA / "Blast" / "tab_2226_tblastn_001.txt"
+        # The query's first hit line, 40000 times
+        self.check_raw_repeated(
+            filename,
+            "gi|16080617|ref|NP_391444.1|",
+            b"gi|16080617|ref|NP_391444.1|\tgi|145479850|",
+            b"\n",
+            40000,
+        )
+
+    def test_blasttab_2226_many_hits_commented(self):
+        """Test blast-tab raw string retrieval, BLAST 2.2.26+, query with many hits, commented (tab_2226_tblastn_005.txt)."""
+        filename = support.DATA / "Blast" / "tab_2226_tblastn_005.txt"
+        # The query's first hit line, 40000 times
+        self.check_raw_repeated(
+            filename,
+            "gi|16080617|ref|NP_391444.1|",
+            b"gi|16080617|ref|NP_391444.1|\tgi|145479850|",
+            b"\n",
+            40000,
+            comments=True,
+        )
+
 
 class BlastTabIndexCases(CheckIndex):
     fmt = "blast-tab"

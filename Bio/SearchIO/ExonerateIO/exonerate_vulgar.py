@@ -191,7 +191,7 @@ class ExonerateVulgarIndexer(_BaseExonerateIndexer):
         handle = self._handle
         handle.seek(offset)
         qresult_key = None
-        qresult_raw = b""
+        lines = []
 
         while True:
             line = handle.readline()
@@ -205,9 +205,9 @@ class ExonerateVulgarIndexer(_BaseExonerateIndexer):
                     curr_key = self.get_qresult_id(cur_pos)
                     if curr_key != qresult_key:
                         break
-            qresult_raw += line
+            lines.append(line)
 
-        return qresult_raw
+        return b"".join(lines)
 
 
 # if not used as a module, run the doctest

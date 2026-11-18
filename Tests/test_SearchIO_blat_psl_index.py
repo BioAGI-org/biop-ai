@@ -9,6 +9,25 @@ import unittest
 
 import support
 from search_tests_common import CheckIndex
+from search_tests_common import CheckRaw
+
+
+class BlatPslRawCases(CheckRaw):
+    """Check BLAT PSL get_raw method."""
+
+    fmt = "blat-psl"
+
+    def test_psl_34_001_many_hits(self):
+        """Test blat-psl raw string retrieval, query with many hits (psl_34_001.psl)."""
+        filename = support.DATA / "Blat" / "psl_34_001.psl"
+        # The query's first hit line, 40000 times
+        self.check_raw_repeated(
+            filename,
+            "hg19_dna",
+            b"38\t3\t0\t0\t0\t0\t0\t0\t+\thg19_dna\t",
+            b"\n",
+            40000,
+        )
 
 
 class BlatPslIndexCases(CheckIndex):

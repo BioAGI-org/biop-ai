@@ -629,14 +629,14 @@ class FastaM10Indexer(SearchIndexer):
     def get_raw(self, offset):
         """Return the raw record from the file as a bytes string."""
         handle = self._handle
-        qresult_raw = b""
+        lines = []
         query_mark = b">>>"
 
         # read header first
         handle.seek(0)
         line = handle.readline()
         while True:
-            qresult_raw += line
+            lines.append(line)
             line = handle.readline()
             if not line:
                 raise ValueError(
@@ -652,15 +652,16 @@ class FastaM10Indexer(SearchIndexer):
             # preserve whitespace, don't use read_forward
             if not line:
                 break
-            qresult_raw += line
+            lines.append(line)
 
             line = handle.readline()
             # break when we've reached qresult end
             if not line.startswith(query_mark) and query_mark in line:
                 break
 
-        # append mock end marker to qresult_raw, since it's not always present
-        return qresult_raw + b">>><<<\n"
+        # append mock end marker, since it's not always present
+        lines.append(b">>><<<\n")
+        return b"".join(lines)
 
 
 # if not used as a module, run the doctest

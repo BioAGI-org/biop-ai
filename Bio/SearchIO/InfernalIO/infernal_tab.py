@@ -460,7 +460,7 @@ class InfernalTabIndexer(SearchIndexer):
         """Return the raw bytes string of a QueryResult object from the given offset."""
         handle = self._handle
         qresult_key = None
-        qresult_raw = b""
+        lines = []
 
         # read the qresult raw string
         handle.seek(offset)
@@ -475,9 +475,9 @@ class InfernalTabIndexer(SearchIndexer):
                 curr_key = cols[self._query_id_idx]
                 if curr_key != qresult_key:
                     break
-            qresult_raw += line
+            lines.append(line)
 
-        return qresult_raw
+        return b"".join(lines)
 
 
 # if not used as a module, run the doctest

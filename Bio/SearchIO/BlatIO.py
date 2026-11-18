@@ -688,7 +688,7 @@ class BlatPslIndexer(SearchIndexer):
         handle.seek(offset)
         query_id_idx = 9
         qresult_key = None
-        qresult_raw = b""
+        lines = []
         tab_char = b"\t"
 
         while True:
@@ -702,9 +702,9 @@ class BlatPslIndexer(SearchIndexer):
                 curr_key = cols[query_id_idx]
                 if curr_key != qresult_key:
                     break
-            qresult_raw += line
+            lines.append(line)
 
-        return qresult_raw
+        return b"".join(lines)
 
 
 class BlatPslWriter:
