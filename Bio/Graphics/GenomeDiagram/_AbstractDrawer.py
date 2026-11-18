@@ -604,11 +604,15 @@ class AbstractDrawer:
         start, end = self._current_track_start_end()
         # The first multiple of the interval after start. As before, an
         # interval of 0 raises ZeroDivisionError and a negative one draws
-        # no ticks (the range below is then empty).
+        # no ticks.
         first = (floor(start) // interval + 1) * interval
+        if interval < 0:
+            return range(0)
         ticks = range(first, ceil(end), interval)
         spacing = interval * points_per_base
-        if interval > 0 and spacing < 1 and len(ticks) > 1:
+        # Compare the second tick with the end rather than take len(ticks),
+        # which raises OverflowError for a range of over sys.maxsize ticks.
+        if spacing < 1 and first + interval < ceil(end):
             warnings.warn(
                 f"Not drawing the scale ticks every {interval} bases: they would "
                 f"be {spacing:.2g} points apart, too close to draw. Raise "
