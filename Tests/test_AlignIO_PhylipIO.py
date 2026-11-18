@@ -12,6 +12,8 @@ import support
 
 from Bio.AlignIO.PhylipIO import PhylipIterator
 from Bio.AlignIO.PhylipIO import PhylipWriter
+from Bio.AlignIO.PhylipIO import RelaxedPhylipIterator
+from Bio.AlignIO.PhylipIO import SequentialPhylipIterator
 
 
 class TestPhylipIO(unittest.TestCase):
@@ -124,6 +126,80 @@ class TestPhylipIO(unittest.TestCase):
             for r1, r2 in zip(a1, a2):
                 self.assertEqual(r1.id, r2.id)
                 self.assertEqual(r1.seq, r2.seq)
+
+
+class EndOfFileGuard(StringIO):
+    """A text handle that fails the test if read on and on at its end."""
+
+    def __init__(self, text):
+        """Hold the text, and count the reads made at its end."""
+        super().__init__(text)
+        self.reads_at_end = 0
+
+    def readline(self, size=-1):
+        """Return the next line, failing after 100 reads at the end."""
+        line = super().readline(size)
+        if not line:
+            self.reads_at_end += 1
+            if self.reads_at_end > 100:
+                raise AssertionError("readline called 100 times at end of file")
+        return line
+
+
+class TestPhylipEndOfFile(unittest.TestCase):
+    """Files ending before the sequences their header announces."""
+
+    iterators = (PhylipIterator, RelaxedPhylipIterator, SequentialPhylipIterator)
+
+    def check(self, iterator, text, message):
+        with self.assertRaises(ValueError) as cm:
+            list(iterator(EndOfFileGuard(text)))
+        self.assertEqual(str(cm.exception), message)
+
+    def read_text(self, filename):
+        with open(support.DATA / "Phylip" / filename) as handle:
+            return handle.read()
+
+    def test_header_only(self):
+        # Reading stops at the end of the file, not a billion lines later.
+        for iterator in self.iterators:
+            with self.subTest(iterator=iterator.__name__):
+                self.check(
+                    iterator,
+                    "1000000000 10\n",
+                    "End of file before sequence 1 of 1000000000",
+                )
+
+    def test_header_only_of_second_alignment(self):
+        for iterator, filename in (
+            (PhylipIterator, "four.dat"),
+            (RelaxedPhylipIterator, "interlaced.phy"),
+            (SequentialPhylipIterator, "sequential.phy"),
+        ):
+            with self.subTest(iterator=iterator.__name__):
+                self.check(
+                    iterator,
+                    self.read_text(filename) + "\n1000000000 10\n",
+                    "End of file before sequence 1 of 1000000000",
+                )
+
+    def test_truncated(self):
+        # four.dat has 5 sequences on 5 lines in its first block,
+        # interlaced.phy 3 sequences on 3 lines, and sequential.phy
+        # 3 sequences on 7 lines each.
+        for iterator, filename, lines, message in (
+            (PhylipIterator, "four.dat", 3, "sequence 4 of 5"),
+            (RelaxedPhylipIterator, "interlaced.phy", 2, "sequence 3 of 3"),
+            (SequentialPhylipIterator, "sequential.phy", 7, "sequence 2 of 3"),
+            (SequentialPhylipIterator, "sequential.phy", 10, "sequence 3 of 3"),
+        ):
+            with self.subTest(iterator=iterator.__name__, lines=lines):
+                text = self.read_text(filename).splitlines(keepends=True)
+                self.check(
+                    iterator,
+                    "".join(text[: lines + 1]),
+                    "End of file before " + message,
+                )
 
 
 if __name__ == "__main__":

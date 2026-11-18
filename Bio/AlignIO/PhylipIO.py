@@ -224,7 +224,14 @@ class PhylipIterator(AlignmentIterator):
         # By default, expects STRICT truncation / padding to 10 characters.
         # Does not require any whitespace between name and seq.
         for i in range(number_of_seqs):
-            line = handle.readline().rstrip()
+            # readline() returns "" for ever at the end of the file, so stop
+            # there, however many sequences the header claims.
+            line = handle.readline()
+            if not line:
+                raise ValueError(
+                    "End of file before sequence %i of %i" % (i + 1, number_of_seqs)
+                )
+            line = line.rstrip()
             sequence_id, s = self._split_id(line)
             ids.append(sequence_id)
             if "." in s:
@@ -404,7 +411,14 @@ class SequentialPhylipIterator(PhylipIterator):
         # By default, expects STRICT truncation / padding to 10 characters.
         # Does not require any whitespace between name and seq.
         for i in range(number_of_seqs):
-            line = handle.readline().rstrip()
+            # readline() returns "" for ever at the end of the file, so stop
+            # there, however many sequences the header claims.
+            line = handle.readline()
+            if not line:
+                raise ValueError(
+                    "End of file before sequence %i of %i" % (i + 1, number_of_seqs)
+                )
+            line = line.rstrip()
             sequence_id, s = self._split_id(line)
             ids.append(sequence_id)
             while len(s) < length_of_seqs:
