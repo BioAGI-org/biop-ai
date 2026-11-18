@@ -10,6 +10,7 @@ import re
 import unittest
 
 import support
+from memory_growth import requires_growth_measurement
 
 from Bio import SeqIO
 from Bio.Data import IUPACData
@@ -572,6 +573,34 @@ class NtSearchTests(unittest.TestCase):
         for subseq in (Seq("AT"), MutableSeq("AT")):
             with self.subTest(subseq=type(subseq).__name__):
                 self.assertEqual(nt_search(text, subseq), expected)
+
+    @requires_growth_measurement
+    def test_hits_do_not_copy_the_sequence(self):
+        """The search does not copy the rest of the sequence after each hit.
+
+        It used to, so the time taken grew as the number of hits times the
+        length of the sequence: searching 2 Mb of random sequence for "A"
+        took 45 seconds. The memory traced during the search shows any such
+        copy, without timing anything.
+        """
+        import tracemalloc  # not on PyPy, where this test is skipped
+
+        seq = "GATC" * 10 + "A" * 1_000_000
+        was_tracing = tracemalloc.is_tracing()
+        if was_tracing:
+            tracemalloc.reset_peak()
+        else:
+            tracemalloc.start()
+        try:
+            before = tracemalloc.get_traced_memory()[0]
+            result = nt_search(seq, "GATC")
+            peak = tracemalloc.get_traced_memory()[1] - before
+        finally:
+            if not was_tracing:
+                tracemalloc.stop()
+        self.assertEqual(result, ["GATC", *range(0, 40, 4)])
+        # Each copy took about 1 MB; the search alone needs about 2 kB.
+        self.assertLess(peak, len(seq) // 10, f"{peak} bytes traced")
 
 
 class GC123Tests(unittest.TestCase):
