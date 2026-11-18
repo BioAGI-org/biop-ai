@@ -203,6 +203,11 @@ class InfernalTextParser(_BaseInfernalParser):
             elif self.line.startswith(_DIV_NO_HIT):
                 while True:
                     self.line = read_forward(self.handle)
+                    if not self.line:
+                        raise ValueError(
+                            "File ended after 'No hits detected' for query"
+                            f" {qid!r}, before the pipeline statistics summary"
+                        )
                     if self.line.startswith(_DIV_HITS_END_CM) or self.line.startswith(
                         _DIV_HITS_END_HMM
                     ):
