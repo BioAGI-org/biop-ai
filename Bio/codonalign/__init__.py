@@ -193,8 +193,9 @@ def build(
             try:
                 nucl_id = corr_dict[pro_rec.id]
             except KeyError:
-                print(f"Protein record ({pro_rec.id}) is not in corr_dict!")
-                exit(1)
+                raise ValueError(
+                    f"Protein record ({pro_rec.id}) is not in corr_dict"
+                ) from None
             pro_nucl_pair.append((pro_rec, nucl_seqs[nucl_id]))
 
     if codon_table is None:
