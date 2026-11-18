@@ -75,7 +75,7 @@ int sorttree(const int nnodes, Node* tree, const double order[], int indices[]);
 int cuttree(int nelements, const Node* tree, int nclusters, int clusterid[]);
 
 /* Chapter 5 */
-void somcluster(int nrows, int ncolumns, double** data, int** mask,
+int somcluster(int nrows, int ncolumns, double** data, int** mask,
   const double weight[], int transpose, int nxnodes, int nynodes,
   double inittau, int niter, char dist, double*** celldata,
   int clusterid[][2], uint64_t rng_seed);

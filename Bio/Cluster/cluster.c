@@ -4405,26 +4405,70 @@ If a memory error occurs, sorttree returns 0.
 
 /* ******************************************************************* */
 
+static int**
+makedummymask(int nrows, int ncolumns)
+/* Return an nrows x ncolumns mask with every value set to 1, or NULL if
+ * memory allocation fails. */
+{
+    int i, j;
+    int** dummymask = MALLOC(nrows*sizeof(int*));
+
+    if (!dummymask) return NULL;
+    for (i = 0; i < nrows; i++) {
+        dummymask[i] = MALLOC(ncolumns*sizeof(int));
+        if (!dummymask[i]) {
+            while (--i >= 0) FREE(dummymask[i]);
+            FREE(dummymask);
+            return NULL;
+        }
+        for (j = 0; j < ncolumns; j++) dummymask[i][j] = 1;
+    }
+    return dummymask;
+}
+
 static void
+freedummymask(int nrows, int** dummymask)
+{
+    int i;
+
+    for (i = 0; i < nrows; i++) FREE(dummymask[i]);
+    FREE(dummymask);
+}
+
+/* ******************************************************************* */
+
+static int
 somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
     const double weights[], int transpose, int nxgrid, int nygrid,
     double inittau, double*** celldata, int niter, char dist)
-
+/* Return 1 on success, or 0 if memory allocation fails. */
 {
     const int nelements = (transpose == 0) ? nrows : ncolumns;
     const int ndata = (transpose == 0) ? ncolumns : nrows;
+    /* The number of rows of dummymask, the mask of a cell of the grid */
+    const int nmask = (transpose == 0) ? nygrid : ndata;
     int i, j;
-    int** dummymask;
     int ix, iy;
-    int* index;
     int iter;
     /* Maximum radius in which nodes are adjusted */
     double maxradius = sqrt(nxgrid*nxgrid+nygrid*nygrid);
     double* stddata = CALLOC(nelements, sizeof(double));
+    int* index = MALLOC(nelements*sizeof(int));
+    int** dummymask = makedummymask(nmask, (transpose == 0) ? ndata : 1);
+    double** celldatavector = NULL;
 
     /* Set the metric function as indicated by dist */
     double (*metric) (int, double**, double**, int**, int**,
                       const double[], int, int, int) = setmetric(dist);
+
+    if (transpose) celldatavector = MALLOC(ndata*sizeof(double*));
+    if (!stddata || !index || !dummymask || (transpose && !celldatavector)) {
+        FREE(stddata);
+        FREE(index);
+        if (dummymask) freedummymask(nmask, dummymask);
+        FREE(celldatavector);
+        return 0;
+    }
 
     /* Calculate the standard deviation for each row or column */
     if (transpose == 0) {
@@ -4458,21 +4502,6 @@ somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
         }
     }
 
-    if (transpose == 0) {
-        dummymask = MALLOC(nygrid*sizeof(int*));
-        for (i = 0; i < nygrid; i++) {
-            dummymask[i] = MALLOC(ndata*sizeof(int));
-            for (j = 0; j < ndata; j++) dummymask[i][j] = 1;
-        }
-    }
-    else {
-        dummymask = MALLOC(ndata*sizeof(int*));
-        for (i = 0; i < ndata; i++) {
-            dummymask[i] = MALLOC(sizeof(int));
-            dummymask[i][0] = 1;
-        }
-    }
-
     /* Randomly initialize the nodes */
     for (ix = 0; ix < nxgrid; ix++) {
         for (iy = 0; iy < nygrid; iy++) {
@@ -4488,7 +4517,6 @@ somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
     }
 
     /* Randomize the order in which genes or arrays will be used */
-    index = MALLOC(nelements*sizeof(int));
     for (i = 0; i < nelements; i++) index[i] = i;
     for (i = 0; i < nelements; i++) {
         j = (int) (i + (nelements-i)*uniform(rng));
@@ -4549,7 +4577,6 @@ somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
         }
         else {
             double closest;
-            double** celldatavector = MALLOC(ndata*sizeof(double*));
             double radius = maxradius * (1. - ((double)iter)/((double)niter));
             double tau = inittau * (1. - ((double)iter)/((double)niter));
 
@@ -4572,7 +4599,6 @@ somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
                     }
                 }
             }
-            FREE(celldatavector);
             for (ix = 0; ix < nxgrid; ix++) {
                 for (iy = 0; iy < nygrid; iy++) {
                     if (sqrt((ix-ixbest)*(ix-ixbest)+(iy-iybest)*(iy-iybest)) <
@@ -4599,36 +4625,33 @@ somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
             }
         }
     }
-    if (transpose == 0)
-        for (i = 0; i < nygrid; i++) FREE(dummymask[i]);
-    else
-        for (i = 0; i < ndata; i++) FREE(dummymask[i]);
-    FREE(dummymask);
+    freedummymask(nmask, dummymask);
     FREE(stddata);
     FREE(index);
+    FREE(celldatavector);
+    return 1;
 }
 
 /* ******************************************************************* */
 
-static void
+static int
 somassign(int nrows, int ncolumns, double** data, int** mask,
     const double weights[], int transpose, int nxgrid, int nygrid,
     double*** celldata, char dist, int clusterid[][2])
-/* Collect clusterids */
+/* Collect clusterids. Return 1 on success, or 0 if memory allocation fails. */
 {
     const int ndata = (transpose == 0) ? ncolumns : nrows;
+    /* The number of rows of dummymask, the mask of a cell of the grid */
+    const int nmask = (transpose == 0) ? nygrid : ndata;
     int i, j;
+    int** dummymask = makedummymask(nmask, (transpose == 0) ? ndata : 1);
 
     /* Set the metric function as indicated by dist */
     double (*metric) (int, double**, double**, int**, int**,
                       const double[], int, int, int) = setmetric(dist);
 
+    if (!dummymask) return 0;
     if (transpose == 0) {
-        int** dummymask = MALLOC(nygrid*sizeof(int*));
-        for (i = 0; i < nygrid; i++) {
-            dummymask[i] = MALLOC(ncolumns*sizeof(int));
-            for (j = 0; j < ncolumns; j++) dummymask[i][j] = 1;
-        }
         for (i = 0; i < nrows; i++) {
             int ixbest = 0;
             int iybest = 0;
@@ -4650,17 +4673,14 @@ somassign(int nrows, int ncolumns, double** data, int** mask,
             clusterid[i][0] = ixbest;
             clusterid[i][1] = iybest;
         }
-        for (i = 0; i < nygrid; i++) FREE(dummymask[i]);
-        FREE(dummymask);
     }
     else {
         double** celldatavector = MALLOC(ndata*sizeof(double*));
-        int** dummymask = MALLOC(nrows*sizeof(int*));
         int ixbest = 0;
         int iybest = 0;
-        for (i = 0; i < nrows; i++) {
-            dummymask[i] = MALLOC(sizeof(int));
-            dummymask[i][0] = 1;
+        if (!celldatavector) {
+            freedummymask(nmask, dummymask);
+            return 0;
         }
         for (i = 0; i < ncolumns; i++) {
             double closest;
@@ -4687,14 +4707,14 @@ somassign(int nrows, int ncolumns, double** data, int** mask,
             clusterid[i][1] = iybest;
         }
         FREE(celldatavector);
-        for (i = 0; i < nrows; i++) FREE(dummymask[i]);
-        FREE(dummymask);
     }
+    freedummymask(nmask, dummymask);
+    return 1;
 }
 
 /* ******************************************************************* */
 
-void
+int
 somcluster(int nrows, int ncolumns, double** data, int** mask,
     const double weight[], int transpose, int nxgrid, int nygrid,
     double inittau, int niter, char dist, double*** celldata,
@@ -4779,41 +4799,55 @@ The seed for the random number generator used to initialize the nodes and
 to randomize the order in which the items are presented. A given seed
 yields bit-identical results on every run.
 
+Return value
+============
+
+If no errors occur, somcluster returns 1.
+If a memory error occurs, somcluster returns 0.
+
 ========================================================================
 */
 {
     const int nobjects = (transpose == 0) ? nrows : ncolumns;
     const int ndata = (transpose == 0) ? ncolumns : nrows;
     int i, j;
+    int ok = 1;
     const int lcelldata = (celldata == NULL) ? 0 : 1;
     ClusterRNG rng;
 
-    if (nobjects < 2) return;
+    if (nobjects < 2) return 1;
 
     clusterrng_init(&rng, rng_seed);
 
     if (lcelldata == 0) {
-        celldata = MALLOC((size_t)nxgrid*nygrid*ndata*sizeof(double**));
-        for (i = 0; i < nxgrid; i++) {
-            celldata[i] = MALLOC((size_t)nygrid*ndata*sizeof(double*));
-            for (j = 0; j < nygrid; j++)
+        /* Pointers not allocated stay NULL, for the clean-up below */
+        celldata = CALLOC((size_t)nxgrid*nygrid*ndata, sizeof(double**));
+        if (!celldata) return 0;
+        for (i = 0; ok && i < nxgrid; i++) {
+            celldata[i] = CALLOC((size_t)nygrid*ndata, sizeof(double*));
+            ok = (celldata[i] != NULL);
+            for (j = 0; ok && j < nygrid; j++) {
                 celldata[i][j] = MALLOC(ndata*sizeof(double));
+                ok = (celldata[i][j] != NULL);
+            }
         }
     }
 
-    somworker(&rng, nrows, ncolumns, data, mask, weight, transpose, nxgrid,
-        nygrid, inittau, celldata, niter, dist);
-    if (clusterid)
-        somassign(nrows, ncolumns, data, mask, weight, transpose,
+    if (ok)
+        ok = somworker(&rng, nrows, ncolumns, data, mask, weight, transpose,
+            nxgrid, nygrid, inittau, celldata, niter, dist);
+    if (ok && clusterid)
+        ok = somassign(nrows, ncolumns, data, mask, weight, transpose,
             nxgrid, nygrid, celldata, dist, clusterid);
     if (lcelldata == 0) {
-        for (i = 0; i < nxgrid; i++)
+        for (i = 0; i < nxgrid && celldata[i]; i++) {
             for (j = 0; j < nygrid; j++)
                 FREE(celldata[i][j]);
-        for (i = 0; i < nxgrid; i++)
             FREE(celldata[i]);
+        }
         FREE(celldata);
     }
+    return ok;
 }
 
 /* ******************************************************************** */
@@ -4834,7 +4868,7 @@ defined in several ways. Several distance measures can be used.
 
 The routine returns the distance in double precision. It returns -1.0 if a
 cluster is empty or an index is out of range, and -2.0 if memory allocation
-for the median fails.
+fails.
 If the parameter transpose is set to a nonzero value, the clusters are
 interpreted as clusters of samples, otherwise as clusters of gene.
 
@@ -4952,6 +4986,15 @@ when samples are being clustered.
                 cdata[1] = CALLOC(ncolumns, sizeof(double));
                 cmask[0] = MALLOC(ncolumns*sizeof(int));
                 cmask[1] = MALLOC(ncolumns*sizeof(int));
+                if (!count[0] || !count[1] || !cdata[0] || !cdata[1] ||
+                    !cmask[0] || !cmask[1]) {
+                    for (i = 0; i < 2; i++) {
+                        FREE(cdata[i]);
+                        FREE(cmask[i]);
+                        FREE(count[i]);
+                    }
+                    return -2.0;
+                }
                 for (i = 0; i < n1; i++) {
                     k = index1[i];
                     for (j = 0; j < ncolumns; j++)
@@ -4991,10 +5034,24 @@ when samples are being clustered.
                 int** count = MALLOC(nrows*sizeof(int*));
                 double** cdata = MALLOC(nrows*sizeof(double*));
                 int** cmask = MALLOC(nrows*sizeof(int*));
-                for (i = 0; i < nrows; i++) {
+                int ok = count && cdata && cmask;
+                for (i = 0; ok && i < nrows; i++) {
                     count[i] = CALLOC(2, sizeof(int));
                     cdata[i] = CALLOC(2, sizeof(double));
                     cmask[i] = MALLOC(2*sizeof(int));
+                    ok = count[i] && cdata[i] && cmask[i];
+                }
+                if (!ok) {
+                    /* Rows 0 to i-1 were allocated, the last in part */
+                    for (j = 0; j < i; j++) {
+                        FREE(count[j]);
+                        FREE(cdata[j]);
+                        FREE(cmask[j]);
+                    }
+                    FREE(count);
+                    FREE(cdata);
+                    FREE(cmask);
+                    return -2.0;
                 }
                 for (i = 0; i < n1; i++) {
                     k = index1[i];
@@ -5051,6 +5108,14 @@ when samples are being clustered.
                     cdata[i] = MALLOC(ncolumns*sizeof(double));
                     cmask[i] = MALLOC(ncolumns*sizeof(int));
                 }
+                if (!cdata[0] || !cdata[1] || !cmask[0] || !cmask[1]) {
+                    for (i = 0; i < 2; i++) {
+                        FREE(cdata[i]);
+                        FREE(cmask[i]);
+                    }
+                    FREE(temp);
+                    return -2.0;
+                }
                 for (j = 0; j < ncolumns; j++) {
                     int count = 0;
                     for (k = 0; k < n1; k++) {
@@ -5102,9 +5167,22 @@ when samples are being clustered.
                 if (!temp) return -2.0;
                 double** cdata = MALLOC(nrows*sizeof(double*));
                 int** cmask = MALLOC(nrows*sizeof(int*));
-                for (i = 0; i < nrows; i++) {
+                int ok = cdata && cmask;
+                for (i = 0; ok && i < nrows; i++) {
                     cdata[i] = MALLOC(2*sizeof(double));
                     cmask[i] = MALLOC(2*sizeof(int));
+                    ok = cdata[i] && cmask[i];
+                }
+                if (!ok) {
+                    /* Rows 0 to i-1 were allocated, the last in part */
+                    for (j = 0; j < i; j++) {
+                        FREE(cdata[j]);
+                        FREE(cmask[j]);
+                    }
+                    FREE(cdata);
+                    FREE(cmask);
+                    FREE(temp);
+                    return -2.0;
                 }
                 for (j = 0; j < nrows; j++) {
                     int count = 0;

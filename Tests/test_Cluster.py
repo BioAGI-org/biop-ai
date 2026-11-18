@@ -3862,6 +3862,91 @@ print("OK")
             env,
         )
 
+    def test_out_of_memory(self):
+        """Check a failed allocation in the C code raises MemoryError.
+
+        somcluster and methods "a" and "m" of clusterdistance used their
+        working buffers without checking that they had been allocated, so
+        they dereferenced NULL when memory ran out, and kcluster returned
+        nfound -1 and clusterid unset. Fail each allocation in turn, one
+        per call: every call must give MemoryError or the usual result.
+        """
+        try:
+            import _testcapi
+        except ImportError:
+            self.skipTest("needs _testcapi")
+        if not hasattr(_testcapi, "set_nomemory"):
+            self.skipTest("needs _testcapi.set_nomemory")
+        self.run_child(
+            """
+import _testcapi
+import numpy as np
+from Bio.Cluster import clusterdistance, kcluster, somcluster
+
+data = np.array(
+    [
+        [1.0, 2.0, 3.0, 4.0],
+        [2.0, 1.5, 0.5, 3.0],
+        [4.0, 3.0, 2.0, 1.0],
+        [0.5, 0.7, 0.9, 1.1],
+        [1.2, 0.0, 2.2, 0.8],
+    ]
+)
+mask = np.ones(data.shape, np.intc)
+mask[4, 1] = 0
+calls = {}
+for t in (0, 1):
+    calls["somcluster", t] = lambda t=t: somcluster(
+        data, mask, transpose=t, nxgrid=2, nygrid=3, niter=4, rng_seed=7
+    )
+    for method in "am":
+        calls[method, t] = lambda t=t, method=method: clusterdistance(
+            data, mask, index1=[0, 1], index2=[2, 3], method=method, transpose=t
+        )
+    calls["kcluster", t] = lambda t=t: kcluster(
+        data, 2, mask, transpose=t, npass=3, rng_seed=7
+    )
+
+
+def values(result):
+    if isinstance(result, tuple):
+        return [values(item) for item in result]
+    return np.asarray(result).tolist()
+
+
+ncalls = 150
+for name, call in calls.items():
+    expected = values(call())
+    outcomes = []
+    for start in range(ncalls):
+        _testcapi.set_nomemory(start, start + 1)
+        try:
+            result = call()
+        except MemoryError:
+            result = None
+        except RuntimeError as error:
+            # The converters report any failure to get a buffer this way.
+            if not str(error).endswith("unexpected format."):
+                raise
+            result = None
+        finally:
+            # Disarm before anything else allocates.
+            _testcapi.remove_mem_hooks()
+        if result is None:
+            outcomes.append("MemoryError")
+        elif values(result) == expected:
+            outcomes.append("ok")
+        else:
+            outcomes.append(f"wrong {values(result)}")
+    failures = outcomes.count("MemoryError")
+    assert failures > 0, (name, outcomes)
+    # The last calls end before reaching the allocation set to fail.
+    assert outcomes[-20:] == ["ok"] * 20, (name, outcomes)
+    assert outcomes.count("ok") + failures == ncalls, (name, outcomes)
+print("OK")
+"""
+        )
+
     def test_pca_infinite_data(self):
         """Check pca rejects data whose column sums are not finite."""
         self.run_child(
