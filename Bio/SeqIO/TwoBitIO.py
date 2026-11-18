@@ -72,6 +72,8 @@ methods that allow it to be used as a dictionary.
 #             T - 00, C - 01, A - 10, G - 11. The first base is in the most
 #             significant 2-bit byte; the last base is in the least significant
 #             2 bits. For example, the sequence TCAG is represented as 00011011.
+import os
+
 try:
     import numpy as np
 except ImportError:
@@ -220,13 +222,31 @@ class TwoBitIterator(SequenceIterator):
             offset = int.from_bytes(data, byteorder, signed=False)
             sequences[name] = (stream, offset)
         self.sequences = sequences
+        # Each block takes 8 bytes of its block table. The records of a valid
+        # file do not overlap, so all their block tables together fit in the
+        # file. Check the block counts against this before allocating arrays
+        # for them, and read a record only once if several names share it.
+        stream.seek(0, os.SEEK_END)
+        filesize = stream.tell()
+        unclaimed = filesize  # bytes not yet taken by a block table
+        records = {}
         for name, (stream, offset) in sequences.items():
+            if offset in records:
+                sequences[name] = records[offset]
+                continue
             stream.seek(offset)
             data = stream.read(4)
             dnaSize = int.from_bytes(data, byteorder, signed=False)
             sequence = _TwoBitSequenceData(stream, offset, dnaSize)
             data = stream.read(4)
             nBlockCount = int.from_bytes(data, byteorder, signed=False)
+            size = 8 * nBlockCount
+            if size > unclaimed or size > filesize - stream.tell():
+                raise ValueError(
+                    "Found nBlockCount %u for sequence %s, too many blocks for a file of %u bytes"
+                    % (nBlockCount, name, filesize)
+                )
+            unclaimed -= size
             nBlockStarts = np.fromfile(stream, dtype=dtype, count=nBlockCount)
             nBlockSizes = np.fromfile(stream, dtype=dtype, count=nBlockCount)
             sequence.nBlocks = np.empty((nBlockCount, 2), dtype="uint32")
@@ -234,6 +254,13 @@ class TwoBitIterator(SequenceIterator):
             sequence.nBlocks[:, 1] = nBlockStarts + nBlockSizes
             data = stream.read(4)
             maskBlockCount = int.from_bytes(data, byteorder, signed=False)
+            size = 8 * maskBlockCount
+            if size > unclaimed or size > filesize - stream.tell():
+                raise ValueError(
+                    "Found maskBlockCount %u for sequence %s, too many blocks for a file of %u bytes"
+                    % (maskBlockCount, name, filesize)
+                )
+            unclaimed -= size
             maskBlockStarts = np.fromfile(stream, dtype=dtype, count=maskBlockCount)
             maskBlockSizes = np.fromfile(stream, dtype=dtype, count=maskBlockCount)
             sequence.maskBlocks = np.empty((maskBlockCount, 2), dtype="uint32")
@@ -245,7 +272,7 @@ class TwoBitIterator(SequenceIterator):
                 raise ValueError("Found non-zero reserved field %u" % reserved)
             sequence.offset = stream.tell()
             sequence = Seq(sequence)
-            sequences[name] = sequence
+            sequences[name] = records[offset] = sequence
         self._names = iter(self.sequences)
 
     def __next__(self):

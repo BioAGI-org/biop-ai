@@ -1,6 +1,7 @@
 """Tests for SeqIO TwoBitIO module."""
 
 import sys
+import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from unittest import mock
@@ -113,6 +114,81 @@ class Parsing(unittest.TestCase):
                 str(cm.exception),
                 "version-1 twoBit files with 64-bit offsets for index are currently not supported",
             )
+
+    def test_block_count_too_large(self):
+        """Check a block count is checked against the file size before allocating."""
+        path = support.DATA / "TwoBit" / "sequence.littleendian.2bit"
+        data = path.read_bytes()
+        fromfile = np.fromfile
+
+        def checked_fromfile(file, dtype, count):
+            # Fail before numpy reserves room for more values than the file has
+            self.assertLessEqual(count, len(data) // 4)
+            return fromfile(file, dtype=dtype, count=count)
+
+        # The record of seq11111 starts at byte 81, so its nBlockCount is at
+        # byte 85, and its maskBlockCount, after two N blocks, at byte 105.
+        for field, position in (("nBlockCount", 85), ("maskBlockCount", 105)):
+            for count in (100, 0x40000000, 0xFFFFFFFF):
+                patched = bytearray(data)
+                patched[position : position + 4] = count.to_bytes(4, "little")
+                with self.subTest(field=field, count=count):
+                    # np.fromfile needs a real file, not an io.BytesIO
+                    with tempfile.TemporaryFile() as stream:
+                        stream.write(patched)
+                        stream.seek(0)
+                        with mock.patch.object(np, "fromfile", checked_fromfile):
+                            with self.assertRaises(ValueError) as cm:
+                                SeqIO.parse(stream, "twobit")
+                    self.assertEqual(
+                        str(cm.exception),
+                        "Found %s %u for sequence seq11111, "
+                        "too many blocks for a file of 770 bytes" % (field, count),
+                    )
+
+    def test_overlapping_block_tables(self):
+        """Check overlapping records cannot claim more blocks than the file holds."""
+        # The records start one word apart in a run of 18 words holding 8,
+        # followed by 18 zero words.  Each record therefore has 8 N blocks,
+        # no mask blocks and a zero reserved field, and its block table fits
+        # in the file, but the 17 tables overlap: together they need
+        # 17 * 64 bytes, far more than the 279 bytes of the file.
+        names = [b"%02d" % k for k in range(17)]
+        start = 16 + 7 * len(names)
+        data = (0x1A412743).to_bytes(4, "little")
+        data += (0).to_bytes(4, "little")
+        data += len(names).to_bytes(4, "little")
+        data += (0).to_bytes(4, "little")
+        for k, name in enumerate(names):
+            data += bytes([len(name)]) + name + (start + 4 * k).to_bytes(4, "little")
+        data += (8).to_bytes(4, "little") * 18 + bytes(4 * 18)
+        self.assertEqual(len(data), 279)
+        with tempfile.TemporaryFile() as stream:
+            stream.write(data)
+            stream.seek(0)
+            with self.assertRaises(ValueError) as cm:
+                SeqIO.parse(stream, "twobit")
+        # The records before 04 take 4 * 64 = 256 bytes of block tables
+        self.assertEqual(
+            str(cm.exception),
+            "Found nBlockCount 8 for sequence 04, too many blocks for a file of 279 bytes",
+        )
+
+    def test_shared_record(self):
+        """Check a record shared by several names is read only once."""
+        path = support.DATA / "TwoBit" / "sequence.littleendian.2bit"
+        data = bytearray(path.read_bytes())
+        # Point the index entry of seq222, whose offset is at byte 36, at the
+        # record of seq11111 at byte 81.
+        data[36:40] = (81).to_bytes(4, "little")
+        with tempfile.TemporaryFile() as stream:
+            stream.write(data)
+            stream.seek(0)
+            records = SeqIO.parse(stream, "twobit")
+            self.assertEqual(len(records), 6)
+            seq = records["seq222"].seq
+            self.assertIs(seq, records["seq11111"].seq)
+            self.assertEqual(seq, self.records[0].seq)
 
 
 class TestComparisons(unittest.TestCase):
