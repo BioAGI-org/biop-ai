@@ -311,6 +311,28 @@ class TestPhenoMicro(unittest.TestCase):
 
         w[1] = 1
 
+    def test_WellRecord_slice_to_huge_last_time(self):
+        """Test a slice ending at a huge last time point raises ValueError."""
+        # A plate whose last time point is 1e17 hours. A slice without a
+        # stop ends at the last time point, so well[:] used to build a grid
+        # of 1e17 hourly points; 1e9 hours needs about 56 GB. 1e17 is beyond
+        # any address space, so the old code fails at once with MemoryError
+        # rather than really allocating.
+        with open(SMALL_JSON_PLATE) as handle:
+            data = json.load(handle)
+        data["measurements"]["Hour"][-1] = 1e17
+        plate = phenotype.read(StringIO(json.dumps(data)), "pm-json")
+        well = plate["A01"]
+        for key in (slice(None), slice(50, None), slice(None, None, 0.5)):
+            with self.subTest(key=key):
+                with self.assertRaisesRegex(
+                    ValueError, "more than 1000000 values; give an explicit stop"
+                ):
+                    well[key]
+        # An explicit stop is the caller's own choice and is not limited.
+        self.assertEqual(well[0:2], [well[0], well[1]])
+        self.assertEqual(well[2e17:], [])
+
     def test_JsonIterator(self):
         """Test basic functionalities of JsonIterator file parser."""
         # Parse file content big enough to trigger issue #3783
