@@ -128,6 +128,11 @@ class Hmmer3TextParser:
             qdesc = "<unknown description>"  # placeholder
             while not self.line.startswith("Scores for "):
                 self.line = read_forward(self.handle)
+                if not self.line:
+                    raise ValueError(
+                        f"File ended in the header of query {qid!r},"
+                        " before the 'Scores for' line"
+                    )
 
                 if self.line.startswith("Accession:"):
                     acc = self.line.strip().split(" ", 1)[1]

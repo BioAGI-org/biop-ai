@@ -316,6 +316,37 @@ class Hmmer(unittest.TestCase):
                     str(cm.exception),
                 )
 
+    def test_hmmer3_file_ends_before_scores(self):
+        with open(support.DATA / "Hmmer" / "text_30_hmmsearch_002.out") as handle:
+            text = handle.read()
+        cuts = {
+            "after the Query line": text.index("Accession:   PF00069.17\n"),
+            "after the Accession line": text.index("Description: Protein kinase"),
+            "inside the Description line": text.index(" kinase domain\nScores for"),
+            "after the Description line": text.index("Scores for complete"),
+        }
+        for where, cut in cuts.items():
+            with self.subTest(where=where):
+                with self.assertRaises(ValueError) as cm:
+                    parse_all_guarded(text[:cut], "hmmer3-text")
+                self.assertIn(
+                    "File ended in the header of query 'Pkinase',"
+                    " before the 'Scores for' line",
+                    str(cm.exception),
+                )
+
+    def test_hmmer3_later_query_ends_before_scores(self):
+        # The first result is complete; the file stops in the second header.
+        with open(support.DATA / "Hmmer" / "text_30_hmmscan_001.out") as handle:
+            text = handle.read()
+        desc = "Description: myoglobin [Homo sapiens]\n"
+        with self.assertRaises(ValueError) as cm:
+            parse_all_guarded(text[: text.index(desc) + len(desc)], "hmmer3-text")
+        self.assertIn(
+            "File ended in the header of query 'gi|4885477|ref|NP_005359.1|'",
+            str(cm.exception),
+        )
+
     def test_hmmer3_domtab_row_too_short(self):
         with open(support.DATA / "Hmmer" / "domtab_30_hmmscan_001.out") as handle:
             lines = handle.readlines()
