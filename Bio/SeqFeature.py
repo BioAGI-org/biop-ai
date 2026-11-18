@@ -105,7 +105,12 @@ else:
 # Regular expressions for location parsing
 
 _reference = r"(?:[a-zA-Z][a-zA-Z0-9_\.\|]*[a-zA-Z0-9]?\:)"
-_oneof_position = r"one\-of\(\d+[,\d+]+\)"
+# A digit and then one or more digits, commas or plus signs. This accepts
+# exactly what the older one\-of\(\d+[,\d+]+\) did, including "one-of(12)",
+# which SeqIO writes for a OneOfPosition with one choice, but in linear time:
+# there \d+ and [,\d+]+ could split a run of digits in many ways, and re
+# tried every one when the match failed, quadratic in the run length.
+_oneof_position = r"one\-of\(\d[\d,+]+\)"
 
 _oneof_location = rf"[<>]?(?:\d+|{_oneof_position})\.\.[<>]?(?:\d+|{_oneof_position})"
 
@@ -166,7 +171,7 @@ _re_within_position = re.compile(_within_position)
 assert _re_within_position.match("(3.9)")
 
 _oneof_location = r"([<>]?\d+|%s)\.\.([<>]?\d+|%s)" % (_oneof_position, _oneof_position)
-_oneof_position = r"one\-of\((\d+[,\d+]+)\)"
+_oneof_position = r"one\-of\((\d[\d,+]+)\)"
 _re_oneof_position = re.compile(_oneof_position)
 assert _re_oneof_position.match("one-of(6,9)")
 assert not _re_oneof_position.match("one-of(3)")
