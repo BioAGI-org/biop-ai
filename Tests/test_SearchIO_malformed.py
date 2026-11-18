@@ -279,6 +279,32 @@ class Hmmer(unittest.TestCase):
             parse_all_guarded(text + "stray trailing line\n", "hmmer3-text")
         self.assertIn("File ended before a 'Query:' line", str(cm.exception))
 
+    def test_hmmer3_blank_line_after_alignment_comment(self):
+        # A blank line after the "# Alignment of" line that phmmer -A prints
+        # after a result is not content, so the file still parses.
+        comment = "# Alignment of 1 hits satisfying inclusion thresholds saved to: x\n"
+        with open(support.DATA / "Hmmer" / "text_30_hmmscan_001.out") as handle:
+            text_30 = handle.read()
+        with open(support.DATA / "Hmmer" / "text_31b2_phmmer_001.out") as handle:
+            text_31 = handle.read()
+        ok = "saved to: /dev/null\n[ok]\n"
+        self.assertIn(ok, text_31)
+        cases = {
+            "HMMER 3.0, at the end of the file": (text_30, text_30 + comment + "\n"),
+            "HMMER 3.1, before the [ok] line": (
+                text_31,
+                text_31.replace(ok, "saved to: /dev/null\n\n[ok]\n"),
+            ),
+        }
+        for where, (text, edited_text) in cases.items():
+            with self.subTest(where=where):
+                expected = parse_all(text, "hmmer3-text")
+                qresults = parse_all_guarded(edited_text, "hmmer3-text")
+                self.assertEqual(
+                    [(qresult.id, len(qresult)) for qresult in expected],
+                    [(qresult.id, len(qresult)) for qresult in qresults],
+                )
+
     def test_hmmer3_file_ends_inside_alignment(self):
         with open(support.DATA / "Hmmer" / "text_30_hmmscan_003.out") as handle:
             text = handle.read()

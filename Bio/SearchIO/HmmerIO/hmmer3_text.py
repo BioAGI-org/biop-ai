@@ -164,9 +164,10 @@ class Hmmer3TextParser:
             self.line = read_forward(self.handle)
 
             # Skip line beginning with '# Alignment of', which are output
-            # when running phmmer with the '-A' flag.
+            # when running phmmer with the '-A' flag, and any blank lines
+            # after it.
             if self.line.startswith("#"):
-                self.line = self.handle.readline()
+                self.line = read_forward(self.handle)
 
             # HMMER >= 3.1 outputs '[ok]' at the end of all results file,
             # which means we can break the main loop when we see the line
