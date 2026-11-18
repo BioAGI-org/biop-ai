@@ -21,6 +21,27 @@ from Bio import SearchIO
 from Bio.SeqRecord import SeqRecord
 
 
+class EndOfFileGuard(BytesIO):
+    """Binary handle that fails if the indexer keeps reading at end of file.
+
+    An indexer stuck in a loop at end of file would otherwise hang the suite.
+    """
+
+    def __init__(self, data):
+        """Initialize the handle with the bytes to read."""
+        super().__init__(data)
+        self.reads_at_end = 0
+
+    def readline(self, *args):
+        """Read a line, failing after many reads at end of file."""
+        line = super().readline(*args)
+        if not line:
+            self.reads_at_end += 1
+            if self.reads_at_end > 100:
+                raise AssertionError("indexer kept reading at end of file")
+        return line
+
+
 class SearchTestBaseClass(unittest.TestCase):
     def compare_attrs(self, obj_a, obj_b, attrs):
         """Compare attribute values of two objects."""

@@ -10,10 +10,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import support
 from search_tests_common import CheckIndex
 from search_tests_common import CheckRaw
+from search_tests_common import EndOfFileGuard
+
+from Bio import SearchIO
 
 import Bio
 from Bio import SearchIO
@@ -398,6 +402,37 @@ index.close()
         qresult = SearchIO.read(filename, self.fmt)
         self.assertEqual("random_s00", qresult.id)
         self.assertEqual(32, qresult.seq_len)
+
+
+class TruncatedCases(unittest.TestCase):
+    """A file cut short after indexing raises ValueError when read back."""
+
+    def test_file_truncated_after_indexing(self):
+        """Test reading back a query after the file was cut in its preamble."""
+        # A file can shrink under its index: truncated in place while a
+        # SearchIO.index dict is open, or replaced after index_db wrote its
+        # offsets to disk. get_raw first reads the preamble, from the start
+        # of the file to the first "Query: " line.
+        filename = support.DATA / "Hmmer" / "text_30_hmmscan_001.out"
+        with open(filename, "rb") as handle:
+            data = handle.read()
+        handle = EndOfFileGuard(data)
+        with mock.patch(
+            "Bio.SearchIO._index._open_for_random_access", return_value=handle
+        ):
+            index = SearchIO.index("test.out", "hmmer3-text")
+        self.addCleanup(index.close)
+        key = "gi|4885477|ref|NP_005359.1|"
+        self.assertEqual(list(index)[1], key)
+        # Cut the file just before its first "Query: " line.
+        handle.truncate(data.index(b"Query: "))
+        for name, get in (("get_raw", index.get_raw), ("getitem", index.__getitem__)):
+            with self.subTest(name):
+                with self.assertRaises(ValueError) as cm:
+                    get(key)
+                self.assertEqual(
+                    str(cm.exception), "File ended before the first 'Query: ' line"
+                )
 
 
 if __name__ == "__main__":
