@@ -58,6 +58,8 @@ SPECIALCOMMENTS = [
 # stands for the quote itself). Quotes are kept, so SYMBOLS="0 1 2" gives the
 # value '"0 1 2"'.
 _OPTION_TOKEN = re.compile(r"""(?:'(?:[^']|'')*'|"(?:[^"]|"")*")[^\s=]*|=|[^\s=]+""")
+# \S matches exactly the characters that str.strip() keeps
+_NON_WHITESPACE = re.compile(r"\S")
 CHARSET = "chars"
 TAXSET = "taxa"
 CODONPOSITIONS = "codonpositions"
@@ -74,30 +76,39 @@ class CharBuffer:
 
     def __init__(self, string):
         """Initialize the class."""
-        if string:
-            self.buffer = list(string)
-        else:
-            self.buffer = []
+        # Reading moves a position along the text, instead of removing
+        # characters from the front of a list, so that reading a whole
+        # command takes time linear in its length, not quadratic.
+        self._text = string if string else ""
+        self._pos = 0
+
+    @property
+    def buffer(self):
+        """Return the characters not read yet, as a string (read-only)."""
+        return self._text[self._pos :]
 
     def peek(self):
         """Return the first character from the buffer."""
-        if self.buffer:
-            return self.buffer[0]
+        if self._pos < len(self._text):
+            return self._text[self._pos]
         else:
             return None
 
     def peek_nonwhitespace(self):
         """Return the first character from the buffer, do not include spaces."""
-        b = "".join(self.buffer).strip()
-        if b:
-            return b[0]
+        # skips any whitespace that str.strip() removes, not only WHITESPACE
+        match = _NON_WHITESPACE.search(self._text, self._pos)
+        if match:
+            return match.group()
         else:
             return None
 
     def __next__(self):
         """Iterate over NEXUS characters in the file."""
-        if self.buffer:
-            return self.buffer.pop(0)
+        if self._pos < len(self._text):
+            c = self._text[self._pos]
+            self._pos += 1
+            return c
         else:
             return None
 
@@ -113,26 +124,22 @@ class CharBuffer:
 
     def skip_whitespace(self):
         """Skip whitespace characters in NEXUS file."""
-        while self.buffer[0] in WHITESPACE:
-            self.buffer = self.buffer[1:]
+        while self._text[self._pos] in WHITESPACE:
+            self._pos += 1
 
     def next_until(self, target):
         """Iterate over the NEXUS file until a target character is reached."""
         for t in target:
-            try:
-                pos = self.buffer.index(t)
-            except ValueError:
-                pass
-            else:
-                found = "".join(self.buffer[:pos])
-                self.buffer = self.buffer[pos:]
+            pos = self._text.find(t, self._pos)
+            if pos != -1:
+                found = self._text[self._pos : pos]
+                self._pos = pos
                 return found
-        else:
-            return None
+        return None
 
     def peek_word(self, word):
         """Return a word stored in the buffer."""
-        return "".join(self.buffer[: len(word)]) == word
+        return self._text.startswith(word, self._pos)
 
     def next_word(self, extra_chars=""):
         """Return the next NEXUS word from a string.
@@ -186,7 +193,7 @@ class CharBuffer:
 
     def rest(self):
         """Return the rest of the string without parsing."""
-        return "".join(self.buffer)
+        return self._text[self._pos :]
 
 
 class StepMatrix:
@@ -791,8 +798,7 @@ class Nexus:
         """Return a generator for looping through Nexus blocks (PRIVATE)."""
         inblock = False
         blocklines = []
-        while file_contents:
-            cl = file_contents.pop(0)
+        for cl in file_contents:
             if cl.lower().startswith("begin"):
                 if not inblock:
                     inblock = True

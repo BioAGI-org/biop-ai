@@ -2045,6 +2045,49 @@ class TestNcharBound(unittest.TestCase):
         self.assertEqual(str(nexus.matrix["t2"]), "ACGA")
 
 
+class TestLongInput(unittest.TestCase):
+    """Long commands, and many commands, parse in linear time.
+
+    CharBuffer, which reads the words of a command, removed the first item
+    of a list of the command's characters for each character it read, and
+    joined all the characters left for each item of a set; the block reader
+    removed the first item of the list of commands for each command. So the
+    time grew with the square of the input: each input below took one and a
+    half to two minutes to parse, and now takes about a second or less.
+    """
+
+    def test_translate(self):
+        """A TRANSLATE table of 50,000 taxa."""
+        n = 50_000
+        table = ",\n".join(f"{i} taxon_{i}" for i in range(1, n + 1))
+        nexus = Nexus.Nexus(
+            f"#NEXUS\nbegin trees;\ntranslate\n{table};\ntree t = (1,{n});\nend;\n"
+        )
+        self.assertEqual(nexus.translate, {i: f"taxon_{i}" for i in range(1, n + 1)})
+        self.assertEqual(nexus.trees[0].get_taxa(), ["taxon_1", f"taxon_{n}"])
+
+    def test_charset(self):
+        """A CHARSET of 80,000 items, half of them ranges."""
+        nexus = Nexus.Nexus(
+            "#NEXUS\nbegin data;\ndimensions ntax=1 nchar=4;\nformat datatype=dna;\n"
+            "matrix\nt1 ACGT\n;\nend;\nbegin sets;\n"
+            f"charset c = {'2 3-4 ' * 40_000};\nend;\n"
+        )
+        self.assertEqual(nexus.charsets, {"c": [1, 2, 3]})
+
+    def test_many_commands(self):
+        """A block of 800,000 commands."""
+        n = 800_000
+        nexus = Nexus.Nexus(
+            "#NEXUS\nbegin foo;\n" + "x;" * n + "\nend;\nbegin data;\n"
+            "dimensions ntax=1 nchar=4;\nformat datatype=dna;\nmatrix\nt1 ACGT\n;\nend;\n"
+        )
+        self.assertEqual(len(nexus.unknown_blocks), 1)
+        self.assertEqual(nexus.unknown_blocks[0].title, "foo")
+        self.assertEqual(nexus.unknown_blocks[0].commandlines, [["x"] * n])
+        self.assertEqual(str(nexus.matrix["t1"]), "ACGT")
+
+
 @unittest.skipIf(cnexus is None, "C extension Bio.Nexus.cnexus not available")
 @unittest.skipUnless(
     sys.platform.startswith("linux") and sys.maxsize > 2**32,
