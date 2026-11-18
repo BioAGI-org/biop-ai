@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from typing import Any
 from typing import cast
 from typing import IO
+from typing import Literal
 from typing import SupportsFloat
 from typing import SupportsIndex
 from typing import TYPE_CHECKING
@@ -377,7 +378,8 @@ def treecluster(
        As the treecluster routine may shuffle the values in the
        distance matrix as part of the clustering algorithm, be sure
        to save this array in a different variable before calling
-       treecluster if you need it later.
+       treecluster if you need it later. A read-only distance matrix,
+       such as one from np.load with mmap_mode="r", is left unchanged.
 
     Either data or distancematrix should be None. If distancematrix is None,
     the hierarchical clustering solution is calculated from the values stored
@@ -402,7 +404,8 @@ def treecluster(
         mask = __check_mask(mask, shape)
         weight = __check_weight(weight, ndata)
     elif distancematrix is not None:
-        distancematrix = __check_distancematrix(distancematrix)
+        # Single linkage only reads the distance matrix
+        distancematrix = __check_distancematrix(distancematrix, method != "s")
         if mask is not None:
             raise ValueError("mask is ignored if distancematrix is used")
         if weight is not None:
@@ -1480,12 +1483,17 @@ def __check_index(index: "ArrayLike | None") -> "NDArray[np.intc]":
 
 
 def __check_distancematrix(
-    distancematrix: "ArrayLike",
+    distancematrix: "ArrayLike", writable: bool = False
 ) -> "NDArray[np.float64] | list[NDArray[np.float64]]":
+    # With writable, np.require copies a read-only array, so that the C code
+    # can write into it.
+    requirements: list[Literal["C", "W"]] = ["C", "W"] if writable else ["C"]
     if distancematrix is None:
         return distancematrix
     if isinstance(distancematrix, np.ndarray):
-        distancematrix = np.require(distancematrix, dtype="d", requirements="C")
+        distancematrix = np.require(
+            distancematrix, dtype="d", requirements=requirements
+        )
     else:
         try:
             distancematrix = np.array(distancematrix, dtype="d")
@@ -1496,7 +1504,7 @@ def __check_distancematrix(
             d: list[NDArray[np.float64]] = []
             for i, row in enumerate(rows):
                 if isinstance(row, np.ndarray):
-                    row = np.require(row, dtype="d", requirements="C")
+                    row = np.require(row, dtype="d", requirements=requirements)
                 else:
                     row = np.array(row, dtype="d")
                 if row.ndim != 1:

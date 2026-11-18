@@ -2241,6 +2241,53 @@ class TestCluster(unittest.TestCase):
         self.assertEqual(indices[11], 1)
         self.assertEqual(indices[12], 0)
 
+    def test_treecluster_read_only_distancematrix(self):
+        """Check treecluster leaves a read-only distance matrix unchanged.
+
+        Methods "m" and "a" overwrite the distance matrix as they cluster.
+        They wrote into a read-only one too, and crashed if its memory was
+        read-only, as for an array from np.load(path, mmap_mode="r").
+        """
+        if TestCluster.module == "Bio.Cluster":
+            from Bio.Cluster import treecluster
+        elif TestCluster.module == "Pycluster":
+            from Pycluster import treecluster
+
+        matrix = np.array(
+            [
+                [0.0, 1.1, 2.3, 4.0],
+                [1.1, 0.0, 4.5, 3.0],
+                [2.3, 4.5, 0.0, 0.7],
+                [4.0, 3.0, 0.7, 0.0],
+            ]
+        )
+        layouts = {
+            "2-D": lambda: matrix.copy(),
+            "1-D": lambda: matrix[np.tril_indices(4, -1)],
+            "rows": lambda: [matrix[i, :i].copy() for i in range(4)],
+        }
+        for layout, make in layouts.items():
+            for method in "sma":
+                with self.subTest(layout=layout, method=method):
+                    writable = make()
+                    expected = str(
+                        treecluster(None, distancematrix=writable, method=method)
+                    )
+                    original = make()
+                    distances = make()
+                    for array in distances if layout == "rows" else [distances]:
+                        array.flags.writeable = False
+                    tree = treecluster(None, distancematrix=distances, method=method)
+                    self.assertEqual(str(tree), expected)
+                    for array, value in zip(distances, original):
+                        np.testing.assert_array_equal(array, value)
+                    # As documented, a writable matrix is still used in place
+                    changed = any(
+                        not np.array_equal(array, value)
+                        for array, value in zip(writable, original)
+                    )
+                    self.assertEqual(changed, method != "s")
+
     def test_somcluster_arguments(self):
         # Test if incorrect arguments are caught by the C code
         if TestCluster.module == "Bio.Cluster":
@@ -3220,6 +3267,76 @@ class TestCluster(unittest.TestCase):
                 )
                 np.testing.assert_allclose(pc @ pc.T, np.eye(2), rtol=0, atol=1e-12)
 
+    def test_read_only_outputs(self):
+        """Check the private functions refuse to write into a read-only array.
+
+        They wrote their results into the arrays they were given whether or
+        not those were read-only.
+        """
+        if TestCluster.module == "Bio.Cluster":
+            from Bio.Cluster import _cluster
+        elif TestCluster.module == "Pycluster":
+            from Pycluster import _cluster
+
+        def read_only(array):
+            array = np.array(array)
+            array.flags.writeable = False
+            return array
+
+        def check(function, arguments, index, name):
+            # Call function with a read-only copy of arguments[index]
+            original = arguments[index]
+            arguments = list(arguments)
+            array = arguments[index] = read_only(original)
+            with self.subTest(function=function.__name__, name=name):
+                with self.assertRaisesRegex(ValueError, f"^{name} is read-only$"):
+                    function(*arguments)
+                np.testing.assert_array_equal(array, original)
+
+        data = np.array([[1.0, 2.0], [1.1, 2.1], [8.0, 9.0], [8.1, 9.1]])
+        mask = np.ones(data.shape, np.intc)
+        weight = np.ones(2)
+        matrix = abs(data[:, :1] - data[:, 0])
+        clusterid = np.array([0, 0, 1, 1], np.intc)
+        nodes = [_cluster.Node(0, 1), _cluster.Node(2, 3), _cluster.Node(-1, -2)]
+        tree = _cluster.Tree(nodes)
+        check(_cluster.Tree.cut, (tree, clusterid, 2), 1, "indices")
+        check(_cluster.Tree.sort, (tree, clusterid, np.ones(4)), 1, "indices")
+        arguments = (data, 2, mask, weight, 0, 1, "a", "e", clusterid, 1)
+        check(_cluster.kcluster, arguments, 8, "clusterid")
+        check(_cluster.kmedoids, (matrix, 2, 1, clusterid, 1), 3, "clusterid")
+        clusterids = np.zeros((4, 2), np.intc)
+        celldata = np.zeros((2, 1, 2))
+        arguments = (clusterids, celldata, data, mask, weight, 0, 0.02, 1, "e", 1)
+        check(_cluster.somcluster, arguments, 0, "clusterids")
+        check(_cluster.somcluster, arguments, 1, "celldata")
+        cdata = np.zeros((2, 2))
+        cmask = np.zeros((2, 2), np.intc)
+        arguments = (data, mask, clusterid, "a", 0, cdata, cmask)
+        check(_cluster.clustercentroids, arguments, 5, "cdata")
+        check(_cluster.clustercentroids, arguments, 6, "cmask")
+        names = ("columnmean", "coordinates", "pc", "eigenvalues")
+        arguments = (data, np.zeros(2), np.zeros((4, 2)), np.zeros((2, 2)), np.zeros(2))
+        for index, name in enumerate(names, 1):
+            check(_cluster.pca, arguments, index, name)
+        rows = [np.zeros(i) for i in range(4)]
+        rows[3] = read_only(rows[3])
+        with self.assertRaisesRegex(ValueError, "^row 3 is read-only$"):
+            _cluster.distancematrix(data, mask, weight, 0, "e", rows)
+        self.assertEqual(rows[3].tolist(), [0, 0, 0])
+        for method in "ma":
+            arguments = (_cluster.Tree(), None, None, None, 0, method, "e", matrix)
+            check(_cluster.treecluster, arguments, 7, "distancematrix")
+            rows = [matrix[i, :i].copy() for i in range(4)]
+            rows[2] = read_only(rows[2])
+            with self.assertRaisesRegex(ValueError, "^row 2 is read-only$"):
+                _cluster.treecluster(*arguments[:7], rows)
+            self.assertEqual(rows[2].tolist(), matrix[2, :2].tolist())
+        # Single linkage only reads the distance matrix
+        tree = _cluster.Tree()
+        _cluster.treecluster(tree, None, None, None, 0, "s", "e", read_only(matrix))
+        self.assertEqual(len(tree), 3)
+
 
 class TestClusterRNGSeed(unittest.TestCase):
     """Tests for the rng_seed argument of kcluster, kmedoids and somcluster.
@@ -3949,6 +4066,42 @@ for size in (3, 5):
         raise AssertionError(f"distancematrix: no ValueError for size {size}")
 clusterid, error, nfound = kmedoids(np.array([1.5]), nclusters=2, rng_seed=1)
 assert clusterid.tolist() == [0, 1], clusterid
+print("OK")
+"""
+        )
+
+    def test_treecluster_read_only_memmap(self):
+        """Check treecluster takes a distance matrix memory-mapped read-only.
+
+        Methods "m" and "a" wrote into the distance matrix, which segfaulted
+        when its pages were mapped read-only.
+        """
+        self.run_child(
+            """
+import os
+import tempfile
+import numpy as np
+from Bio.Cluster import _cluster, treecluster
+
+matrix = np.array([[0.0, 1.1, 2.3], [1.1, 0.0, 4.5], [2.3, 4.5, 0.0]])
+with tempfile.TemporaryDirectory() as directory:
+    path = os.path.join(directory, "distances.npy")
+    np.save(path, matrix)
+    for method in "sma":
+        expected = str(treecluster(None, distancematrix=matrix.copy(), method=method))
+        distances = np.load(path, mmap_mode="r")
+        tree = treecluster(None, distancematrix=distances, method=method)
+        assert str(tree) == expected, (method, str(tree), expected)
+        del distances
+    assert (np.load(path) == matrix).all()
+    distances = np.load(path, mmap_mode="r")
+    try:
+        _cluster.treecluster(_cluster.Tree(), None, None, None, 0, "m", "e", distances)
+    except ValueError as error:
+        assert str(error) == "distancematrix is read-only", error
+    else:
+        raise AssertionError("no ValueError")
+    del distances
 print("OK")
 """
         )
