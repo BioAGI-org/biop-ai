@@ -6,10 +6,14 @@
 """Tests for SearchIO blast-tab indexing."""
 
 import unittest
+from unittest import mock
 
 import support
 from search_tests_common import CheckIndex
 from search_tests_common import CheckRaw
+from search_tests_common import EndOfFileGuard
+
+from Bio import SearchIO
 
 
 class BlastTabRawCases(CheckRaw):
@@ -193,6 +197,60 @@ class BlastTabIndexCases(CheckIndex):
         """Test blast-tab indexing, BLAST 2.2.26+, all columns, commented."""
         filename = support.DATA / "Blast" / "tab_2226_tblastn_011.txt"
         self.check_index(filename, self.fmt, comments=True)
+
+
+class TruncatedCases(unittest.TestCase):
+    """A file cut short after indexing is read back without looping."""
+
+    def index(self, data):
+        """Index data as blast-tab through EndOfFileGuard; return both."""
+        handle = EndOfFileGuard(data)
+        with mock.patch(
+            "Bio.SearchIO._index._open_for_random_access", return_value=handle
+        ):
+            index = SearchIO.index("test.txt", "blast-tab")
+        self.addCleanup(index.close)
+        return index, handle
+
+    def test_query_after_end_of_file(self):
+        """Test reading back a query that starts after the new end of file."""
+        # A file can shrink under its index: truncated in place while a
+        # SearchIO.index dict is open, or replaced after index_db wrote its
+        # offsets to disk.
+        filename = support.DATA / "Blast" / "tab_2226_tblastn_001.txt"
+        with open(filename, "rb") as handle:
+            data = handle.read()
+        index, handle = self.index(data)
+        key = "gi|11464971:4-101"
+        self.assertEqual(list(index), ["gi|16080617|ref|NP_391444.1|", key])
+        offset = data.index(b"\n" + key.encode() + b"\t") + 1
+        # Cut the file after its first line, well before the last query.
+        handle.truncate(data.index(b"\n") + 1)
+        for name, get in (("get_raw", index.get_raw), ("getitem", index.__getitem__)):
+            with self.subTest(name):
+                with self.assertRaises(ValueError) as cm:
+                    get(key)
+                self.assertEqual(
+                    str(cm.exception), f"File ended before the query at offset {offset}"
+                )
+
+    def test_empty_query_id_at_end_of_file(self):
+        """Test reading back a query with an empty ID that ends the file."""
+        # The first query's ID column is blanked, and the file is cut after
+        # indexing where that query ends. At end of file the ID column of
+        # the empty "line" is empty too, so the reader must stop there, not
+        # take it as more of this query.
+        filename = support.DATA / "Blast" / "tab_2226_tblastn_001.txt"
+        with open(filename, "rb") as handle:
+            data = handle.read()
+        data = data.replace(b"gi|16080617|ref|NP_391444.1|\t", b"\t")
+        index, handle = self.index(data)
+        key = "gi|11464971:4-101"
+        self.assertEqual(list(index), ["", key])
+        # Cut the file where the query with the empty ID ends.
+        end = data.index(b"\n" + key.encode() + b"\t") + 1
+        handle.truncate(end)
+        self.assertEqual(index.get_raw(""), data[:end])
 
 
 if __name__ == "__main__":
