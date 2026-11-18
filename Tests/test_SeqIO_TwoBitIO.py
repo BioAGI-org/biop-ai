@@ -1,5 +1,6 @@
 """Tests for SeqIO TwoBitIO module."""
 
+import io
 import sys
 import tempfile
 import unittest
@@ -189,6 +190,63 @@ class Parsing(unittest.TestCase):
             seq = records["seq222"].seq
             self.assertIs(seq, records["seq11111"].seq)
             self.assertEqual(seq, self.records[0].seq)
+
+    def test_truncated_file(self):
+        """Check a file that ends too early raises ValueError."""
+        path = support.DATA / "TwoBit" / "sequence.littleendian.2bit"
+        data = path.read_bytes()
+        # The header takes bytes 0-15 and the index bytes 16-80. The record of
+        # seq6, the last one, takes bytes 726-765, followed by its DNA. A file
+        # cut before byte 766 is therefore missing part of the header, the
+        # index or a record.
+        sizes = (
+            4,  # before the version
+            14,  # in the reserved field of the header
+            16,  # before the index
+            20,  # in the name of seq11111
+            38,  # in the offset of seq222
+            726,  # before the record of seq6
+            744,  # in the maskBlockCount of seq6
+            764,  # in the reserved field of seq6
+        )
+        for size in range(766):
+            with self.subTest(size=size):
+                with tempfile.TemporaryFile() as stream:
+                    stream.write(data[:size])
+                    stream.seek(0)
+                    with self.assertRaises(ValueError) as cm:
+                        SeqIO.parse(stream, "twobit")
+                # Other sizes give other messages, such as "Unknown signature"
+                # or a block count too large for the file
+                if size in sizes:
+                    self.assertEqual(
+                        str(cm.exception), "Unexpected end of file at byte %d" % size
+                    )
+
+    def test_sequence_count_too_large(self):
+        """Check the index is not read past the end of the file."""
+        # A header claiming 2**32 - 1 sequences, with no index after it
+        data = (0x1A412743).to_bytes(4, "little")
+        data += (0).to_bytes(4, "little")
+        data += (0xFFFFFFFF).to_bytes(4, "little")
+        data += (0).to_bytes(4, "little")
+
+        class Stream(io.BytesIO):
+            """Fail, rather than hang, if the parser keeps reading at the end."""
+
+            empty_reads = 0
+
+            def read(self, size=-1):
+                data = super().read(size)
+                if size and not data:
+                    self.empty_reads += 1
+                    if self.empty_reads > 100:
+                        raise AssertionError("kept reading at end of file")
+                return data
+
+        with self.assertRaises(ValueError) as cm:
+            SeqIO.parse(Stream(data), "twobit")
+        self.assertEqual(str(cm.exception), "Unexpected end of file at byte 16")
 
 
 class TestComparisons(unittest.TestCase):

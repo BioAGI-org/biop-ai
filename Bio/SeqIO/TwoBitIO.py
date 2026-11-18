@@ -92,6 +92,18 @@ from . import _twoBitIO
 from .Interfaces import SequenceIterator
 
 
+def _read(stream, size):
+    """Read size bytes from stream, or raise ValueError at end of file (PRIVATE).
+
+    Without this check, a read at the end of the file returns no data, which
+    int.from_bytes would take as zero.
+    """
+    data = stream.read(size)
+    if len(data) < size:
+        raise ValueError("Unexpected end of file at byte %d" % stream.tell())
+    return data
+
+
 class _TwoBitSequenceData(SequenceDataAbstractBaseClass):
     """Stores information needed to retrieve sequence data from a .2bit file (PRIVATE).
 
@@ -198,7 +210,7 @@ class TwoBitIterator(SequenceIterator):
         else:
             raise ValueError("Unknown signature")
         self.byteorder = byteorder
-        data = stream.read(4)
+        data = _read(stream, 4)
         version = int.from_bytes(data, byteorder, signed=False)
         if version == 1:
             raise ValueError(
@@ -206,19 +218,19 @@ class TwoBitIterator(SequenceIterator):
             )
         if version != 0:
             raise ValueError("Found unexpected file version %u; aborting" % version)
-        data = stream.read(4)
+        data = _read(stream, 4)
         sequenceCount = int.from_bytes(data, byteorder, signed=False)
-        data = stream.read(4)
+        data = _read(stream, 4)
         reserved = int.from_bytes(data, byteorder, signed=False)
         if reserved != 0:
             raise ValueError("Found non-zero reserved field; aborting")
         sequences = {}
         for i in range(sequenceCount):
-            data = stream.read(1)
+            data = _read(stream, 1)
             nameSize = int.from_bytes(data, byteorder, signed=False)
-            data = stream.read(nameSize)
+            data = _read(stream, nameSize)
             name = data.decode("ASCII")
-            data = stream.read(4)
+            data = _read(stream, 4)
             offset = int.from_bytes(data, byteorder, signed=False)
             sequences[name] = (stream, offset)
         self.sequences = sequences
@@ -235,10 +247,10 @@ class TwoBitIterator(SequenceIterator):
                 sequences[name] = records[offset]
                 continue
             stream.seek(offset)
-            data = stream.read(4)
+            data = _read(stream, 4)
             dnaSize = int.from_bytes(data, byteorder, signed=False)
             sequence = _TwoBitSequenceData(stream, offset, dnaSize)
-            data = stream.read(4)
+            data = _read(stream, 4)
             nBlockCount = int.from_bytes(data, byteorder, signed=False)
             size = 8 * nBlockCount
             if size > unclaimed or size > filesize - stream.tell():
@@ -252,7 +264,7 @@ class TwoBitIterator(SequenceIterator):
             sequence.nBlocks = np.empty((nBlockCount, 2), dtype="uint32")
             sequence.nBlocks[:, 0] = nBlockStarts
             sequence.nBlocks[:, 1] = nBlockStarts + nBlockSizes
-            data = stream.read(4)
+            data = _read(stream, 4)
             maskBlockCount = int.from_bytes(data, byteorder, signed=False)
             size = 8 * maskBlockCount
             if size > unclaimed or size > filesize - stream.tell():
@@ -266,7 +278,7 @@ class TwoBitIterator(SequenceIterator):
             sequence.maskBlocks = np.empty((maskBlockCount, 2), dtype="uint32")
             sequence.maskBlocks[:, 0] = maskBlockStarts
             sequence.maskBlocks[:, 1] = maskBlockStarts + maskBlockSizes
-            data = stream.read(4)
+            data = _read(stream, 4)
             reserved = int.from_bytes(data, byteorder, signed=False)
             if reserved != 0:
                 raise ValueError("Found non-zero reserved field %u" % reserved)
