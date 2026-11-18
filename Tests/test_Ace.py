@@ -9,6 +9,7 @@
 
 import unittest
 from io import StringIO
+from unittest import mock
 
 import support
 
@@ -2238,6 +2239,62 @@ DS CHROMAT_FILE: read1 PHD_FILE: read1.phd.1 TIME: Thu Jan 1 00:00:00 2009
             "^Contig 'Contig1' has 4 BQ quality values for 5 non-gap consensus bases$",
         ):
             self.parse(text)
+
+
+class CountingRT(Ace.rt):
+    """RT tag counting how often its name is read or it is compared."""
+
+    looks = 0
+    __hash__ = object.__hash__
+
+    @property
+    def name(self):
+        CountingRT.looks += 1
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = value
+
+    def __eq__(self, other):
+        CountingRT.looks += 1
+        return self is other
+
+
+class AceReadSortsTags(unittest.TestCase):
+    """Ace.read moves misplaced RT tags in time linear in their number."""
+
+    def test_footer_tags_linear(self):
+        """Check footer RT tags reach their reads without pairwise scans."""
+        nreads = 300
+        last = f"r{nreads - 1}"
+        lines = [f"AS 1 {nreads}", "", f"CO c 1 {nreads} 0 U", "A", "", "BQ", "1"]
+        for i in range(nreads):
+            lines += ["", f"RD r{i} 1 0 0", "A", "", "QA 1 1 1 1"]
+        # One footer block, as consed writes it, so the parser attaches
+        # every tag to the last read: first that read's own tags, then
+        # one tag for each other read.
+        lines += ["", "RT{"]
+        lines += [f"{last} own phrap 1 1 040217:110357"] * nreads
+        lines += [f"r{i} moved phrap 1 1 040217:110357" for i in range(nreads - 1)]
+        lines += ["}", ""]
+        CountingRT.looks = 0
+        with mock.patch.object(Ace, "rt", CountingRT):
+            record = Ace.read(StringIO("\n".join(lines)))
+        looks = CountingRT.looks
+        reads = record.contigs[0].reads
+        self.assertEqual(len(reads), nreads)
+        for i, read in enumerate(reads[:-1]):
+            self.assertEqual(
+                [(t.name, t.tag_type) for t in read.rt], [(f"r{i}", "moved")]
+            )
+        self.assertEqual(
+            [(t.name, t.tag_type) for t in reads[-1].rt], [(last, "own")] * nreads
+        )
+        # The old sort() read every misplaced tag's name once per read,
+        # and list.remove() compared it with every tag kept before it:
+        # about 180,000 looks here. Filing the 599 tags by name takes 898.
+        self.assertLess(looks, 10 * 2 * nreads)
 
 
 if __name__ == "__main__":
