@@ -25,6 +25,13 @@ class _BaseHmmerTextIndexer(SearchIndexer):
             handle.seek(0)
             while True:
                 line = handle.readline()
+                if not line:
+                    # The index no longer matches the file (truncated or
+                    # replaced after indexing)
+                    raise ValueError(
+                        "File ended before the first"
+                        f" {self.qresult_start.decode()!r} line"
+                    )
                 if line.startswith(self.qresult_start):
                     break
                 lines.append(line)
