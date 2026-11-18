@@ -293,8 +293,12 @@ class FastaM10Parser:
     def _parse_preamble(self):
         """Parse the Fasta preamble for Fasta flavor and version (PRIVATE)."""
         preamble = {}
+        line = self.handle.readline()
+        if not line:
+            # an empty file holds no query results
+            self.line = line
+            return preamble
         while True:
-            line = self.handle.readline()
             # this should be the line just before the first qresult
             if line.startswith("Query"):
                 break
@@ -306,6 +310,11 @@ class FastaM10Parser:
                 flav_match = re.match(_RE_FLAVS, line.lower())
                 if flav_match:
                     preamble["program"] = flav_match.group(0)
+            line = self.handle.readline()
+            if not line:
+                raise ValueError(
+                    "File ended before the 'Query' line of the FASTA preamble"
+                )
         self.line = line
 
         return preamble
@@ -334,6 +343,9 @@ class FastaM10Parser:
         state_QRES_END = 7
 
         line = self.line
+        # an empty file holds no query results
+        if not line:
+            return
 
         while True:
             # one line before the hit table

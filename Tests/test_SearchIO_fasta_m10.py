@@ -3165,6 +3165,31 @@ class Fasta36Cases(unittest.TestCase):
 class TruncatedCases(unittest.TestCase):
     """A file cut off part way through raises ValueError, not a hang."""
 
+    def test_empty_file(self):
+        """Test an empty file, which holds no query results."""
+        self.assertEqual(list(parse(EndOfFileGuard(""), FMT)), [])
+
+    def test_cut_in_preamble(self):
+        """Test a file that ends before the 'Query' line of its preamble."""
+        # Line 7 is the last line of the preamble: "Query: NC_002127.faa" in
+        # output001.m10 (FASTA 35), and "Query library NC_002127.faa vs ..."
+        # in output002.m10 (FASTA 34). A FASTA sequence file, given under
+        # the wrong format name, has no such line at all.
+        for name, handle in (
+            ("output001.m10, 1 line", truncated("output001.m10", 1)),
+            ("output001.m10, 3 lines", truncated("output001.m10", 3)),
+            ("output001.m10, 6 lines", truncated("output001.m10", 6)),
+            ("output002.m10, 6 lines", truncated("output002.m10", 6)),
+            ("FASTA sequence", EndOfFileGuard(">seq1\nACGT\n")),
+        ):
+            with self.subTest(name):
+                with self.assertRaises(ValueError) as cm:
+                    list(parse(handle, FMT))
+                self.assertEqual(
+                    str(cm.exception),
+                    "File ended before the 'Query' line of the FASTA preamble",
+                )
+
     def test_cut_before_first_hit(self):
         """Test a query whose alignments end before the first '>>' hit."""
         # In output001.m10, line 24 is ">>>gi|10955263|ref|NP_052604.1|, ...",
