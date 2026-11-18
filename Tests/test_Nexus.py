@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from io import StringIO
+from unittest import mock
 
 import support
 
@@ -1819,6 +1820,65 @@ end;
             with self.subTest(row=row, reader="Bio.Align"):
                 with self.assertRaisesRegex(ValueError, message):
                     next(AlignmentIterator(StringIO(text)))
+
+
+class TestUnclosedQuote(unittest.TestCase):
+    """A quoted word that runs to the end of the text raises NexusError.
+
+    The file may close the quote, but not within the part of it that one
+    parser reads: a line of the matrix, or one comma-separated part of a
+    partition.
+    """
+
+    def setUp(self):
+        # Before the fix next_word kept reading the empty buffer, adding
+        # None to the word until memory ran out. Stop such a loop early so
+        # that the test fails instead.
+        next_char = Nexus.CharBuffer.__next__
+
+        def bounded_next(buffer):
+            if not buffer.buffer:
+                buffer.reads_at_end = getattr(buffer, "reads_at_end", 0) + 1
+                if buffer.reads_at_end > 1000:
+                    raise AssertionError("CharBuffer read past its end 1000 times")
+            return next_char(buffer)
+
+        patcher = mock.patch.object(Nexus.CharBuffer, "__next__", bounded_next)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_next_word(self):
+        """CharBuffer.next_word raises NexusError on a word left open."""
+        for text, word in (("'t1", "'t1"), ('"a b', '"a b'), ("'it''", "'it'")):
+            with self.subTest(text=text):
+                with self.assertRaises(Nexus.NexusError) as cm:
+                    Nexus.CharBuffer(text).next_word()
+                self.assertEqual(str(cm.exception), f"Missing closing quote in: {word}")
+        # Closed quotes, and a doubled quote inside them, read as before
+        self.assertEqual(Nexus.CharBuffer("'it''s' x").next_word(), "'it's'")
+        self.assertEqual(Nexus.CharBuffer('"a b" x').next_word(), '"a b"')
+
+    def test_read(self):
+        """Reading such a file raises NexusError."""
+        matrix = (
+            "begin data;\ndimensions ntax=2 nchar=4;\nformat datatype=dna;\nmatrix\n"
+        )
+        for text, word in (
+            # a taxon label split over two lines of the matrix
+            (matrix + "'t1\nt2' ACGT\nt3 ACGT\n;\nend;\n", "'t1"),
+            # partitions are split at commas outside single quotes only
+            ('begin sets;\ntaxpartition p = "a,b" : 1;\nend;\n', '"a'),
+            (
+                matrix + "t1 ACGT\nt2 ACGT\n;\nend;\n"
+                'begin sets;\ncharpartition p = "a,b" : 1;\nend;\n',
+                '"a',
+            ),
+        ):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(
+                    Nexus.NexusError, f"^Missing closing quote in: {word}$"
+                ):
+                    Nexus.Nexus("#NEXUS\n" + text)
 
 
 @unittest.skipIf(cnexus is None, "C extension Bio.Nexus.cnexus not available")

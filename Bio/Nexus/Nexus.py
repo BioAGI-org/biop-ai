@@ -170,6 +170,9 @@ class CharBuffer:
                 elif quoted:  # second single quote ends word
                     break
             elif quoted:
+                if c is None:
+                    # the text ended inside the quotes
+                    raise NexusError(f"Missing closing quote in: {''.join(word)[:50]}")
                 # if quoted, then add anything
                 word.append(next(self))
             elif (
