@@ -6,6 +6,8 @@
 """Tests for SearchIO hmmer3-text indexing."""
 
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -13,6 +15,7 @@ import support
 from search_tests_common import CheckIndex
 from search_tests_common import CheckRaw
 
+import Bio
 from Bio import SearchIO
 
 
@@ -341,16 +344,44 @@ class Hmmer3TextIndexCases(CheckIndex):
     def test_hmmertext_query_line_trailing_whitespace(self):
         """Test hmmer3-text indexing, Query line ending in whitespace."""
         # The old id regex took time quadratic in the number of spaces after
-        # [L=32], here about 15 seconds for each of the six times it is read.
+        # [L=32] to match the line: four minutes or more for 400,000 spaces,
+        # each time the line is read. So the file is indexed and the query
+        # read back from the index in a child process first, where the
+        # timeout fails the test.
         with open(support.DATA / "Hmmer" / "text_30_hmmscan_002.out") as handle:
             text = handle.read()
         query = "Query:       random_s00  [L=32]\n"
         self.assertIn(query, text)
-        text = text.replace(query, query[:-1] + " " * 100000 + "\n", 1)
+        text = text.replace(query, query[:-1] + " " * 400_000 + "\n", 1)
         handle, filename = tempfile.mkstemp(suffix=".out")
         self.addCleanup(os.remove, filename)
         with os.fdopen(handle, "w") as handle:
             handle.write(text)
+        code = f"""\
+from Bio import SearchIO
+index = SearchIO.index({filename!r}, {self.fmt!r})
+qresult = index["random_s00"]
+print(qresult.id, qresult.seq_len)
+index.close()
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("indexing the file took over 60 seconds")
+        self.assertEqual("random_s00 32\n", result.stdout, result.stderr)
         self.check_index(filename, self.fmt)
         qresult = SearchIO.read(filename, self.fmt)
         self.assertEqual("random_s00", qresult.id)

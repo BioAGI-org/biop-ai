@@ -5,11 +5,15 @@
 
 """Tests for SearchIO HmmerIO parsers."""
 
+import os
+import subprocess
+import sys
 import unittest
 from io import StringIO
 
 import support
 
+import Bio
 from Bio.SearchIO import parse
 
 # test case files are in the Blast directory
@@ -767,14 +771,40 @@ class HmmscanCases(unittest.TestCase):
 
     def test_30_hmmscan_002_padded_query_line(self):
         """Parsing hmmscan 3.0 (text_30_hmmscan_002) after a padded Query line."""
-        # The parser skips a "Query:" line without [L=N]. Rejecting this one
-        # took the old id regex over a minute: its time was cubic in the
-        # number of spaces.
+        # The parser skips a "Query:" line without [L=N]. The old id regex
+        # took time cubic in the number of spaces to reject one: over eight
+        # minutes for 10,000 spaces. So the file is parsed in a child process
+        # first, where the timeout fails the test.
         with open(get_file("text_30_hmmscan_002.out")) as handle:
             text = handle.read()
         query = "Query:       random_s00  [L=32]\n"
         self.assertIn(query, text)
-        text = text.replace(query, "Query: " + " " * 5000 + "x\n" + query, 1)
+        text = text.replace(query, "Query: " + " " * 10_000 + "x\n" + query, 1)
+        code = f"""\
+import sys
+from Bio.SearchIO import parse
+for qresult in parse(sys.stdin, {FMT!r}):
+    print(qresult.id, qresult.seq_len)
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                input=text,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("parsing the file took over 60 seconds")
+        self.assertEqual("random_s00 32\n", result.stdout, result.stderr)
         qresults = list(parse(StringIO(text), FMT))
         self.assertEqual(["random_s00"], [qresult.id for qresult in qresults])
         self.assertEqual(32, qresults[0].seq_len)
