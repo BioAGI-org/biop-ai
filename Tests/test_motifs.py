@@ -5699,6 +5699,115 @@ class TestDistPearson(unittest.TestCase):
                         first.dist_pearson(second)
 
 
+class TestScoreDistribution(unittest.TestCase):
+    """Tests of the score distribution that pssm.distribution approximates."""
+
+    # Uniform, so that normalising it in pssm.distribution changes nothing.
+    background = dict.fromkeys("ACGT", 0.25)
+
+    def make_pssm(self):
+        with open(support.DATA / "motifs" / "REB1.pfm") as stream:
+            motif = motifs.read(stream, "pfm")
+        motif.pseudocounts = 0.5
+        return motif.pssm
+
+    def columns(self, pssm):
+        """Yield each column's scores, motif and background probabilities."""
+        for position in range(pssm.length):
+            scores = pssm[:, position]
+            mo_probs = {k: 2**v * self.background[k] for k, v in scores.items()}
+            yield scores, mo_probs, self.background
+
+    def start(self, distribution):
+        """Return the density before the first column: all of it at score 0."""
+        density = [0.0] * distribution.n_points
+        density[-distribution._index_diff(distribution.min_score)] = 1.0
+        return density
+
+    def per_bin_loop(self, distribution, columns):
+        """Return the densities as computed one bin at a time in Python."""
+        n = distribution.n_points
+        mo_density = self.start(distribution)
+        bg_density = self.start(distribution)
+        for scores, mo_probs, bg_probs in columns:
+            mo_new = [0.0] * n
+            bg_new = [0.0] * n
+            for letter, score in scores.items():
+                d = distribution._index_diff(score)
+                for i in range(n):
+                    j = max(0, min(n - 1, i + d))
+                    mo_new[j] += mo_density[i] * mo_probs[letter]
+                    bg_new[j] += bg_density[i] * bg_probs[letter]
+            mo_density, bg_density = mo_new, bg_new
+        return mo_density, bg_density
+
+    def count_python_calls(self, function, *args, **kwargs):
+        """Return what function returns, and how many Python calls it made."""
+        calls = 0
+
+        def profile(frame, event, arg):
+            nonlocal calls
+            if event == "call":
+                calls += 1
+
+        previous = sys.getprofile()
+        sys.setprofile(profile)
+        try:
+            result = function(*args, **kwargs)
+        finally:
+            sys.setprofile(previous)
+        return result, calls
+
+    def test_python_calls_do_not_grow_with_bins(self):
+        """The work for each score bin is done by numpy, not in Python.
+
+        Each column used to make two Python calls per bin and letter, with
+        1000 bins per column at the default precision, so the time grew with
+        the square of the motif length read from the file: 90 seconds for a
+        160-column motif.
+        """
+        pssm = self.make_pssm()
+        distribution, calls = self.count_python_calls(
+            pssm.distribution, background=self.background
+        )
+        self.assertLess(calls, distribution.n_points)
+        _, calls = self.count_python_calls(
+            distribution.modify, *next(self.columns(pssm))
+        )
+        self.assertLess(calls, distribution.n_points)
+
+    def test_same_as_per_bin_loop(self):
+        """The densities are those of the per-bin loop, to the last bit.
+
+        In REB1, rounding moves some probability past both ends of the bins,
+        where it piles up in the end bin. In the hand-made matrix, its first
+        column moves every bin past the top end.
+        """
+        values = {
+            "A": [5.0, -10.0],
+            "C": [10.0, -9.0],
+            "G": [6.0, -9.5],
+            "T": [7.0, -9.2],
+        }
+        for pssm, precision in (
+            (self.make_pssm(), 10**3),
+            (PositionSpecificScoringMatrix("ACGT", values), 10),
+        ):
+            distribution = pssm.distribution(self.background, precision)
+            expected = self.per_bin_loop(distribution, self.columns(pssm))
+            self.assertEqual(
+                (distribution.mo_density, distribution.bg_density), expected
+            )
+            # modify() adds one column at a time; replay the matrix through it.
+            distribution.mo_density = self.start(distribution)
+            distribution.bg_density = self.start(distribution)
+            for column in self.columns(pssm):
+                distribution.modify(*column)
+            self.assertEqual(
+                (distribution.mo_density, distribution.bg_density), expected
+            )
+
+
 # Run only while the GIL is off. A free-threaded build turns it back on when
 # an undeclared extension is imported, unless PYTHON_GIL=0 is set.
 @unittest.skipIf(
