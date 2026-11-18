@@ -6,9 +6,40 @@
 """Tests for SearchIO fasta-m10 indexing."""
 
 import unittest
+from io import BytesIO
+from unittest import mock
 
 import support
 from search_tests_common import CheckIndex
+
+from Bio import SearchIO
+
+
+class EndOfFileGuard(BytesIO):
+    """Binary handle that fails if the indexer keeps reading at end of file.
+
+    An indexer stuck in a loop at end of file would otherwise hang the suite.
+    """
+
+    def __init__(self, data):
+        """Initialize the handle with the bytes to read."""
+        super().__init__(data)
+        self.reads_at_end = 0
+
+    def readline(self, *args):
+        """Read a line, failing after many reads at end of file."""
+        line = super().readline(*args)
+        if not line:
+            self.reads_at_end += 1
+            if self.reads_at_end > 100:
+                raise AssertionError("indexer kept reading at end of file")
+        return line
+
+
+def lines(filename, start, stop):
+    """Return lines start + 1 to stop of a test file, as bytes."""
+    with open(support.DATA / "Fasta" / filename, "rb") as handle:
+        return b"".join(handle.readlines()[start:stop])
 
 
 class FastaM10IndexCases(CheckIndex):
@@ -53,6 +84,61 @@ class FastaM10IndexCases(CheckIndex):
         """Test fasta-m10 indexing, fasta36, single query with multiple hsps."""
         filename = support.DATA / "Fasta" / "output012.m10"
         self.check_index(filename, self.fmt)
+
+
+class TruncatedCases(unittest.TestCase):
+    """A file with no query, or none after its preamble, raises ValueError."""
+
+    def index(self, data):
+        """Index the bytes as fasta-m10, through a handle guarding end of file."""
+        with mock.patch(
+            "Bio.SearchIO._index._open_for_random_access",
+            return_value=EndOfFileGuard(data),
+        ):
+            index = SearchIO.index("test.m10", "fasta-m10")
+        self.addCleanup(index.close)
+        return index
+
+    def test_empty_file(self):
+        """Test an empty file, which holds no query results."""
+        self.assertEqual(len(self.index(b"")), 0)
+
+    def test_no_query(self):
+        """Test a file that ends before its first query line."""
+        # Lines 1 to 7 of output001.m10 are its preamble, ending with
+        # "Query: NC_002127.faa"; line 8 is the first query line, "  1>>>gi|...".
+        # A FASTA sequence file, given under the wrong format name, has no
+        # query line at all.
+        for name, data in (
+            ("output001.m10, 3 lines", lines("output001.m10", 0, 3)),
+            ("output001.m10, 7 lines", lines("output001.m10", 0, 7)),
+            ("FASTA sequence", b">seq1\nACGT\n"),
+        ):
+            with self.subTest(name):
+                with self.assertRaises(ValueError) as cm:
+                    self.index(data)
+                self.assertEqual(
+                    str(cm.exception),
+                    "File ended before the first query line of the FASTA output",
+                )
+
+    def test_query_without_preamble(self):
+        """Test reading back a lone query that has no preamble before it."""
+        # Lines 8 to 105 of output001.m10 are its first query. get_raw reads
+        # the preamble from the start of the file to the first query line
+        # after line 1, and here there is none.
+        index = self.index(lines("output001.m10", 7, 105))
+        key = "gi|10955263|ref|NP_052604.1|"
+        self.assertEqual(list(index), [key])
+        for name, get in (("get_raw", index.get_raw), ("getitem", index.__getitem__)):
+            with self.subTest(name):
+                with self.assertRaises(ValueError) as cm:
+                    get(key)
+                self.assertEqual(
+                    str(cm.exception),
+                    "File ended before the first query line after the FASTA"
+                    " preamble",
+                )
 
 
 if __name__ == "__main__":

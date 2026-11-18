@@ -583,6 +583,9 @@ class FastaM10Indexer(SearchIndexer):
         query_mark = b">>>"
 
         line = handle.readline()
+        if not line:
+            # an empty file holds no query results
+            return
         while True:
             end_offset = handle.tell()
 
@@ -601,6 +604,10 @@ class FastaM10Indexer(SearchIndexer):
                     start_offset = end_offset
             else:
                 line = handle.readline()
+                if not line:
+                    raise ValueError(
+                        "File ended before the first query line of the FASTA output"
+                    )
 
     def get_raw(self, offset):
         """Return the raw record from the file as a bytes string."""
@@ -614,6 +621,10 @@ class FastaM10Indexer(SearchIndexer):
         while True:
             qresult_raw += line
             line = handle.readline()
+            if not line:
+                raise ValueError(
+                    "File ended before the first query line after the FASTA preamble"
+                )
             if not line.startswith(query_mark) and query_mark in line:
                 break
 
