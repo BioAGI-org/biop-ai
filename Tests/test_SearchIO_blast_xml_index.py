@@ -6,10 +6,35 @@
 """Tests for SearchIO blast-xml indexing."""
 
 import unittest
+from io import BytesIO
+from unittest import mock
 
 import support
 from search_tests_common import CheckIndex
 from search_tests_common import CheckRaw
+
+from Bio import SearchIO
+
+
+class EndOfFileGuard(BytesIO):
+    """Binary handle that fails if the indexer keeps reading at end of file.
+
+    An indexer stuck in a loop at end of file would otherwise hang the suite.
+    """
+
+    def __init__(self, data):
+        """Initialize the handle with the bytes to read."""
+        super().__init__(data)
+        self.reads_at_end = 0
+
+    def readline(self, *args):
+        """Read a line, failing after many reads at end of file."""
+        line = super().readline(*args)
+        if not line:
+            self.reads_at_end += 1
+            if self.reads_at_end > 100:
+                raise AssertionError("indexer kept reading at end of file")
+        return line
 
 
 class BlastXmlRawCases(CheckRaw):
@@ -760,6 +785,39 @@ class BlastXmlIndexCases(CheckIndex):
         """Test blast-xml indexing, BLAST 2.2.26+, single query, multiple hits."""
         filename = support.DATA / "Blast" / "xml_2226_tblastn_004.xml"
         self.check_index(filename, self.fmt)
+
+
+class TruncatedCases(unittest.TestCase):
+    """A query cut short after indexing raises ValueError when read back."""
+
+    def test_file_truncated_after_indexing(self):
+        """Test reading back a query whose </Iteration> was cut off."""
+        # A file can shrink under its index: truncated in place while a
+        # SearchIO.index dict is open, or replaced after index_db wrote its
+        # offsets to disk. (Indexing the cut file afresh raises ValueError.)
+        filename = support.DATA / "Blast" / "xml_2226_blastp_001.xml"
+        with open(filename, "rb") as handle:
+            data = handle.read()
+        handle = EndOfFileGuard(data)
+        with mock.patch(
+            "Bio.SearchIO._index._open_for_random_access", return_value=handle
+        ):
+            index = SearchIO.index("test.xml", "blast-xml")
+        self.addCleanup(index.close)
+        key = "gi|11464971:4-101"
+        self.assertEqual(list(index)[-1], key)
+        # Cut the file just before the </Iteration> closing its last query.
+        handle.truncate(data.rindex(b"</Iteration>"))
+        offset = data.rindex(b"    <Iteration>\n")
+        for name, get in (("get_raw", index.get_raw), ("getitem", index.__getitem__)):
+            with self.subTest(name):
+                with self.assertRaises(ValueError) as cm:
+                    get(key)
+                self.assertEqual(
+                    str(cm.exception),
+                    "File ended before the </Iteration> closing the <Iteration>"
+                    f" at offset {offset}",
+                )
 
 
 if __name__ == "__main__":
