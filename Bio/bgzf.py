@@ -472,6 +472,12 @@ def _load_bgzf_block(handle, text_mode=False):
         raise ValueError("Missing BC, this isn't a BGZF file!")
     # Now comes the compressed data, CRC, and length of uncompressed data.
     deflate_size = block_size - 1 - extra_len - 19
+    if deflate_size < 0:
+        # Else handle.read(deflate_size) would read to the end of the file
+        raise ValueError(
+            f"Block size {block_size} is less than the {extra_len + 20} bytes "
+            "of its header and trailer"
+        )
     d = zlib.decompressobj(-15)  # Negative window size means no headers
     data = d.decompress(handle.read(deflate_size)) + d.flush()
     expected_crc = handle.read(4)
