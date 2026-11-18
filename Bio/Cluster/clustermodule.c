@@ -1600,6 +1600,7 @@ exit:
     mask_converter(NULL, &mask);
     vector_converter(NULL, &weight);
     index_converter(NULL, &clusterid);
+    if (ifound == -1) return PyErr_NoMemory();
     if (ifound) return Py_BuildValue("di", error, ifound);
     return NULL;
 }
@@ -2056,6 +2057,7 @@ py_somcluster(PyObject* self, PyObject* args, PyObject* keywords)
     PyObject* result = NULL;
     PyObject* rng_seed_obj;
     uint64_t rng_seed;
+    int ok;
 
     static char* kwlist[] = {"clusterids",
                              "celldata",
@@ -2127,21 +2129,25 @@ py_somcluster(PyObject* self, PyObject* args, PyObject* keywords)
     if (!check_writable(&indices, "clusterids")) goto exit;
     if (!check_writable(&celldata.view, "celldata")) goto exit;
     Py_BEGIN_ALLOW_THREADS
-    somcluster(nrows,
-               ncols,
-               data.values,
-               mask.values,
-               weight.buf,
-               transpose,
-               celldata.nx,
-               celldata.ny,
-               inittau,
-               niter,
-               dist,
-               celldata.values,
-               indices.buf,
-               rng_seed);
+    ok = somcluster(nrows,
+                    ncols,
+                    data.values,
+                    mask.values,
+                    weight.buf,
+                    transpose,
+                    celldata.nx,
+                    celldata.ny,
+                    inittau,
+                    niter,
+                    dist,
+                    celldata.values,
+                    indices.buf,
+                    rng_seed);
     Py_END_ALLOW_THREADS
+    if (!ok) {
+        PyErr_NoMemory();
+        goto exit;
+    }
     Py_INCREF(Py_None);
     result = Py_None;
 
