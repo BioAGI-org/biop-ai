@@ -3,9 +3,11 @@
 # license.  Please see the LICENSE file that should have been included
 # as part of this package.
 """Tests for Align.bigbed module."""
+import struct
 import sys
 import tempfile
 import unittest
+from io import BytesIO
 from io import StringIO
 
 import support
@@ -8009,6 +8011,92 @@ class TestDeclarations(unittest.TestCase):
             self.assertEqual(
                 field.comment, "Start positions relative to chromStart", msg=filename
             )
+
+
+class SeekGuard(BytesIO):
+    """A binary stream that fails the test if seeked on and on."""
+
+    def __init__(self, data):
+        """Hold the data, and count the seeks made in it."""
+        super().__init__(data)
+        self.seeks = 0
+
+    def seek(self, *args):
+        # Reading a valid bigBed file seeks fewer than 30 times.
+        self.seeks += 1
+        if self.seeks > 1000:
+            raise AssertionError("seek called 1000 times")
+        return super().seek(*args)
+
+
+class TestAlign_malformed_chromosome_index(unittest.TestCase):
+    """Chromosome indices whose nodes do not form a tree."""
+
+    def make_stream(self, nodes):
+        """Return bed3.bb with its chromosome index replaced, and node offsets.
+
+        The new index is appended to the file. Each node is given as a list
+        of the indices of its child nodes in nodes, the first being the root.
+        A node without children is written as a leaf holding no chromosomes.
+        """
+        with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        # The offset of the chromosome index is at byte 8 of the file header.
+        (index_offset,) = struct.unpack_from("<Q", data, 8)
+        # The chromosome index header is 32 bytes; its root node follows it.
+        index_header = data[index_offset : index_offset + 32]
+        (keySize,) = struct.unpack_from("<I", index_header, 8)
+        offsets = []
+        offset = len(data) + len(index_header)
+        for children in nodes:
+            offsets.append(offset)
+            offset += 4 + len(children) * (keySize + 8)
+        struct.pack_into("<Q", data, 8, len(data))
+        data += index_header
+        for children in nodes:
+            if children:
+                data += struct.pack("<?xH", False, len(children))
+                for child in children:
+                    data += struct.pack(f"<{keySize}sQ", b"chr22", offsets[child])
+            else:
+                data += struct.pack("<?xH", True, 0)
+        return SeekGuard(bytes(data)), offsets
+
+    def check(self, nodes, node):
+        stream, offsets = self.make_stream(nodes)
+        with self.assertRaises(ValueError) as cm:
+            Align.parse(stream, "bigbed")
+        self.assertEqual(
+            str(cm.exception),
+            "Chromosome index is not a tree: the node at offset "
+            f"{offsets[node]} is reached more than once",
+        )
+
+    def test_unchanged(self):
+        # The same index as in bed3.bb, but appended, reads as before.
+        with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        (index_offset,) = struct.unpack_from("<Q", data, 8)
+        struct.pack_into("<Q", data, 8, len(data))
+        data += data[index_offset : index_offset + 32 + 4 + 5 + 8]
+        with Align.parse(SeekGuard(bytes(data)), "bigbed") as alignments:
+            self.assertEqual(len(alignments.targets), 1)
+            self.assertEqual(alignments.targets[0].id, "chr22")
+            self.assertEqual(len(alignments.targets[0]), 51304566)
+            self.assertEqual(len(list(alignments)), 2)
+
+    def test_root_child_of_itself(self):
+        # This used to loop for ever, using more memory on each pass.
+        self.check([[0]], 0)
+
+    def test_cycle(self):
+        self.check([[1], [2], [1]], 1)
+
+    def test_shared_child(self):
+        # Reaching each node twice from its parent used to double the work
+        # at each level, taking 2**30 steps here.
+        nodes = [[i + 1, i + 1] for i in range(30)] + [[]]
+        self.check(nodes, 30)
 
 
 if __name__ == "__main__":
