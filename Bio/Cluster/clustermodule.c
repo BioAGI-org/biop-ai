@@ -561,11 +561,21 @@ celldata_converter(PyObject* argument, void* pointer)
         return 0;
     }
 
+    if (view->ndim != 3) {
+        PyErr_Format(PyExc_ValueError,
+                     "celldata array has incorrect rank %d (expected 3)",
+                     view->ndim);
+        goto exit;
+    }
     nx = (int) view->shape[0];
     ny = (int) view->shape[1];
     nz = (int) view->shape[2];
     if (nx != view->shape[0] || ny != view->shape[1] || nz != view->shape[2]) {
         PyErr_SetString(PyExc_RuntimeError, "celldata array too large");
+        goto exit;
+    }
+    if (nx < 1 || ny < 1 || nz < 1) {
+        PyErr_SetString(PyExc_ValueError, "celldata array is empty");
         goto exit;
     }
     if (view->itemsize != sizeof(double)) {
