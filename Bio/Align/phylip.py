@@ -173,7 +173,18 @@ class AlignmentIterator(interfaces.AlignmentIterator):
     def _read_file(self, stream):
         names = []
         seqs = []
-        lines = [stream.readline() for i in range(self._number_of_seqs)]
+        lines = []
+        for i in range(self._number_of_seqs):
+            # Each sequence starts on a line of its own.  readline() returns
+            # "" for ever at the end of the file, so stop there, however many
+            # sequences the header claims.
+            line = stream.readline()
+            if not line:
+                raise ValueError(
+                    "End of file after %d lines, expected at least one line "
+                    "for each of %d sequences" % (i, self._number_of_seqs)
+                )
+            lines.append(line)
         if all(len(self._split_id(line)[1]) == self._length_of_seqs for line in lines):
             # One line per sequence; anything after it is another alignment.
             self._parse_interleaved_first_block(lines, seqs, names)

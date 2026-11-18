@@ -1463,6 +1463,52 @@ class TestPhylipRelaxed(unittest.TestCase):
                 )
 
 
+class EndOfFileGuard(ForwardOnly):
+    """A forward-only stream that fails the test if read on and on at its end."""
+
+    def __init__(self, text):
+        """Hold the text, and count the reads made at its end."""
+        super().__init__(text)
+        self.reads_at_end = 0
+
+    def readline(self):
+        line = super().readline()
+        if not line:
+            self.reads_at_end += 1
+            if self.reads_at_end > 100:
+                raise AssertionError("readline called 100 times at end of file")
+        return line
+
+
+class TestPhylipEndOfFile(unittest.TestCase):
+    """Files ending before the sequences their header announces."""
+
+    def check(self, text, found, expected):
+        message = (
+            f"End of file after {found} lines, expected at least one line "
+            f"for each of {expected} sequences"
+        )
+        for fmt in ("phylip", "phylip-relaxed"):
+            with self.subTest(fmt=fmt):
+                with self.assertRaises(ValueError) as cm:
+                    list(Align.parse(EndOfFileGuard(text), fmt))
+                self.assertEqual(str(cm.exception), message)
+
+    def test_header_only(self):
+        # Reading stops at the end of the file, not a billion lines later.
+        self.check("1000000000 10\n", 0, 1000000000)
+
+    def test_header_only_of_second_alignment(self):
+        self.check(read_text("interlaced.phy") + "1000000000 10\n", 0, 1000000000)
+
+    def test_truncated_first_block(self):
+        # In sequential.phy the second line continues the first sequence.
+        for filename in ("interlaced.phy", "sequential.phy"):
+            with self.subTest(filename=filename):
+                lines = read_text(filename).splitlines(keepends=True)
+                self.check("".join(lines[:3]), 2, 3)
+
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     unittest.main(testRunner=runner)
