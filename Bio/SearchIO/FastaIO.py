@@ -120,14 +120,21 @@ __all__ = ("FastaM10Parser", "FastaM10Indexer")
 # regex for program name
 _RE_FLAVS = re.compile(r"t?fast[afmsxy]|pr[sf][sx]|lalign|[gs]?[glso]search")
 # regex for sequence ID and length ~ deals with both \n and \r\n
-_PTR_ID_DESC_SEQLEN = r">>>(.+?)\s+(.*?) *- (\d+) (?:aa|nt)\s*$"
+# Use it with .match() at the first ">>>" of the line, and take the description
+# as group(2).rstrip(" "). No two parts of it can match the same characters;
+# the old pattern's could, so it took minutes to reject a line without the
+# "- <length> aa" ending. The ID is one character and then non-whitespace, all
+# that the old "(.+?)\s+" could match, and the lookahead stops "\s+" from
+# giving back whitespace.
+_PTR_ID_DESC_SEQLEN = r">>>(.\S*)\s+(?!\s)(.*?)- (\d+) (?:aa|nt)\s*$"
 _RE_ID_DESC_SEQLEN = re.compile(_PTR_ID_DESC_SEQLEN)
 _RE_ID_DESC_SEQLEN_IDX = re.compile(_PTR_ID_DESC_SEQLEN.encode())
 # regex for qresult, hit, or hsp attribute value
 _RE_ATTR = re.compile(r"^; [a-z]+(_[ \w-]+):\s+(.*)$")
 # regex for capturing excess start and end sequences in alignments
 _RE_START_EXC = re.compile(r"^-*")
-_RE_END_EXC = re.compile(r"-*$")
+# the lookbehind makes re.search try each run of "-" once, not from every "-"
+_RE_END_EXC = re.compile(r"(?<!-)-*$")
 
 # attribute name mappings
 _HSP_ATTR_MAP = {
@@ -378,10 +385,15 @@ class FastaM10Parser:
                     # if qresult is filled, yield it first
                     if qresult is not None:
                         yield _set_qresult_hits(qresult, hit_rows)
-                    regx = re.search(_RE_ID_DESC_SEQLEN, line)
+                    regx = _RE_ID_DESC_SEQLEN.match(line, line.find(">>>"))
+                    if regx is None:
+                        raise ValueError(
+                            "Expected a query line '>>>ID DESCRIPTION - LENGTH aa'"
+                            f" (or nt), found:\n{line!r}"
+                        )
                     query_id = regx.group(1)
                     seq_len = regx.group(3)
-                    desc = regx.group(2)
+                    desc = regx.group(2).rstrip(" ")
                     qresult = QueryResult(id=query_id)
                     qresult.seq_len = int(seq_len)
                     # get target from the next line
@@ -590,7 +602,12 @@ class FastaM10Indexer(SearchIndexer):
             end_offset = handle.tell()
 
             if not line.startswith(query_mark) and query_mark in line:
-                regx = re.search(_RE_ID_DESC_SEQLEN_IDX, line)
+                regx = _RE_ID_DESC_SEQLEN_IDX.match(line, line.find(query_mark))
+                if regx is None:
+                    raise ValueError(
+                        "Expected a query line '>>>ID DESCRIPTION - LENGTH aa'"
+                        f" (or nt), found:\n{line!r}"
+                    )
                 qresult_key = regx.group(1).decode()
                 start_offset = end_offset - len(line)
             # yield whenever we encounter a new query or at the end of the file
