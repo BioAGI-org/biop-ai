@@ -1921,9 +1921,22 @@ class _RTreeFormatter:
         # double the work at each level.
         offset = stream.tell()
         visited = {offset}
+        # The nodes of a tree do not overlap, so together they fit in the
+        # file. Nodes that overlap could otherwise each be read in full,
+        # in time and memory quadratic in the size of the file.
+        stream.seek(0, io.SEEK_END)
+        file_size = remaining = stream.tell()
+        stream.seek(offset)
         while True:
             data = stream.read(formatter_node.size)
             isLeaf, count = formatter_node.unpack(data)
+            entry = formatter_leaf if isLeaf else formatter_nonleaf
+            remaining -= formatter_node.size + count * entry.size
+            if remaining < 0:
+                raise ValueError(
+                    "R tree index is not a tree: its nodes overlap, as together "
+                    f"they are larger than the file ({file_size} bytes)"
+                )
             if isLeaf:
                 children = node.children
                 for i in range(count):
@@ -2248,10 +2261,24 @@ class _BPlusTreeFormatter:
         # tree each node is reached once; reaching one again means a loop,
         # which would never end, or a node shared by two parents, which can
         # double the work at each level.
-        visited = {stream.tell()}
+        offset = stream.tell()
+        visited = {offset}
+        # The nodes of a tree do not overlap, so together they fit in the
+        # file. Nodes that overlap could otherwise each be read in full,
+        # in time and memory quadratic in the size of the file.
+        stream.seek(0, io.SEEK_END)
+        file_size = remaining = stream.tell()
+        stream.seek(offset)
         while True:
             data = stream.read(formatter_node.size)
             isLeaf, count = formatter_node.unpack(data)
+            entry = formatter_leaf if isLeaf else formatter_nonleaf
+            remaining -= formatter_node.size + count * entry.size
+            if remaining < 0:
+                raise ValueError(
+                    "Chromosome index is not a tree: its nodes overlap, as "
+                    f"together they are larger than the file ({file_size} bytes)"
+                )
             if isLeaf:
                 for i in range(count):
                     data = stream.read(formatter_leaf.size)
