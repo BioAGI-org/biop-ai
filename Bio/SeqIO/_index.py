@@ -684,7 +684,9 @@ class FastqRandomAccess(SeqFileRandomAccess):
         handle = self._handle
         handle.seek(offset)
         line = handle.readline()
-        data = line
+        # A bytearray grows in place; bytes += line would copy the whole
+        # record so far on every line, quadratic in a line-wrapped record.
+        data = bytearray(line)
         if line[0:1] != b"@":
             raise ValueError(f"Problem with FASTQ @ line:\n{line!r}")
         # Find the seq line(s)
@@ -719,7 +721,7 @@ class FastqRandomAccess(SeqFileRandomAccess):
                 qual_len += len(line.strip())
         if seq_len != qual_len:
             raise ValueError("Problem with quality section")
-        return data
+        return bytes(data)
 
 
 ###############################################################################
