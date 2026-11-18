@@ -8024,7 +8024,7 @@ class SeekGuard(BytesIO):
         self.seeks = 0
 
     def seek(self, *args):
-        # Reading a valid bigBed file seeks fewer than 30 times.
+        # Reading a valid bigBed file seeks fewer than 40 times.
         self.seeks += 1
         if self.seeks > 1000:
             raise AssertionError("seek called 1000 times")
@@ -8099,6 +8099,32 @@ class TestAlign_malformed_chromosome_index(unittest.TestCase):
         # at each level, taking 2**30 steps here.
         nodes = [[i + 1, i + 1] for i in range(30)] + [[]]
         self.check(nodes, 30)
+
+    def test_overlapping_nodes(self):
+        # A chain of 100 non-leaf nodes of 100 children each, each node
+        # starting inside the one before it, just after that node's first
+        # child, which names it. The nodes lie within 3 kB of the file, but
+        # each used to be read in full, 130 kB in all.
+        with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        (index_offset,) = struct.unpack_from("<Q", data, 8)
+        index_header = data[index_offset : index_offset + 32]
+        (keySize,) = struct.unpack_from("<I", index_header, 8)
+        struct.pack_into("<Q", data, 8, len(data))
+        data += index_header
+        start = len(data)
+        stride = 4 + keySize + 8
+        for i in range(100):
+            data += struct.pack("<?xH", False, 100)
+            data += struct.pack(f"<{keySize}sQ", b"chr22", start + stride * (i + 1))
+        data += bytes(100 * (keySize + 8))
+        with self.assertRaises(ValueError) as cm:
+            Align.parse(SeekGuard(bytes(data)), "bigbed")
+        self.assertEqual(
+            str(cm.exception),
+            "Chromosome index is not a tree: its nodes overlap, as together "
+            f"they are larger than the file ({len(data)} bytes)",
+        )
 
 
 class TestAlign_malformed_data_index(unittest.TestCase):
@@ -8178,6 +8204,33 @@ class TestAlign_malformed_data_index(unittest.TestCase):
         # These used to raise IndexError.
         self.check([[]], 0, self.no_children)
         self.check([[1], []], 1, self.no_children)
+
+    def test_overlapping_nodes(self):
+        # A root naming 100 leaves that start 4 bytes apart, so that they
+        # overlap, each holding 100 data blocks. The leaves lie within 3.6 kB
+        # of the file, but each used to be read in full, giving 10000 data
+        # blocks, 320 kB in all; the item count in the header agrees.
+        with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        (index_offset,) = struct.unpack_from("<Q", data, 24)
+        index_header = data[index_offset : index_offset + 48]
+        struct.pack_into("<Q", index_header, 8, 100 * 100)
+        struct.pack_into("<Q", data, 24, len(data))
+        data += index_header
+        leaves = len(data) + 4 + 100 * 24
+        data += struct.pack("<?xH", False, 100)
+        for i in range(100):
+            data += struct.pack("<IIIIQ", 0, 0, 0, 0, leaves + 4 * i)
+        # Every 4 bytes from here is the header of a leaf of 100 entries of
+        # 32 bytes each, and the bytes are long enough for the last leaf.
+        data += struct.pack("<?xH", True, 100) * (100 + 8 * 100)
+        with self.assertRaises(ValueError) as cm:
+            Align.parse(SeekGuard(bytes(data)), "bigbed")
+        self.assertEqual(
+            str(cm.exception),
+            "R tree index is not a tree: its nodes overlap, as together "
+            f"they are larger than the file ({len(data)} bytes)",
+        )
 
 
 class TestAlign_malformed_data_block(unittest.TestCase):
