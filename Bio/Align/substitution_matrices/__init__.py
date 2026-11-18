@@ -511,6 +511,14 @@ def load(name=None):
         except ValueError:
             pass
         return sorted(filenames)
+    name = os.fspath(name)
+    if os.path.basename(name) != name or name in ("", os.curdir, os.pardir):
+        # Without this check, os.path.join would accept an absolute path or
+        # a name with "..", and read() would open a file outside data/.
+        raise ValueError(
+            f"{name!r} is not the name of a substitution matrix; "
+            "use read() to read a matrix from a file"
+        )
     path = os.path.join(subdirectory, name)
     matrix = read(path)
     return matrix

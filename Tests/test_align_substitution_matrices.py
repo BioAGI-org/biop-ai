@@ -5,6 +5,7 @@
 """Tests for Array in the Bio.Align.substitution_matrices module."""
 
 import os
+import pathlib
 import pickle
 import subprocess
 import sys
@@ -2435,6 +2436,35 @@ class TestLoading(unittest.TestCase):
                 m = substitution_matrices.load(name)
             except Exception:
                 self.fail(f"Failed to load substitution matrix '{name}'")
+
+    def test_loading_by_path(self):
+        """Confirm that load accepts only the name of a provided matrix."""
+        # ecoli.txt is a file that read() parses; load() must not open it.
+        path = os.path.abspath(support.DATA / "Align" / "ecoli.txt")
+        directory = os.path.dirname(os.path.realpath(substitution_matrices.__file__))
+        depth = len(os.path.join(directory, "data").split(os.sep))
+        relative = os.path.splitdrive(path)[1].lstrip(os.sep)
+        for name in (
+            path,
+            pathlib.Path(path),
+            os.path.join(*[os.pardir] * depth, relative),
+            os.path.join(os.pardir, "data", "BLOSUM62"),
+            os.path.join(directory, "data", "BLOSUM62"),
+            os.pardir,
+            os.curdir,
+            "",
+        ):
+            with self.subTest(name=name):
+                with self.assertRaises(ValueError) as cm:
+                    substitution_matrices.load(name)
+                self.assertIn(
+                    "is not the name of a substitution matrix", str(cm.exception)
+                )
+        # A plain name, as a str or a path-like object, still loads.
+        matrix = substitution_matrices.load(pathlib.PurePath("BLOSUM62"))
+        self.assertAlmostEqual(matrix["A", "A"], 4.0)
+        with self.assertRaises(FileNotFoundError):
+            substitution_matrices.load("NOSUCHMATRIX")
 
     def test_reading(self):
         """Confirm matrix reading works with filename or handle."""
