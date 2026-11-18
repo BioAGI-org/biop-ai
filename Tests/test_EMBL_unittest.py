@@ -5,12 +5,16 @@
 
 """Tests for EMBL module (using unittest framework)."""
 
+import os
+import subprocess
+import sys
 import unittest
 import warnings
 from io import StringIO
 
 import support
 
+import Bio
 from Bio import BiopythonParserWarning
 from Bio import SeqIO
 
@@ -81,16 +85,50 @@ class EMBLTests(unittest.TestCase):
 
         The IMGT parser rewrites a position like "12>" as ">12". The regular
         expression doing this took time quadratic in the length of a run of
-        digits not followed by ">", so this location took minutes.
+        digits not followed by ">". It still gave the right result in the
+        end, so the long run is parsed in a child process, and the timeout
+        fails the test on the old expression.
         """
         with open(support.DATA / "EMBL" / "A04195.imgt") as handle:
             data = handle.read()
-        data = data.replace("10..51\n", "1>," + "1" * 150000 + "\n", 1)
         data = data.replace("10..12\n", "10..12>\n", 1)
+
+        def with_digit_run(length):
+            return data.replace("10..51\n", "1>," + "1" * length + "\n", 1)
+
+        # The old expression took 1, 3.6 and 15 seconds on 10,000, 20,000
+        # and 40,000 digits, so 200,000 digits take it about six minutes. The
+        # new one takes milliseconds.
+        code = """\
+import sys
+import warnings
+from Bio import SeqIO
+warnings.simplefilter("ignore")
+record = SeqIO.read(sys.stdin, "imgt")
+print(record.features[0].location, record.features[1].location)
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            input=with_digit_run(200_000),
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(result.stdout, "None [9:>12](+)\n", result.stderr)
+
+        # A shorter run gives the usual warning, with ">" moved to the front.
         with self.assertWarnsRegex(
             BiopythonParserWarning, "Could not parse feature location '>1,111"
         ):
-            record = SeqIO.read(StringIO(data), "imgt")
+            record = SeqIO.read(StringIO(with_digit_run(1000)), "imgt")
         self.assertIsNone(record.features[0].location)
         self.assertEqual(str(record.features[1].location), "[9:>12](+)")
 
