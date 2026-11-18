@@ -664,6 +664,17 @@ class MafIndex:
                                 % (rec_start, rec_end, offset, start, end)
                             )
 
+                        # An existing index is used without reading the MAF
+                        # file, so repeat the size check of __maf_indexer here;
+                        # get_spliced makes an entry per letter in the size.
+                        size = record.annotations["size"]
+                        letters = len(record.seq) - record.seq.count("-")
+                        if size != letters:
+                            raise ValueError(
+                                "Invalid length for target coordinates "
+                                "(expected %s, found %s)" % (size, letters)
+                            )
+
                 yield fetched
 
     def get_spliced(self, starts, ends, strand=1):
