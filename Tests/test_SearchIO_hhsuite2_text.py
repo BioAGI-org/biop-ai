@@ -6,6 +6,7 @@
 """Tests for SearchIO HhsuiteIO parsers."""
 
 import unittest
+from io import StringIO
 
 import support
 
@@ -197,6 +198,44 @@ class HhsuiteCases(unittest.TestCase):
         self.assertEqual(4, hsp.query_end)
         self.assertEqual("D", hsp.hit.seq)
         self.assertEqual("X", hsp.query.seq)
+
+    def test_allx_padded_match_block_lines(self):
+        """Parsing allx.hhr with Q and T lines of spaces in a match block."""
+        # The parser skips a Q or T line that is not an alignment row.
+        # Rejecting each of these took the old Q and T regexes over half a
+        # minute: their time was cubic in the number of spaces.
+        with open(get_file("allx.hhr")) as handle:
+            text = handle.read()
+        row = "Q Only             39 X   39 (39)\n"
+        self.assertIn(row, text)
+        padded = "Q" + " " * 2000 + "y\n" + "T" + " " * 2000 + "y\n"
+        text = text.replace(row, row + padded, 1)
+        qresult = next(parse(StringIO(text), FMT))
+        self.assertEqual(10, len(qresult))
+        hsp = qresult[0].hsps[0]
+        self.assertEqual("1klr_A", hsp.hit_id)
+        self.assertEqual(38, hsp.query_start)
+        self.assertEqual(39, hsp.query_end)
+        self.assertEqual(23, hsp.hit_start)
+        self.assertEqual(24, hsp.hit_end)
+        self.assertEqual("X", hsp.query.seq)
+        self.assertEqual("T", hsp.hit.seq)
+
+    def test_allx_hit_line_without_whitespace(self):
+        """Parsing allx.hhr ending in a hit line of '>' without whitespace."""
+        # Rejecting this line took the old regex for the hit id and
+        # description over a minute: its time was quadratic in the number
+        # of '>' characters.
+        with open(get_file("allx.hhr")) as handle:
+            text = handle.read()
+        start = "No 1  \n"
+        self.assertIn(start, text)
+        text = text[: text.index(start) + len(start)] + ">" * 64000
+        qresults = parse(StringIO(text), FMT)
+        with self.assertRaisesRegex(
+            RuntimeError, "^Unexpected content in HIT_BLOCK_DESC line'>>>"
+        ):
+            next(qresults)
 
     def test_4y9h_nossm(self):
         """Parsing 4y9h_hhsearch_server_NOssm.hhr file."""

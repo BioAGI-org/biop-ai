@@ -24,12 +24,20 @@ _RE_QUERY = re.compile(r"^Query\s+(.+)\s?$")
 _RE_HIT_BLOCK_START = re.compile(r"^No +(\d+)\s+$")
 
 # id and full description
-_RE_HIT_BLOCK_DESC = re.compile(r">(\S+)\s+(.*)$")
+# This is used with re.search, which tries every start position. The
+# (?<!\S)[^\s>]* tries only the first ">" of each run of non-whitespace,
+# which gives the same match as trying every ">" in it: without it, a long
+# run of ">" with no whitespace after took time quadratic in its length.
+_RE_HIT_BLOCK_DESC = re.compile(r"(?<!\S)[^\s>]*>(\S+)\s+(.*)$")
 
 # sequence alignment line
 # Q sp|Q9BSU1|CP07  229 DAKMRVFERSVYFGDSCQDVLSMLGSPHKV  258 (422)
-_RE_MATCH_BLOCK_QUERY_SEQ = re.compile(r"^Q\s+(.+) +(\d+) +([A-Z-]+) +(\d+) +\(\d+\)$")
-_RE_MATCH_BLOCK_HIT_SEQ = re.compile(r"^T\s+(.+) +(\d+) +([A-Z-]+) +(\d+) +\(\d+\)$")
+# Group 1 includes the spaces around the name; the caller strips them. Keep
+# a single \s after Q and a single space after group 1: if two parts of the
+# pattern can match the same run of spaces, a long run takes time quadratic
+# or cubic in its length to reject.
+_RE_MATCH_BLOCK_QUERY_SEQ = re.compile(r"^Q\s(.+) (\d+) +([A-Z-]+) +(\d+) +\(\d+\)$")
+_RE_MATCH_BLOCK_HIT_SEQ = re.compile(r"^T\s(.+) (\d+) +([A-Z-]+) +(\d+) +\(\d+\)$")
 
 _END_OF_FILE_MARKER = "Done!"
 
