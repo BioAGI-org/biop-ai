@@ -1752,6 +1752,23 @@ class TestXMS(unittest.TestCase):
             )
         )
 
+    def test_xms_entity_declaration(self):
+        """Test that an XML entity declaration raises ValueError.
+
+        Declared entities can expand to far more nodes than the file holds
+        ("billion laughs"), and XMS files have no use for them.
+        """
+        with open(support.DATA / "motifs" / "abdb.xms") as stream:
+            data = stream.read()
+        self.assertIn("<name>Abd-B</name>", data)
+        data = '<!DOCTYPE motif [<!ENTITY name "Abd-B">]>\n' + data.replace(
+            "<name>Abd-B</name>", "<name>&name;</name>"
+        )
+        with self.assertRaisesRegex(
+            ValueError, "XML entity declarations are not allowed .found entity 'name'"
+        ):
+            motifs.parse(StringIO(data), "xms")
+
 
 class TestJASPAR(unittest.TestCase):
     """Testing parsing JASPAR files."""
@@ -4147,6 +4164,34 @@ class TestMEME(unittest.TestCase):
             self.assertIsNone(motif.counts)
         self.assertIs(record["TGGTAGWTGTRSYAGT"], record[1])
 
+    def test_meme_entity_declaration(self):
+        """Test that an XML entity declaration raises ValueError.
+
+        Declared entities can expand to far more elements than the file holds
+        ("billion laughs"), and MEME output has no use for them.
+        """
+        path = support.DATA / "motifs" / "meme.INO_up800.classic.oops.xml"
+        with open(path) as stream:
+            data = stream.read()
+        self.assertEqual(data.count("]>"), 1)
+        self.assertIn('primary_sequences="common/INO_up800.s"', data)
+        data = data.replace("]>", '<!ENTITY file "common/INO_up800.s">\n]>')
+        data = data.replace(
+            'primary_sequences="common/INO_up800.s"', 'primary_sequences="&file;"'
+        )
+        with self.assertRaisesRegex(
+            ValueError, "XML entity declarations are not allowed .found entity 'file'"
+        ):
+            motifs.parse(StringIO(data), "meme")
+
+    def test_meme_truncated(self):
+        """Test that truncated MEME XML raises ValueError."""
+        path = support.DATA / "motifs" / "meme.INO_up800.classic.oops.xml"
+        with open(path) as stream:
+            data = stream.read()
+        with self.assertRaisesRegex(ValueError, "Improper MEME XML input file"):
+            motifs.parse(StringIO(data[: len(data) // 2]), "meme")
+
     def test_minimal_meme_parser(self):
         """Parse motifs/minimal_test.meme file."""
         with open(support.DATA / "motifs" / "minimal_test.meme") as stream:
@@ -5130,6 +5175,31 @@ class TestMAST(unittest.TestCase):
             NotImplementedError, "Strand handling option separate not parsable"
         ):
             motifs.parse(StringIO(data), "MAST")
+
+    def test_mast_entity_declaration(self):
+        """Test that an XML entity declaration raises ValueError.
+
+        Declared entities can expand to far more elements than the file holds
+        ("billion laughs"), and MAST output has no use for them.
+        """
+        with open(support.DATA / "motifs" / "mast.crp0.de.oops.txt.xml") as stream:
+            data = stream.read()
+        declaration, body = data.split("\n", 1)
+        self.assertTrue(declaration.startswith("<?xml "))
+        self.assertIn('source="common/crp0.s"', body)
+        body = body.replace('source="common/crp0.s"', 'source="&db;"')
+        data = f'{declaration}\n<!DOCTYPE mast [<!ENTITY db "common/crp0.s">]>\n{body}'
+        with self.assertRaisesRegex(
+            ValueError, "XML entity declarations are not allowed .found entity 'db'"
+        ):
+            motifs.parse(StringIO(data), "MAST")
+
+    def test_mast_truncated(self):
+        """Test that truncated MAST XML raises ValueError."""
+        with open(support.DATA / "motifs" / "mast.crp0.de.oops.txt.xml") as stream:
+            data = stream.read()
+        with self.assertRaisesRegex(ValueError, "Improper MAST XML input file"):
+            motifs.parse(StringIO(data[: len(data) // 2]), "MAST")
 
 
 class TestTransfac(unittest.TestCase):

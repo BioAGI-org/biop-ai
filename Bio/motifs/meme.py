@@ -7,6 +7,7 @@
 """Module for the support of MEME motif format."""
 
 import xml.etree.ElementTree as ET
+from xml.parsers import expat
 
 from Bio import Align
 from Bio import motifs
@@ -48,8 +49,8 @@ def read(handle):
     """
     record = Record()
     try:
-        xml_tree = ET.parse(handle)
-    except ET.ParseError:
+        xml_tree = ET.parse(handle, parser=_XMLParser())
+    except expat.ExpatError:
         raise ValueError(
             "Improper MEME XML input file. XML root tag should start with <MEME version= ..."
         )
@@ -119,6 +120,54 @@ class Record(list):
 
 
 # Everything below is private
+
+
+class _XMLParser:
+    """Parser for ElementTree.parse that rejects XML entity declarations.
+
+    MEME and MAST output has no use for them, and entities that expand to
+    other entities turn a few hundred bytes into millions of elements
+    ("billion laughs"). ElementTree's own XMLParser hides its expat parser,
+    so it cannot refuse them. This one drives expat and a TreeBuilder as the
+    pure Python XMLParser of ElementTree does, and builds the same tree.
+    Malformed XML raises expat.ExpatError.
+    """
+
+    def __init__(self):
+        self._builder = ET.TreeBuilder()
+        self._parser = expat.ParserCreate(namespace_separator="}")
+        self._parser.buffer_text = True
+        self._parser.EntityDeclHandler = self._entity_decl
+        self._parser.StartElementHandler = self._start
+        self._parser.EndElementHandler = self._end
+        self._parser.CharacterDataHandler = self._builder.data
+
+    @staticmethod
+    def _entity_decl(name, *args):
+        raise ValueError(
+            f"XML entity declarations are not allowed (found entity {name!r})"
+        )
+
+    @staticmethod
+    def _fixname(name):
+        # expat gives a name in a namespace as "uri}local", ElementTree
+        # as "{uri}local".
+        return "{" + name if "}" in name else name
+
+    def _start(self, tag, attrib):
+        fixname = self._fixname
+        attrib = {fixname(key): value for key, value in attrib.items()}
+        self._builder.start(fixname(tag), attrib)
+
+    def _end(self, tag):
+        self._builder.end(self._fixname(tag))
+
+    def feed(self, data):
+        self._parser.Parse(data, False)
+
+    def close(self):
+        self._parser.Parse(b"", True)
+        return self._builder.close()
 
 
 def __read_metadata(record, xml_tree):

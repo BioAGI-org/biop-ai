@@ -7,7 +7,7 @@
 """Parse XMS motif files."""
 
 import re
-from xml.dom import minidom
+from xml.dom import expatbuilder
 from xml.dom import Node
 
 from Bio import motifs
@@ -83,6 +83,20 @@ class XMSScanner:
         return re.sub(r"\s+", " ", "".join(retlist))
 
 
+class _ExpatBuilder(expatbuilder.ExpatBuilderNS):
+    """Builds the document minidom.parse does, but rejects entity declarations.
+
+    XMS files have no use for them, and entities that expand to other
+    entities turn a few hundred bytes into millions of DOM nodes ("billion
+    laughs").
+    """
+
+    def entity_decl_handler(self, entityName, *args):
+        raise ValueError(
+            f"XML entity declarations are not allowed (found entity {entityName!r})"
+        )
+
+
 class Record(list):
     """Class to store the information in a XMS matrix table.
 
@@ -100,7 +114,12 @@ def read(handle):
     XMS is an XML format for describing regulatory motifs and PSSMs.
     This format was defined by Thomas Down, and used in the NestedMICA and MotifExplorer programs.
     """
-    xms_doc = minidom.parse(handle)
+    builder = _ExpatBuilder()
+    if isinstance(handle, str):  # a file name, as minidom.parse accepts
+        with open(handle, "rb") as stream:
+            xms_doc = builder.parseFile(stream)
+    else:
+        xms_doc = builder.parseFile(handle)
     record = XMSScanner(xms_doc).record
 
     return record
