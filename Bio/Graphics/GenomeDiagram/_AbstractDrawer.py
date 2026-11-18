@@ -32,14 +32,19 @@ For dealing with biological information, the package expects Biopython objects
 like SeqFeatures.
 """
 
+import warnings
 from itertools import islice
+from math import ceil
 from math import cos
+from math import floor
 from math import pi
 from math import sin
 
 from reportlab.graphics.shapes import Polygon
 from reportlab.lib import colors
 from reportlab.lib import pagesizes
+
+from Bio import BiopythonWarning
 
 from ._Colors import _warn_colour_alias
 
@@ -569,3 +574,43 @@ class AbstractDrawer:
         else:
             end = min(self.end, track.end)
         return start, end
+
+    def _scale_tick_positions(self, interval_name, points_per_base):
+        """Return the positions of one class of scale ticks on this track (PRIVATE).
+
+        Arguments:
+         - interval_name - "scale_largetick_interval" or
+           "scale_smalltick_interval", the track attribute giving the
+           number of bases between the ticks
+         - points_per_base - the distance on the page, in points, between
+           two adjacent bases where the ticks are drawn
+
+        Ticks sit on the multiples of the interval, so they are placed the
+        same way whatever part of the sequence is shown. Only those strictly
+        inside the current track's start and end are returned, so a track
+        limited to a small window of a long diagram costs only its own ticks.
+
+        If the ticks would be less than one point apart, none are returned
+        and a BiopythonWarning names the interval to raise. Ticks are lines
+        one point wide, so ticks that close only merge into a solid band,
+        and how many there are is set by the sequence coordinates rather
+        than by the page: a single feature ending at 1e11 in a small file
+        would ask for ten million of them.
+        """
+        track = self._parent[self.current_track_level]
+        interval = int(getattr(track, interval_name))
+        start, end = self._current_track_start_end()
+        # The first multiple of the interval after start. As before, an
+        # interval of 0 raises ZeroDivisionError and a negative one draws
+        # no ticks (the range below is then empty).
+        first = (floor(start) // interval + 1) * interval
+        spacing = interval * points_per_base
+        if interval > 0 and spacing < 1:
+            warnings.warn(
+                f"Not drawing the scale ticks every {interval} bases: they would "
+                f"be {spacing:.2g} points apart, too close to draw. Raise "
+                f"{interval_name} to draw them.",
+                BiopythonWarning,
+            )
+            return range(0)
+        return range(first, ceil(end), interval)

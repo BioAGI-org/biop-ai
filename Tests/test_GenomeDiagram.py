@@ -13,6 +13,7 @@ import support
 from Bio import MissingPythonDependencyError
 
 try:
+    from reportlab.graphics.shapes import Line
     from reportlab.lib import colors
     from reportlab.lib.units import cm
     from reportlab.pdfbase import pdfmetrics
@@ -38,6 +39,7 @@ except ImportError:
 from reportlab import rl_config
 
 from Bio import BiopythonDeprecationWarning
+from Bio import BiopythonWarning
 from Bio import SeqIO
 from Bio.Graphics.GenomeDiagram import CrossLink
 from Bio.Graphics.GenomeDiagram import Diagram
@@ -921,6 +923,36 @@ class DiagramTest(unittest.TestCase):
                     self.gdd.draw(
                         format="linear", track_size=track_size, start=0, end=1000
                     )
+
+    def check_small_ticks_skipped(self, fmt):
+        """Draw a feature ending at 1 Gbp and check only the large ticks stay."""
+        # A tiny file can declare a feature this long. On the default page
+        # the default small ticks, every 10 kbp, would then be about 0.1
+        # points apart (linear) or 0.01 points apart (circular). One Line
+        # used to be drawn for each, so the time and memory needed grew
+        # with the coordinate, not with the size of the file.
+        feature_set = self.gdd.tracks[1].new_set()
+        feature_set.add_feature(SeqFeature(SimpleLocation(0, 10**9)))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            self.gdd.draw(format=fmt)
+        self.assertEqual(len(caught), 1, [str(w.message) for w in caught])
+        self.assertIs(caught[0].category, BiopythonWarning)
+        self.assertIn(
+            "too close to draw. Raise scale_smalltick_interval", str(caught[0].message)
+        )
+        lines = [e for e in self.gdd.drawing.contents if isinstance(e, Line)]
+        # The large ticks, every 1 Mbp, are still drawn: 1000 of them.
+        self.assertGreaterEqual(len(lines), 1000)
+        self.assertLess(len(lines), 2000)
+
+    def test_linear_scale_ticks_too_dense(self):
+        """Linear scale ticks less than a point apart are skipped with a warning."""
+        self.check_small_ticks_skipped("linear")
+
+    def test_circular_scale_ticks_too_dense(self):
+        """Circular scale ticks less than a point apart are skipped with a warning."""
+        self.check_small_ticks_skipped("circular")
 
     def test_del_tracks(self):
         """Delete track."""
