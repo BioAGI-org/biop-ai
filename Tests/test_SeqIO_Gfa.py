@@ -147,6 +147,34 @@ class TestCorrupt(unittest.TestCase):
                 self.assertIs(caught[0].category, BiopythonParserWarning)
                 self.assertIn(message, str(caught[0].message))
 
+    def test_float_tag_backtracking(self):
+        """Check long f and B tags are type checked in linear time.
+
+        The float pattern given by the GFA standard can match a run of digits
+        in many ways, and Python's re tried them all on a value that did not
+        match. That took time quadratic in the length of an f tag, and doubling
+        with each element of a B tag, so a B tag of 40 elements took days.
+        """
+        array = ",".join(["11"] * 28)
+        for value, message in (
+            ("f:" + "1" * 60000 + "a", "Expected float"),
+            ("B:f," + array + "X", "integers or floats"),
+            ("f:" + "1" * 60000, None),
+            ("B:f," + array, None),
+            ("B:i,-1.5,+.5,2e-3,7E+10," + array, None),
+        ):
+            with self.subTest(value=value[:12], message=message):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    record = SeqIO.read(StringIO(f"S\ts1\tAAA\tAB:{value}\n"), "gfa1")
+                self.assertEqual(record.annotations["AB"], tuple(value.split(":")))
+                if message is None:
+                    self.assertEqual(caught, [])
+                else:
+                    self.assertEqual(len(caught), 1)
+                    self.assertIs(caught[0].category, BiopythonParserWarning)
+                    self.assertIn(message, str(caught[0].message))
+
     def test_parser_warnings_filter(self):
         """Check a filter on BiopythonWarning still applies to GFA warnings."""
         with warnings.catch_warnings():
