@@ -116,7 +116,10 @@ def _open(source):
 
 
 # A mantissa ending in the exponent marker, such as "-1.000000e" (issue #2839).
-_SPLIT_MANTISSA = re.compile(r"[-+]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)[eE]", re.ASCII)
+# The digits after the point sit inside the optional group so that they cannot
+# share a run of digits with those before it, which would make a long run of
+# digits with no "e" take quadratic time to reject.
+_SPLIT_MANTISSA = re.compile(r"[-+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)[eE]", re.ASCII)
 
 
 def _parse_trim(value):
