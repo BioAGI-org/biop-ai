@@ -3187,6 +3187,36 @@ class TruncatedCases(unittest.TestCase):
                     f" of query {query_id!r}",
                 )
 
+    def test_cut_inside_hits(self):
+        """Test a query whose alignments end part way through its hits."""
+        # In output001.m10, the two hits of the first query run from the
+        # ">>gi|152973457|..." on line 40 to line 105, and line 106 opens the
+        # second query. The cuts fall after a ">>" hit line (40), in the HSP
+        # attributes (50), after the aligned query's ">" line (52), in the
+        # aligned query sequence (60, 92), in the aligned hit sequence (70)
+        # and after the last line of the last hit (105). In output007.m10,
+        # lines 75 to 78 are the "; al_cons" block of the first hit.
+        for filename, n in (
+            ("output001.m10", 40),
+            ("output001.m10", 50),
+            ("output001.m10", 52),
+            ("output001.m10", 60),
+            ("output001.m10", 70),
+            ("output001.m10", 92),
+            ("output001.m10", 105),
+            ("output007.m10", 75),
+            ("output007.m10", 77),
+        ):
+            with self.subTest(filename=filename, lines=n):
+                handle = truncated(filename, n)
+                with self.assertRaises(ValueError) as cm:
+                    list(parse(handle, FMT))
+                self.assertEqual(
+                    str(cm.exception),
+                    "File ended inside the alignments"
+                    " of query 'gi|10955263|ref|NP_052604.1|'",
+                )
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)

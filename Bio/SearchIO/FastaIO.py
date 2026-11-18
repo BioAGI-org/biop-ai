@@ -431,6 +431,10 @@ class FastaM10Parser:
             # yield hit if we've reached the start of a new query or
             # the end of the search
             self.line = self.handle.readline()
+            if not self.line:
+                raise ValueError(
+                    f"File ended inside the alignments of query {query_id!r}"
+                )
             if self.line.strip() in [">>><<<", ">>>///"] or (
                 not self.line.startswith(">>>") and ">>>" in self.line
             ):
