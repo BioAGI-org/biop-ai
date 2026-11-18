@@ -8,10 +8,12 @@ import struct
 import unittest
 from io import BytesIO
 from os.path import basename
+from unittest import mock
 
 import support
 
 from Bio import SeqIO
+from Bio.SeqIO import AbiIO
 
 # TODO PEP8 address long lines.
 
@@ -625,6 +627,37 @@ class TestAbiCorrupt(unittest.TestCase):
         # Each entry used to decode the block again, so memory grew with the
         # number of entries times the block size. Now they share one value:
         self.assertEqual(len({id(value) for value in raw.values()}), 1)
+        # 50 entries each of PBAS2, PCON2 and SMPL1 at offset 128. The last
+        # of each takes the first 20 chars, the others all 1000:
+        block = b"ACGT" * 250
+        entries = [
+            (name, number, 2, 1, size, size, 128, 0)
+            for name, number in [(b"PBAS", 2), (b"PCON", 2), (b"SMPL", 1)]
+            for size in [1000] * 49 + [20]
+        ]
+        data = self.abif(block, entries)
+        self.assertEqual(len(data), 5328)
+        decoded = []  # length of each value decoded to a string
+
+        class Chars(bytes):
+            def decode(self, *args, **kwargs):
+                decoded.append(len(self))
+                return super().decode(*args, **kwargs)
+
+        parse = AbiIO._parse_tag_data
+        with mock.patch.object(
+            AbiIO, "_parse_tag_data", lambda *args: Chars(parse(*args))
+        ):
+            record = SeqIO.read(BytesIO(data), "abi")
+        # The last entry of each wins:
+        self.assertEqual(record.seq, "ACGT" * 5)
+        self.assertEqual(
+            record.letter_annotations["phred_quality"], [65, 67, 71, 84] * 5
+        )
+        self.assertEqual(record.id, "ACGT" * 5)
+        # Each entry used to decode its shared value again, so time grew with
+        # the number of entries times the block size. Now only the last does:
+        self.assertEqual(decoded, [20, 20, 20])
 
     def test_overlapping_data_blocks(self):
         """Test directory entries whose data blocks overlap."""
