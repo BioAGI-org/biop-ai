@@ -384,27 +384,28 @@ class AbiIterator(SequenceIterator):
         sample_id = "<unknown id>"
 
         raw = {}
-        seq = qual = None
         for tag_name, tag_number, tag_data in _abi_parse_header(header, stream):
             key = tag_name + str(tag_number)
 
             raw[key] = tag_data
 
-            # PBAS2 is base-called sequence, only available in 3530
-            if key == "PBAS2":
-                seq = tag_data.decode()
-            # PCON2 is quality values of base-called sequence
-            elif key == "PCON2":
-                qual = [ord(val) for val in tag_data.decode()]
-            # SMPL1 is sample id entered before sequencing run, it must be
-            # a string.
-            elif key == "SMPL1":
-                sample_id = _get_string_tag(tag_data)
-            elif key in times:
+            if key in times:
                 times[key] = tag_data
-            else:
-                if key in _EXTRACT:
-                    annot[_EXTRACT[key]] = tag_data
+            elif key in _EXTRACT:
+                annot[_EXTRACT[key]] = tag_data
+
+        # The last entry for a key wins. Decode it once, not once per entry,
+        # as entries repeating a key can all share one large block.
+        # PBAS2 is base-called sequence, only available in 3530
+        seq = raw["PBAS2"].decode() if "PBAS2" in raw else None
+        # PCON2 is quality values of base-called sequence
+        qual = None
+        if "PCON2" in raw:
+            qual = [ord(val) for val in raw["PCON2"].decode()]
+        # SMPL1 is sample id entered before sequencing run, it must be
+        # a string.
+        if "SMPL1" in raw:
+            sample_id = _get_string_tag(raw["SMPL1"])
 
         # set time annotations
         annot["run_start"] = f"{times['RUND1']} {times['RUNT1']}"
