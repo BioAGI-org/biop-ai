@@ -311,7 +311,12 @@ class FastaM10Parser:
                 break
             # try to match for version line
             elif line.startswith(" version"):
-                preamble["version"] = line.split(" ")[2]
+                fields = line.split(" ")
+                if len(fields) < 3:
+                    raise ValueError(
+                        f"Expected a version number on the FASTA version line:\n{line!r}"
+                    )
+                preamble["version"] = fields[2]
             else:
                 # try to match for flavor line
                 flav_match = re.match(_RE_FLAVS, line.lower())

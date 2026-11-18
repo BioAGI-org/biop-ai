@@ -3190,6 +3190,25 @@ class TruncatedCases(unittest.TestCase):
                     "File ended before the 'Query' line of the FASTA preamble",
                 )
 
+    def test_cut_in_version_line(self):
+        """Test a file that ends part way through its ' version' line."""
+        # Line 3 of output001.m10 is " version 35.03 Feb. 18, 2008". Cut
+        # just after " version", it has no version number.
+        with open(get_file("output001.m10")) as handle:
+            lines = handle.readlines()
+        self.assertEqual(lines[2], " version 35.03 Feb. 18, 2008\n")
+        for n in range(len(lines[2])):
+            text = "".join(lines[:2]) + lines[2][:n]
+            with self.subTest(cut=lines[2][:n]):
+                with self.assertRaises(ValueError) as cm:
+                    list(parse(EndOfFileGuard(text), FMT))
+                if n == len(" version"):
+                    self.assertEqual(
+                        str(cm.exception),
+                        "Expected a version number on the FASTA version line:"
+                        "\n' version'",
+                    )
+
     def test_cut_before_first_hit(self):
         """Test a query whose alignments end before the first '>>' hit."""
         # In output001.m10, line 24 is ">>>gi|10955263|ref|NP_052604.1|, ...",
