@@ -676,7 +676,15 @@ class BlastXmlIndexer(SearchIndexer):
                 f"Expected <Iteration> at offset {offset}, not:\n{qresult_raw!r}"
             )
         while qend_mark not in qresult_raw:
-            qresult_raw += handle.readline()
+            line = handle.readline()
+            if not line:
+                # The index no longer matches the file (truncated after
+                # indexing); a fresh index raises the same error in __iter__
+                raise ValueError(
+                    "File ended before the </Iteration> closing the"
+                    f" <Iteration> at offset {offset}"
+                )
+            qresult_raw += line
         if not qresult_raw.rstrip().endswith(qend_mark):
             raise ValueError(
                 f"Expected the <Iteration> at offset {offset} to end with"
