@@ -1215,6 +1215,24 @@ class MalformedFileTests(unittest.TestCase):
                     proxy.get_raw(0)
                 self.assertIn(message, str(cm.exception))
 
+    def test_fastq_get_raw_many_short_lines(self):
+        """A record wrapped at one base per line is read back in linear time.
+
+        get_raw used to build the record with bytes += line, which copies
+        the whole record so far on every line.  Done that way, each of the
+        two look-ups below took a minute or more on this 1.6 MB file.
+        """
+        lines = 400000
+        path = self.write(
+            "wrapped.fastq", "@r1\n" + "A\n" * lines + "+\n" + "I\n" * lines
+        )
+        with open(path, "rb") as handle:
+            data = handle.read()
+        index = SeqIO.index(path, "fastq")
+        self.addCleanup(index.close)
+        self.assertEqual(index.get_raw("r1"), data)
+        self.assertEqual(index["r1"].seq, "A" * lines)
+
     # GenBank ------------------------------------------------------------
 
     # A complete but minimal record, to be given various LOCUS lines:
