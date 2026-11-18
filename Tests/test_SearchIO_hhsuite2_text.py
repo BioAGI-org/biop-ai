@@ -5,11 +5,15 @@
 
 """Tests for SearchIO HhsuiteIO parsers."""
 
+import os
+import subprocess
+import sys
 import unittest
 from io import StringIO
 
 import support
 
+import Bio
 from Bio.SearchIO import parse
 
 # test case files are in the Blast directory
@@ -199,17 +203,51 @@ class HhsuiteCases(unittest.TestCase):
         self.assertEqual("D", hsp.hit.seq)
         self.assertEqual("X", hsp.query.seq)
 
-    def test_allx_padded_match_block_lines(self):
-        """Parsing allx.hhr with Q and T lines of spaces in a match block."""
-        # The parser skips a Q or T line that is not an alignment row.
-        # Rejecting each of these took the old Q and T regexes over half a
-        # minute: their time was cubic in the number of spaces.
+    def run_in_child(self, code, text):
+        """Run code in a child process with text on stdin, and return its output.
+
+        The child imports Bio from this checkout. The test fails if the child
+        takes over 60 seconds, so a slow regex fails it even when the regex
+        would give the right answer in the end.
+        """
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                input=text,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("parsing the file took over 60 seconds")
+        self.assertEqual(0, result.returncode, result.stderr)
+        return result.stdout
+
+    def check_padded_match_block_line(self, line):
+        """Parse allx.hhr with line added to the first match block."""
+        # The parser skips a Q or T line that is not an alignment row. The
+        # old Q and T regexes took time cubic in the number of spaces to
+        # reject one: over five minutes for 4,000 spaces. So the file is
+        # parsed in a child process first, where the timeout fails the test.
         with open(get_file("allx.hhr")) as handle:
             text = handle.read()
         row = "Q Only             39 X   39 (39)\n"
         self.assertIn(row, text)
-        padded = "Q" + " " * 2000 + "y\n" + "T" + " " * 2000 + "y\n"
-        text = text.replace(row, row + padded, 1)
+        text = text.replace(row, row + line, 1)
+        code = f"""\
+import sys
+from Bio.SearchIO import parse
+print(len(next(parse(sys.stdin, {FMT!r}))))
+"""
+        self.assertEqual("10\n", self.run_in_child(code, text))
         qresult = next(parse(StringIO(text), FMT))
         self.assertEqual(10, len(qresult))
         hsp = qresult[0].hsps[0]
@@ -221,16 +259,34 @@ class HhsuiteCases(unittest.TestCase):
         self.assertEqual("X", hsp.query.seq)
         self.assertEqual("T", hsp.hit.seq)
 
+    def test_allx_padded_match_block_q_line(self):
+        """Parsing allx.hhr with a Q line of spaces in a match block."""
+        self.check_padded_match_block_line("Q" + " " * 4000 + "y\n")
+
+    def test_allx_padded_match_block_t_line(self):
+        """Parsing allx.hhr with a T line of spaces in a match block."""
+        self.check_padded_match_block_line("T" + " " * 4000 + "y\n")
+
     def test_allx_hit_line_without_whitespace(self):
         """Parsing allx.hhr ending in a hit line of '>' without whitespace."""
-        # Rejecting this line took the old regex for the hit id and
-        # description over a minute: its time was quadratic in the number
-        # of '>' characters.
+        # The old regex for the hit id and description took time quadratic
+        # in the number of '>' characters to reject this line: about ten
+        # minutes for 200,000. So the file is parsed in a child process
+        # first, where the timeout fails the test.
         with open(get_file("allx.hhr")) as handle:
             text = handle.read()
         start = "No 1  \n"
         self.assertIn(start, text)
-        text = text[: text.index(start) + len(start)] + ">" * 64000
+        text = text[: text.index(start) + len(start)] + ">" * 200_000
+        code = f"""\
+import sys
+from Bio.SearchIO import parse
+try:
+    next(parse(sys.stdin, {FMT!r}))
+except RuntimeError:
+    print("RuntimeError")
+"""
+        self.assertEqual("RuntimeError\n", self.run_in_child(code, text))
         qresults = parse(StringIO(text), FMT)
         with self.assertRaisesRegex(
             RuntimeError, "^Unexpected content in HIT_BLOCK_DESC line'>>>"
