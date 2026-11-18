@@ -6,13 +6,20 @@
 # as part of this package.
 """Tests Bio.SeqFeature."""
 
+import os
+import re
+import subprocess
+import sys
 import unittest
 import warnings
 from copy import deepcopy
+from io import StringIO
 
 import support
 
+import Bio
 from Bio import BiopythonParserWarning
+from Bio import SeqFeature as SeqFeatureModule
 from Bio import Seq
 from Bio import SeqIO
 from Bio import SeqRecord
@@ -25,6 +32,7 @@ from Bio.SeqFeature import ExactPosition
 from Bio.SeqFeature import Location
 from Bio.SeqFeature import LocationParserError
 from Bio.SeqFeature import OneOfPosition
+from Bio.SeqFeature import Position
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqFeature import SimpleLocation
 from Bio.SeqFeature import UnknownPosition
@@ -520,6 +528,149 @@ class TestLocations(unittest.TestCase):
         self.assertEqual(
             str(cm.exception), "double complement in 'join(complement(1..5),10..20)'?"
         )
+
+    def test_oneof_long_digit_run(self):
+        r"""A long run of digits in a bad one-of is rejected in linear time.
+
+        The one-of pattern used the character class [,\d+] where a repeated
+        group was meant, so it could split a run of digits in many ways, and
+        Python's re tried every one. That took time quadratic in the length
+        of the run: a GenBank file with a 32 kB feature location took 3 s.
+        It still raised the right error in the end, so the long runs are
+        parsed in a child process, and the timeout fails the test on the old
+        pattern.
+        """
+        texts = [
+            "one-of({})",  # start position, then no ".."
+            "1..one-of({}x)",  # end position
+            "join(one-of({}x)..5,10..20)",  # split into parts first
+        ]
+        # The old pattern took 1.2 to 2.5 seconds on 20,000 digits in each of
+        # these and in Position.fromstring, four times as long for each
+        # doubling, so 300,000 digits take it 4.5 to 9.5 minutes each. The
+        # new pattern takes milliseconds.
+        code = """\
+import sys
+from Bio.SeqFeature import Location
+from Bio.SeqFeature import Position
+digits = "1" * 300_000
+for text in sys.argv[1:]:
+    try:
+        Location.fromstring(text.format(digits))
+    except ValueError as err:
+        print(type(err).__name__)
+try:
+    Position.fromstring("one-of(" + digits + "x")
+except ValueError as err:
+    print(type(err).__name__)
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code, *texts],
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(
+            result.stdout, "LocationParserError\n" * 3 + "ValueError\n", result.stderr
+        )
+
+        # Shorter runs give the usual error messages.
+        digits = "1" * 1000
+        for text in texts:
+            with self.subTest(text=text):
+                with self.assertRaises(LocationParserError) as cm:
+                    Location.fromstring(text.format(digits))
+                self.assertIn("Could not parse feature location", str(cm.exception))
+        with self.assertRaisesRegex(ValueError, "invalid literal for int"):
+            Position.fromstring(f"one-of({digits}x")
+        # A long valid one-of still parses.
+        location = Location.fromstring("one-of(" + "7," * 30000 + "9)..20")
+        self.assertIsInstance(location.start, OneOfPosition)
+        self.assertEqual(len(location.start.position_choices), 30001)
+        self.assertEqual(location.start, 6)
+
+    def test_oneof_choices(self):
+        """A one-of with one or more choices parses."""
+        location = Location.fromstring("one-of(12,15)..20")
+        self.assertEqual(
+            location.start.position_choices, [ExactPosition(11), ExactPosition(14)]
+        )
+        location = Location.fromstring("one-of(12)..20")
+        self.assertEqual(location.start.position_choices, [ExactPosition(11)])
+        with self.assertRaises(LocationParserError):
+            Location.fromstring("one-of(3)..20")
+
+    def test_oneof_same_language(self):
+        r"""The one-of patterns accept exactly what one\-of\(\d+[,\d+]+\) did.
+
+        That pattern took quadratic time on a long run of digits, and was
+        replaced by one taking linear time. A first replacement accepted
+        only two or more comma separated numbers, which broke reading back
+        "one-of(12)", as SeqIO writes a OneOfPosition with one choice.
+        """
+        old = re.compile(r"one\-of\(\d+[,\d+]+\)")
+        for text in (
+            "one-of(12)",
+            "one-of(3)",
+            "one-of(12,15)",
+            "one-of(1,2,3)",
+            "one-of(1,+2)",
+            "one-of(1+)",
+            "one-of(1,,2)",
+            "one-of(1,2,)",
+            "one-of(+1,2)",
+            "one-of(,1,2)",
+            "one-of(1, 2)",
+            "one-of(1.2)",
+            "one-of(-1,2)",
+            "one-of()",
+            "one-of(1\u0662)",
+        ):
+            with self.subTest(text=text):
+                expected = old.fullmatch(text) is not None
+                # Position.fromstring uses this one.
+                self.assertEqual(
+                    SeqFeatureModule._re_oneof_position.fullmatch(text) is not None,
+                    expected,
+                )
+                # Location.fromstring uses the other.
+                match = SeqFeatureModule._re_location_category.match(f"{text}..20")
+                self.assertEqual(
+                    match is not None and match.lastgroup == "oneof", expected
+                )
+
+    def test_oneof_single_choice_round_trip(self):
+        """A one-of with one choice survives a GenBank write and read."""
+        start = OneOfPosition(11, choices=[ExactPosition(11)])
+        end = OneOfPosition(30, choices=[ExactPosition(30)])
+        locations = [
+            SimpleLocation(start, ExactPosition(20), strand=1),
+            SimpleLocation(ExactPosition(0), end, strand=1),
+        ]
+        record = SeqRecord.SeqRecord(
+            Seq.Seq("A" * 40),
+            id="test",
+            annotations={"molecule_type": "DNA"},
+            features=[SeqFeature(loc, type="misc_feature") for loc in locations],
+        )
+        handle = StringIO()
+        SeqIO.write(record, handle, "genbank")
+        self.assertIn(" one-of(12)..20\n", handle.getvalue())
+        self.assertIn(" 1..one-of(30)\n", handle.getvalue())
+        handle.seek(0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", BiopythonParserWarning)
+            new = SeqIO.read(handle, "genbank")
+        for feature, location in zip(new.features, locations):
+            self.assertEqual(repr(feature.location), repr(location))
 
     def test_fromstring_is_static(self):
         """Test whether Location.fromstring is static.
