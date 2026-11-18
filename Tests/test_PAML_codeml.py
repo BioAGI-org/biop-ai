@@ -8,6 +8,7 @@
 import itertools
 import os
 import os.path
+import tempfile
 import unittest
 
 import support
@@ -395,6 +396,48 @@ class ModTest(unittest.TestCase):
             self.assertIn("parameters", model, version_msg)
             params = model["parameters"]
             self.assertEqual(len(params), SITECLASS_PARAMS[0], version_msg)
+
+    def testParseNgene2Mgene1BadGenes(self):
+        """Reject Gene blocks that do not match the header's gene count."""
+        # The "(N genes: separate data)" count used to size the genes list
+        # before any gene was read, so a short file could ask for gigabytes.
+        results_path = os.path.join(
+            self.results_dir, "codeml", "ngene2_mgene1", "ngene2_mgene1-4_5.out"
+        )
+        with open(results_path) as handle:
+            text = handle.read()
+        header = "(2 genes: separate data)"
+        gene1 = "\nGene  1  ls:"
+        gene2 = "\nGene  2  ls:"
+        for part in (header, gene1, gene2):
+            self.assertEqual(text.count(part), 1)
+        cases = [
+            (
+                text.replace(header, "(100000 genes: separate data)"),
+                "expected 100000 Gene blocks, found 2",
+            ),
+            (
+                text.replace(header, "(1 genes: separate data)"),
+                "expected 1 Gene blocks, found 2",
+            ),
+            (text[: text.index(gene1)], "expected 2 Gene blocks, found 0"),
+            (text[: text.index(gene2)], "expected 2 Gene blocks, found 1"),
+            (
+                text.replace(gene2, "\nGene  0  ls:"),
+                "expected Gene 2, found Gene 0",
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            bad_path = os.path.join(tmp_dir, "bad.out")
+            for bad_text, message in cases:
+                with self.subTest(message=message):
+                    with open(bad_path, "w") as handle:
+                        handle.write(bad_text)
+                    with self.assertRaises(ValueError) as cm:
+                        codeml.read(bad_path)
+                    self.assertEqual(
+                        str(cm.exception), f"Invalid results file: {message}"
+                    )
 
     def testParseNgene2Mgene34(self):
         res_dir = os.path.join(self.results_dir, "codeml", "ngene2_mgene34")

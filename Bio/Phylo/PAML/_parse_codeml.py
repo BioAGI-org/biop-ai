@@ -17,7 +17,8 @@ def parse_basics(lines, results):
     # multi_models is used to designate there being results for more than one
     # model in the file
     multi_models = False
-    multi_genes = False
+    # num_genes is the gene count given in the header, or None without one
+    num_genes = None
     version_re = re.compile(r".+ \(in paml version (\d+\.\d+[a-z]*).*")
     model_re = re.compile(r"Model:\s+(.+)")
     num_genes_re = re.compile(r"\(([0-9]+) genes: separate data\)")
@@ -43,11 +44,10 @@ def parse_basics(lines, results):
         # Find out if more than one genes are analyzed
         num_genes_res = num_genes_re.search(line)
         if num_genes_res is not None:
+            # Do not make a placeholder per gene: the count comes from the
+            # file. parse_nssites appends one dict per Gene block it reads.
             results["genes"] = []
             num_genes = int(num_genes_res.group(1))
-            for n in range(num_genes):
-                results["genes"].append({})
-            multi_genes = True
             continue
         # Get the codon substitution model
         codon_freq_res = codon_freq_re.match(line)
@@ -70,10 +70,10 @@ def parse_basics(lines, results):
         # Get the maximum log-likelihood
         if "ln Lmax" in line and line_floats:
             results["lnL max"] = line_floats[0]
-    return (results, multi_models, multi_genes)
+    return (results, multi_models, num_genes)
 
 
-def parse_nssites(lines, results, multi_models, multi_genes):
+def parse_nssites(lines, results, multi_models, num_genes):
     """Determine which NSsites models are present and parse them."""
     ns_sites = {}
     model_re = re.compile(r"Model (\d+):\s+(.+)")
@@ -93,7 +93,7 @@ def parse_nssites(lines, results, multi_models, multi_genes):
             "beta&w>1": 8,
             "M2a_rel": 22,
         }[siteclass_model]
-        if multi_genes:
+        if num_genes is not None:
             genes = results["genes"]
             current_gene = None
             gene_start = None
@@ -104,13 +104,23 @@ def parse_nssites(lines, results, multi_models, multi_genes):
                     if current_gene is not None:
                         assert model_results is not None
                         parse_model(lines[gene_start:line_num], model_results)
-                        genes[current_gene - 1] = model_results
+                        genes.append(model_results)
                     gene_start = line_num
                     current_gene = int(gene_res.group(1))
+                    if current_gene != len(genes) + 1:
+                        raise ValueError(
+                            "Invalid results file: "
+                            f"expected Gene {len(genes) + 1}, found Gene {current_gene}"
+                        )
                     model_results = {"description": siteclass_model}
-            if len(genes[current_gene - 1]) == 0:
+            if current_gene is not None:
                 model_results = parse_model(lines[gene_start:], model_results)
-                genes[current_gene - 1] = model_results
+                genes.append(model_results)
+            if len(genes) != num_genes:
+                raise ValueError(
+                    "Invalid results file: "
+                    f"expected {num_genes} Gene blocks, found {len(genes)}"
+                )
         else:
             model_results = {"description": siteclass_model}
             model_results = parse_model(lines, model_results)
