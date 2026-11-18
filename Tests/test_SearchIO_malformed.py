@@ -42,6 +42,33 @@ def parse_all(text, fmt, **kwargs):
     return list(SearchIO.parse(StringIO(text), fmt, **kwargs))
 
 
+class EndOfFileGuard(StringIO):
+    """A text handle that fails the test when read on and on at end of file.
+
+    A parser that keeps calling readline() after it has returned "" has
+    missed the end of the file and would loop forever. This handle turns
+    that hang into an immediate test failure.
+    """
+
+    max_reads_at_end = 1000
+    reads_at_end = 0
+
+    def readline(self, size=-1):
+        line = super().readline(size)
+        if not line:
+            self.reads_at_end += 1
+            if self.reads_at_end > self.max_reads_at_end:
+                raise AssertionError(
+                    f"readline() called {self.reads_at_end} times at end of file"
+                )
+        return line
+
+
+def parse_all_guarded(text, fmt, **kwargs):
+    """Parse the given text completely, failing if the parser loops at its end."""
+    return list(SearchIO.parse(EndOfFileGuard(text), fmt, **kwargs))
+
+
 class BlastXmlIndex(unittest.TestCase):
     """The BLAST XML indexer needs one <Iteration> block per run of lines."""
 
@@ -227,6 +254,30 @@ class Hmmer(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             parse_all(text, "hmmer3-text")
         self.assertIn("Expected '  == domain 2'", str(cm.exception))
+
+    def test_hmmer3_query_line_without_length(self):
+        # The only 'Query:' line has no [L=N], and nothing follows it.
+        with open(support.DATA / "Hmmer" / "text_30_hmmscan_001.out") as handle:
+            text = handle.read()
+        text = text[: text.index("  [L=32]\n")] + "\n"
+        with self.assertRaises(ValueError) as cm:
+            parse_all_guarded(text, "hmmer3-text")
+        self.assertIn("File ended before a 'Query:' line", str(cm.exception))
+
+    def test_hmmer3_cut_inside_later_query_line(self):
+        with open(support.DATA / "Hmmer" / "text_30_hmmscan_001.out") as handle:
+            text = handle.read()
+        text = text[: text.index("Query:       gi|4885477") + len("Query:       gi")]
+        with self.assertRaises(ValueError) as cm:
+            parse_all_guarded(text, "hmmer3-text")
+        self.assertIn("File ended before a 'Query:' line", str(cm.exception))
+
+    def test_hmmer3_stray_line_after_last_result(self):
+        with open(support.DATA / "Hmmer" / "text_30_hmmscan_001.out") as handle:
+            text = handle.read()
+        with self.assertRaises(ValueError) as cm:
+            parse_all_guarded(text + "stray trailing line\n", "hmmer3-text")
+        self.assertIn("File ended before a 'Query:' line", str(cm.exception))
 
     def test_hmmer3_domtab_row_too_short(self):
         with open(support.DATA / "Hmmer" / "domtab_30_hmmscan_001.out") as handle:
