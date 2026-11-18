@@ -390,6 +390,43 @@ class TestCorruptedSnapGene(unittest.TestCase):
             SeqIO.read(h, "snapgene")
         h.close()
 
+    def test_xml_entity_declaration(self):
+        """Read a file whose XML packet declares entities."""
+        # Expanding nested entities lets a packet of a few hundred bytes
+        # build a DOM of hundreds of megabytes ("billion laughs").
+        dtds = {
+            "general": '<!ENTITY a "AAAA"><!ENTITY b "&a;&a;&a;&a;">',
+            "parameter": "<!ENTITY % a \"<!ENTITY b 'AAAA'>\"> %a;",
+        }
+        for packet_type, root, body, entity in (
+            (0x06, "Notes", "<Comments>&b;</Comments>", "general"),
+            (0x0A, "Features", "&b;", "general"),
+            (0x05, "Primers", "&b;", "general"),
+            (0x06, "Notes", "<Comments>&b;</Comments>", "parameter"),
+        ):
+            dtd = f"<!DOCTYPE {root} [{dtds[entity]}]>"
+            xml = (dtd + f"<{root}>{body}</{root}>").encode()
+            with self.subTest(root=root, entity=entity):
+                # Keep the cookie and DNA packets, then add the XML packet
+                h = BytesIO(
+                    self.buffer[:1025]
+                    + bytes([packet_type])
+                    + len(xml).to_bytes(4, "big")
+                    + xml
+                )
+                with self.assertRaisesRegex(
+                    ValueError, "SnapGene XML packets must not declare entities"
+                ):
+                    SeqIO.read(h, "snapgene")
+                h.close()
+
+        # A DOCTYPE that declares no entities is harmless and still accepted
+        xml = b"<!DOCTYPE Notes><Notes><Comments>Plain text</Comments></Notes>"
+        h = BytesIO(self.buffer[:1025] + b"\x06" + len(xml).to_bytes(4, "big") + xml)
+        record = SeqIO.read(h, "snapgene")
+        h.close()
+        self.assertEqual(record.description, "Plain text")
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
