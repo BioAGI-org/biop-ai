@@ -2156,6 +2156,7 @@ py_somcluster(PyObject* self, PyObject* args, PyObject* keywords)
 
 exit:
     data_converter(NULL, &data);
+    mask_converter(NULL, &mask);
     vector_converter(NULL, &weight);
     index2d_converter(NULL, &indices);
     celldata_converter(NULL, &celldata);
