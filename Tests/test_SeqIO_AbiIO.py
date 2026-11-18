@@ -559,6 +559,40 @@ class TestAbiCorrupt(unittest.TestCase):
         ):
             SeqIO.read(BytesIO(data), "abi")
 
+    def test_directory_entry_size_zero(self):
+        """Test a header giving the directory entries a size of zero."""
+        with open(support.DATA / "Abi" / "310.ab1", "rb") as handle:
+            data = handle.read()
+        # Header: directory entry size 28, then 113 directory entries:
+        self.assertEqual(data[16:22], b"\x00\x1c\x00\x00\x00\x71")
+        # Size 0 made every entry re-read the first one, so a large count
+        # (such as 0xFFFFFFFF) looped for hours:
+        data = data[:16] + b"\x00\x00" + data[18:]
+        for fmt in ("abi", "abi-trim"):
+            with self.subTest(fmt=fmt):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "^ABIF directory entry size is 0 bytes, expected at least 28$",
+                ):
+                    SeqIO.read(BytesIO(data), fmt)
+
+    def test_directory_past_end_of_file(self):
+        """Test a header giving more directory entries than the file holds."""
+        with open(support.DATA / "Abi" / "310.ab1", "rb") as handle:
+            data = handle.read()
+        self.assertEqual(len(data), 222099)
+        # Header: 113 directory entries of 28 bytes starting at 218515:
+        self.assertEqual(data[18:22], (113).to_bytes(4, "big"))
+        self.assertEqual(data[26:30], (218515).to_bytes(4, "big"))
+        data = data[:18] + (0xFFFFFFFF).to_bytes(4, "big") + data[22:]
+        # Entry 128 would start at 218515 + 128 * 28, the end of the file:
+        with self.assertRaisesRegex(
+            ValueError,
+            "^ABIF directory entry 128 at offset 222099 runs past the end of "
+            "the file$",
+        ):
+            SeqIO.read(BytesIO(data), "abi")
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
