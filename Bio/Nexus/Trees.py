@@ -128,9 +128,8 @@ class Tree(Nodes.Chain):
             prev = 1
             incomment = False
 
-            blocks = _re_block_delimiters.split(tree[1:closing])
-
-            for idx, blk in enumerate(blocks):
+            for match in _re_block_delimiters.finditer(tree, 1, closing):
+                blk = match.group()
                 if not incomment:
                     if blk == "(":
                         plevel += 1
@@ -139,9 +138,8 @@ class Tree(Nodes.Chain):
                     elif blk == NODECOMMENT_START:
                         incomment = True
                     elif blk == "," and plevel == 0:
-                        p = sum(len(blk) for blk in blocks[: idx + 1])
-                        subtrees.append(tree[prev:p])
-                        prev = p + 1
+                        subtrees.append(tree[prev : match.start()])
+                        prev = match.end()
                 elif blk == NODECOMMENT_END:
                     incomment = False
             subtrees.append(tree[prev:closing])
