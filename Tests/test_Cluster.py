@@ -3866,6 +3866,44 @@ print("OK")
 """
         )
 
+    def test_somcluster_clusterids_size(self):
+        """Check the private somcluster checks the number of rows of clusterids.
+
+        It was not checked, so somcluster wrote the grid cell of every item
+        it clustered past the end of a clusterids array that was too short.
+        """
+        self.run_child(
+            """
+import numpy as np
+from Bio.Cluster import _cluster
+
+data = np.arange(32.0).reshape(4, 8)
+mask = np.ones(data.shape, np.intc)
+for transpose in (0, 1):
+    nitems, ndata = data.shape[::-1] if transpose else data.shape
+    weight = np.ones(ndata)
+    celldata = np.zeros((2, 1, ndata))
+    for size in (1, nitems - 1, nitems + 1):
+        clusterids = np.zeros((size, 2), np.intc)
+        try:
+            _cluster.somcluster(
+                clusterids, celldata, data, mask, weight, transpose, 0.02, 5, "e", 1
+            )
+        except ValueError as error:
+            expected = (
+                f"clusterids has incorrect number of rows ({size}, expected {nitems})"
+            )
+            assert str(error) == expected, error
+        else:
+            raise AssertionError(f"no ValueError for {size} rows, transpose {transpose}")
+    # Every item is assigned a cell of the 2 x 1 grid
+    clusterids = np.full((nitems, 2), -1, np.intc)
+    _cluster.somcluster(clusterids, celldata, data, mask, weight, transpose, 0.02, 5, "e", 1)
+    assert ((0 <= clusterids) & (clusterids < [2, 1])).all(), clusterids
+print("OK")
+"""
+        )
+
     def test_output_size(self):
         """Check the size of the arrays kcluster, kmedoids and distancematrix fill.
 

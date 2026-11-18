@@ -2004,6 +2004,7 @@ py_somcluster(PyObject* self, PyObject* args, PyObject* keywords)
     int nrows;
     int ncols;
     int ndata;
+    int nitems;
     Data data = {0};
     Mask mask = {0};
     Py_buffer weight = {0};
@@ -2075,6 +2076,13 @@ py_somcluster(PyObject* self, PyObject* args, PyObject* keywords)
         PyErr_Format(PyExc_RuntimeError,
                     "the celldata array size is not consistent with the data "
                     "(last dimension is %d; expected %d)", celldata.nz, ndata);
+        goto exit;
+    }
+    nitems = transpose ? ncols : nrows;
+    if (indices.shape[0] != nitems) {
+        PyErr_Format(PyExc_ValueError,
+                     "clusterids has incorrect number of rows "
+                     "(%zd, expected %d)", indices.shape[0], nitems);
         goto exit;
     }
     Py_BEGIN_ALLOW_THREADS
