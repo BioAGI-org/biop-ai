@@ -11,14 +11,29 @@ See also the doctests in bgzf.py which are called via run_tests.py
 import gzip
 import io
 import os
+import platform
 import random
+import struct
 import tempfile
 import unittest
+import zlib
 from random import shuffle
 
 import support
 
 from Bio import bgzf
+
+
+def bgzf_block(data):
+    """Return data as one BGZF block with a valid CRC and size, however long."""
+    c = zlib.compressobj(9, zlib.DEFLATED, -15)
+    deflated = c.compress(data) + c.flush()
+    return (
+        bgzf._bgzf_header
+        + struct.pack("<H", len(deflated) + 25)
+        + deflated
+        + struct.pack("<II", zlib.crc32(data), len(data))
+    )
 
 
 class BgzfTests(unittest.TestCase):
@@ -608,6 +623,50 @@ class BgzfTests(unittest.TestCase):
                 load(handle)
             # Nothing past the 25 bytes the block declares was read
             self.assertLessEqual(handle.tell(), 25)
+
+    def test_block_data_larger_than_65536(self):
+        """A block that decompresses to more than 65536 bytes is a ValueError.
+
+        Its block size, CRC and data length can all be right. Such a block was
+        read in full, and tell() returned a wrong virtual offset once more than
+        65535 bytes into it.
+        """
+        data = bgzf_block(b"A" * 65536) + bgzf._bgzf_eof
+        with bgzf.BgzfReader(fileobj=io.BytesIO(data), mode="rb") as h:
+            self.assertEqual(h.read(65537), b"A" * 65536)
+        error = "^Block of [0-9]+ bytes decompresses to more than 65536 bytes$"
+        for size in (65537, 2**22):
+            data = bgzf_block(b"A" * size) + bgzf._bgzf_eof
+            for load in (
+                lambda h: bgzf.BgzfReader(fileobj=h),
+                lambda h: list(bgzf.BgzfBlocks(h)),
+            ):
+                with self.subTest(size=size), self.assertRaisesRegex(ValueError, error):
+                    load(io.BytesIO(data))
+
+    @unittest.skipIf(platform.python_implementation() == "PyPy", "no tracemalloc")
+    def test_block_data_larger_than_65536_not_decompressed(self):
+        """A block is rejected without decompressing more than 65537 bytes.
+
+        Deflate can expand about 1000 times, so a block of 64 kB could take
+        64 MiB of memory. Here 4 MiB of data deflates to about 4 kB.
+        """
+        import tracemalloc
+
+        data = bgzf_block(b"A" * 2**22) + bgzf._bgzf_eof
+        was_tracing = tracemalloc.is_tracing()
+        if not was_tracing:
+            tracemalloc.start()
+        try:
+            tracemalloc.reset_peak()
+            before = tracemalloc.get_traced_memory()[0]
+            with self.assertRaises(ValueError):
+                bgzf.BgzfReader(fileobj=io.BytesIO(data))
+            peak = tracemalloc.get_traced_memory()[1] - before
+        finally:
+            if not was_tracing:
+                tracemalloc.stop()
+        self.assertLess(peak, 2**20)
 
     def test_reader_with_binary_fileobj(self):
         """A BgzfReader must accept a binary mode file object."""
