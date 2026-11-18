@@ -444,14 +444,13 @@ _convert_array_to_distancematrix(PyObject* array, Distancematrix* distances)
     }
 
     if (view->len == 0) {
-        PyBuffer_Release(view);
         PyErr_SetString(PyExc_ValueError, "distance matrix is empty");
-        return 0;
+        goto exit;
     }
     if (view->itemsize != sizeof(double)) {
         PyErr_SetString(PyExc_RuntimeError,
                         "distance matrix has an incorrect data type");
-        return 0;
+        goto exit;
     }
     if (view->ndim == 1) {
         int m = (int) view->shape[0];
@@ -459,19 +458,19 @@ _convert_array_to_distancematrix(PyObject* array, Distancematrix* distances)
             PyErr_Format(PyExc_ValueError,
                          "distance matrix is too large (size = %zd)",
                          view->shape[0]);
-            return 0;
+            goto exit;
         }
         n = (int)(1+sqrt(1+8*m)/2); /* rounds to (1+sqrt(1+8*m))/2 */
         if (n*n-n != 2 * m) {
             PyErr_SetString(PyExc_ValueError,
                             "distance matrix has unexpected size.");
-            return 0;
+            goto exit;
         }
         distances->n = n;
         values = PyMem_Malloc(n*sizeof(double*));
         if (!values) {
             PyErr_NoMemory();
-            return 0;
+            goto exit;
         }
         distances->values = values;
         for (p = view->buf, i = 0; i < n; p += i, i++) values[i] = p;
@@ -482,18 +481,18 @@ _convert_array_to_distancematrix(PyObject* array, Distancematrix* distances)
             PyErr_Format(PyExc_ValueError,
                          "distance matrix is too large (size = %zd)",
                          view->shape[0]);
-            return 0;
+            goto exit;
         }
         distances->n = n;
         if (view->shape[1] != n) {
             PyErr_SetString(PyExc_ValueError,
                             "distance matrix is not square.");
-            return 0;
+            goto exit;
         }
         values = PyMem_Malloc(n*sizeof(double*));
         if (!values) {
             PyErr_NoMemory();
-            return 0;
+            goto exit;
         }
         distances->values = values;
         for (p = view->buf, i = 0; i < n; p += n, i++) values[i] = p;
@@ -502,9 +501,13 @@ _convert_array_to_distancematrix(PyObject* array, Distancematrix* distances)
         PyErr_Format(PyExc_ValueError,
                      "distance matrix has incorrect rank %d (expected 1 or 2)",
                      view->ndim);
-        return 0;
+        goto exit;
     }
     return 1;
+
+exit:
+    PyBuffer_Release(view);
+    return 0;
 }
 
 static int

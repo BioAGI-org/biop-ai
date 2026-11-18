@@ -5,6 +5,7 @@
 """Tests for Cluster module."""
 
 import functools
+import gc
 import io
 import os
 import subprocess
@@ -12,6 +13,7 @@ import sys
 import sysconfig
 import tempfile
 import unittest
+import weakref
 
 try:
     import numpy as np
@@ -3021,6 +3023,59 @@ class TestCluster(unittest.TestCase):
             self.assertEqual(len(clusterid), n)
             self.assertEqual(clusterid.tolist(), expected[0].tolist())
             self.assertEqual((error, nfound), expected[1:])
+
+    @unittest.skipUnless(
+        sys.implementation.name == "cpython", "CPython frees an array at once"
+    )
+    def test_rejected_distancematrix_released(self):
+        """Check kmedoids and treecluster release a distance matrix they reject.
+
+        For a distance matrix of the wrong shape or data type they raised an
+        exception but kept the buffer they had taken from it, so the array
+        was never freed.
+        """
+        if TestCluster.module == "Bio.Cluster":
+            from Bio.Cluster import _cluster, kmedoids, treecluster
+        elif TestCluster.module == "Pycluster":
+            from Pycluster import _cluster, kmedoids, treecluster
+
+        functions = {
+            "kmedoids": lambda matrix: kmedoids(matrix, nclusters=1),
+            "treecluster": lambda matrix: treecluster(None, distancematrix=matrix),
+        }
+        matrices = {
+            "2-D": (lambda: np.zeros((2, 3)), "^distance matrix is not square.$"),
+            "1-D": (lambda: np.zeros(2), "^distance matrix has unexpected size.$"),
+            "3-D": (
+                lambda: np.zeros((2, 2, 2)),
+                "^distance matrix has incorrect rank 3 \\(expected 1 or 2\\)$",
+            ),
+        }
+        for name, function in functions.items():
+            for shape, (make, message) in matrices.items():
+                with self.subTest(function=name, shape=shape):
+                    matrix = make()
+                    with self.assertRaisesRegex(ValueError, message):
+                        function(matrix)
+                    reference = weakref.ref(matrix)
+                    del matrix
+                    gc.collect()
+                    self.assertIsNone(reference(), "distance matrix not freed")
+        # Only the private functions take a matrix that is not of doubles. A
+        # bytearray cannot be resized while a buffer of it is held.
+        functions = {
+            "kmedoids": lambda matrix: _cluster.kmedoids(matrix, 1, 1, None, 0),
+            "treecluster": lambda matrix: _cluster.treecluster(
+                _cluster.Tree(), None, None, None, 0, "s", "e", matrix
+            ),
+        }
+        message = "^distance matrix has an incorrect data type$"
+        for name, function in functions.items():
+            with self.subTest(function=name, shape="bytes"):
+                matrix = bytearray(8)
+                with self.assertRaisesRegex(RuntimeError, message):
+                    function(matrix)
+                matrix.append(0)
 
     def test_pca_arguments(self):
         if TestCluster.module == "Bio.Cluster":
