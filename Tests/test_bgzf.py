@@ -590,6 +590,25 @@ class BgzfTests(unittest.TestCase):
                 with self.assertRaises(TypeError):
                     list(bgzf.BgzfBlocks(decompressed))
 
+    def test_block_size_smaller_than_header(self):
+        """A BC block size too small for the header and trailer is a ValueError."""
+        with open(support.DATA / "GenBank" / "cor6_6.gb.bgz", "rb") as h:
+            data = bytearray(h.read())
+        # XLEN is 6, so the header and trailer take 26 bytes. A BSIZE of 24
+        # declares a 25-byte block, leaving -1 bytes for the deflate data.
+        self.assertEqual(data[12:16], b"BC\x02\x00")
+        data[16:18] = (24).to_bytes(2, "little")
+        error = "^Block size 25 is less than the 26 bytes of its header and trailer$"
+        for load in (
+            lambda h: bgzf.BgzfReader(fileobj=h),
+            lambda h: list(bgzf.BgzfBlocks(h)),
+        ):
+            handle = io.BytesIO(data)
+            with self.assertRaisesRegex(ValueError, error):
+                load(handle)
+            # Nothing past the 25 bytes the block declares was read
+            self.assertLessEqual(handle.tell(), 25)
+
     def test_reader_with_binary_fileobj(self):
         """A BgzfReader must accept a binary mode file object."""
         reader = bgzf.BgzfReader(fileobj=io.BytesIO())
