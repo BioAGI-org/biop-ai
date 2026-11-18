@@ -15,6 +15,8 @@ for likelihood ratio tests.
 """
 
 from math import exp
+from math import isfinite
+from math import isinf
 from math import log
 
 
@@ -98,6 +100,11 @@ def _incomplete_gamma(x, alpha):
         return -1
     factor = exp(p * log(x) - x - g)
     if x > 1 and x >= p:
+        if factor == 0 or isinf(x):
+            # The ratio is 1 - factor * gin with gin below 1, so it is 1 once
+            # factor underflows; for x this large (or infinite) the recurrence
+            # below would overflow to inf and nan.
+            return 1.0
         a = 1 - p
         b = a + x + 1
         term = 0
@@ -120,13 +127,18 @@ def _incomplete_gamma(x, alpha):
         an = a * term
         for i in range(2):
             pn[i + 4] = b * pn[i + 2] - an * pn[i]
+        if not (isfinite(pn[4]) and isfinite(pn[5])):
+            raise ValueError(
+                "The continued fraction for the incomplete gamma ratio "
+                f"overflowed at x={x!r}, alpha={alpha!r}"
+            )
         if pn[5] != 0:
             rn = pn[4] / pn[5]
             dif = abs(gin - rn)
-            if dif > accurate:
-                gin = rn
-            elif dif <= accurate * rn:
+            if dif <= accurate and dif <= accurate * rn:
                 break
+            # As in AS 32, keep the latest convergent whenever the loop goes on
+            gin = rn
         for i in range(4):
             pn[i] = pn[i + 2]
         if abs(pn[4]) < overflow:
