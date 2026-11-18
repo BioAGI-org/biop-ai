@@ -25,6 +25,13 @@ _aa3to1_dict = {}
 _aa3to1_dict.update(protein_letters_3to1)
 _aa3to1_dict.update(protein_letters_3to1_extended)
 
+# The largest number of missing residues AtomIterator will fill in with "X"
+# in one chain, summed over all its gaps in residue numbering. Titin,
+# the longest known protein, has about 35,000 residues, and a PDB file's
+# 4-column residue numbers span at most 10,999. mmCIF residue numbers have no
+# width limit, so without this a small file could ask for gigabytes of "X".
+_MAX_GAP_PADDING = 100_000
+
 
 def _res2aacode(residue, undef_code="X"):
     """Return the one-letter amino acid code from the residue name.
@@ -75,9 +82,18 @@ def AtomIterator(pdb_id, structure):
         if gaps:
             res_out = []
             prev_idx = 0
+            padding = 0
             for i, pregap, postgap in gaps:
                 if postgap > pregap:
                     gapsize = postgap - pregap - 1
+                    padding += gapsize
+                    if padding > _MAX_GAP_PADDING:
+                        raise ValueError(
+                            f"Residue numbers in chain {chn_id!r} jump from "
+                            f"{pregap} to {postgap}, so {padding} residues are "
+                            "missing from the chain, more than the "
+                            f"{_MAX_GAP_PADDING} that can be filled in with 'X'"
+                        )
                     res_out.extend(_res2aacode(x) for x in residues[prev_idx:i])
                     prev_idx = i
                     res_out.append("X" * gapsize)
@@ -596,6 +612,8 @@ class CifAtomIterator(SequenceIterator):
         residue numbering, the sequence is filled in with 'X' characters to
         match the size of the missing region, and  None is included as the
         corresponding entry in the list record.annotations["residues"].
+        A chain whose residue numbering leaves more than 100,000 residues
+        missing raises ValueError.
 
         This function uses the Bio.PDB module to do most of the hard work. The
         annotation information could be improved but this extra parsing should

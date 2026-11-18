@@ -322,6 +322,60 @@ class TestCifAtom(AtomTestGenerator("cif", "cif-atom")):
             "MDIRQGPKEPFRDYVDRFYKTLRAEQASQEVKNWMTETLLVQNANPDCKTILKALGPGATLEEMMTACQG",
         )
 
+    @staticmethod
+    def parse_ca_atoms(*resseqs):
+        """Parse one alanine CA atom per residue number, all in chain A."""
+        lines = [
+            "data_GAP",
+            "loop_",
+            "_atom_site.group_PDB",
+            "_atom_site.id",
+            "_atom_site.type_symbol",
+            "_atom_site.label_atom_id",
+            "_atom_site.label_alt_id",
+            "_atom_site.label_comp_id",
+            "_atom_site.label_asym_id",
+            "_atom_site.auth_asym_id",
+            "_atom_site.auth_seq_id",
+            "_atom_site.pdbx_PDB_ins_code",
+            "_atom_site.Cartn_x",
+            "_atom_site.Cartn_y",
+            "_atom_site.Cartn_z",
+            "_atom_site.occupancy",
+            "_atom_site.B_iso_or_equiv",
+            "_atom_site.pdbx_PDB_model_num",
+        ]
+        for serial, resseq in enumerate(resseqs, 1):
+            lines.append(f"ATOM {serial} C CA . ALA A A {resseq} ? 0 0 0 1 0 1")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", BiopythonParserWarning)
+            return list(SeqIO.parse(StringIO("\n".join(lines) + "\n"), "cif-atom"))
+
+    def test_atom_gap_padding_limit(self):
+        """Reject residue numbering that would pad a chain with over 100,000 X."""
+        for resseqs in (
+            # One gap of 100,001 missing residues, 2 to 100,002.
+            (1, 100_003),
+            # Two gaps of 59,999, each under the limit, 119,998 in all.
+            (1, 60_001, 120_001),
+            # Too big to repeat "X" at all: OverflowError before the fix.
+            (1, 10**20),
+        ):
+            with self.subTest(resseqs=resseqs):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    rf"chain 'A' jump from {resseqs[-2]} to {resseqs[-1]}.*"
+                    r"more than the 100000 ",
+                ):
+                    self.parse_ca_atoms(*resseqs)
+
+    def test_atom_gap_padding_at_limit(self):
+        """Pad a chain with up to 100,000 X, in one gap or in several."""
+        (record,) = self.parse_ca_atoms(1, 100_002)
+        self.assertEqual(record.seq, "A" + "X" * 100_000 + "A")
+        (record,) = self.parse_ca_atoms(1, 50_002, 100_003)
+        self.assertEqual(record.seq, "A" + "X" * 50_000 + "A" + "X" * 50_000 + "A")
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
