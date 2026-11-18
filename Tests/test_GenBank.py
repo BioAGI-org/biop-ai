@@ -10,6 +10,8 @@
 """Tests for the GenBank module."""
 
 import copy
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -19,6 +21,7 @@ from io import StringIO
 
 import support
 
+import Bio
 from Bio import BiopythonParserWarning
 from Bio import BiopythonWarning
 
@@ -8132,30 +8135,94 @@ KEYWORDS    """,
 
         Regular expressions looking for "-START##" (on the first COMMENT
         line, and on any later line holding it) and splitting a structured
-        comment line at "::" took time quadratic in the line length. Each
-        of these 100,000 character lines took 20 to 60 seconds to parse.
+        comment line at "::" took time quadratic in the line length. They
+        still gave the right result in the end, so a record with a long line
+        at each of the three places is parsed in a child process, and the
+        timeout fails the test on the old expressions.
         """
-        n = 100_000
         first = "PROVISIONAL REFSEQ: This record has not yet been subject to final"
         second = "NCBI review. The reference sequence was derived from AF035812.1."
-        with self.subTest(line="first COMMENT line"):
-            record = SeqIO.read(self.read_noref_modified(first, "x" * n), "genbank")
-            self.assertEqual(record.annotations["comment"], "x" * n + "\n" + second)
-        with self.subTest(line="-START## not at the end"):
+
+        def cases(n):
+            """Return the name, handle, comment and structured comment of each."""
             line = "x" * n + "-START## is not at the end."
-            record = SeqIO.read(self.read_noref_with_comment_lines([line]), "genbank")
-            self.assertEqual(
-                record.annotations["comment"], f"{first}\n{second}\n{line}"
-            )
-        with self.subTest(line="key :: value"):
             key = "x" + " " * n + "y"
-            handle = self.read_noref_with_comment_lines(
-                ["##Assembly-Data-START##", key + ":: z", "##Assembly-Data-END##"]
+            structured = [
+                "##Assembly-Data-START##",
+                key + ":: z",
+                "##Assembly-Data-END##",
+            ]
+            return [
+                (
+                    "first COMMENT line",
+                    self.read_noref_modified(first, "x" * n),
+                    "x" * n + "\n" + second,
+                    None,
+                ),
+                (
+                    "-START## not at the end",
+                    self.read_noref_with_comment_lines([line]),
+                    f"{first}\n{second}\n{line}",
+                    None,
+                ),
+                (
+                    "key :: value",
+                    self.read_noref_with_comment_lines(structured),
+                    f"{first}\n{second}",
+                    {"Assembly-Data": {key: "z"}},
+                ),
+            ]
+
+        def lengths(comment, structured):
+            """Return the length of the comment and of each structured key."""
+            keys = [len(key) for fields in structured.values() for key in fields]
+            return f"{len(comment)} {keys}\n"
+
+        # The old expressions took 2.7, 3.1 and 1.2 seconds on 20,000
+        # character lines at these three places, four times as long for each
+        # doubling, so 300,000 characters take them 4 to 12 minutes each. The
+        # new code takes milliseconds.
+        code = """\
+import sys
+from Bio import SeqIO
+for record in SeqIO.parse(sys.stdin, "genbank"):
+    structured = record.annotations.get("structured_comment", {})
+    keys = [len(key) for fields in structured.values() for key in fields]
+    print(len(record.annotations["comment"]), keys)
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
             )
-            record = SeqIO.read(handle, "genbank")
-            self.assertEqual(
-                record.annotations["structured_comment"], {"Assembly-Data": {key: "z"}}
-            )
+        )
+        long_cases = cases(300_000)
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            input="".join(handle.getvalue() for _, handle, _, _ in long_cases),
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(
+            result.stdout,
+            "".join(
+                lengths(comment, structured or {})
+                for _, _, comment, structured in long_cases
+            ),
+            result.stderr,
+        )
+
+        # Shorter lines at the same places give the same comments in full.
+        for name, handle, comment, structured in cases(1000):
+            with self.subTest(line=name):
+                record = SeqIO.read(handle, "genbank")
+                self.assertEqual(record.annotations["comment"], comment)
+                self.assertEqual(
+                    record.annotations.get("structured_comment"), structured
+                )
 
     def test_structured_comment_line_without_key(self):
         """A structured comment line starting with "::" raises ValueError."""
