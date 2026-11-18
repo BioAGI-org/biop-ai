@@ -485,6 +485,15 @@ def _abi_parse_header(header, stream):
             f"ABIF directory entry size is {head_elem_size} bytes, "
             f"expected at least {dir_size}"
         )
+    # The data blocks of a valid file do not overlap, so together they fit
+    # in the file. Entries pointing at the same block share one decoded
+    # value. Any other overlap would decode the same bytes once per entry,
+    # taking memory that grows with the square of the file size, so stop
+    # once the blocks claim more bytes than the file holds.
+    stream.seek(0, io.SEEK_END)
+    file_size = stream.tell()
+    claimed = 0  # bytes of data in the distinct blocks so far
+    blocks = {}
 
     for index in range(head_elem_num):
         start = head_offset + index * head_elem_size
@@ -513,9 +522,18 @@ def _abi_parse_header(header, stream):
         # so offset needs to be changed
         if data_size <= 4:
             data_offset = tag_offset + 20
-        stream.seek(data_offset)
-        data = stream.read(data_size)
-        yield tag_name, tag_number, _parse_tag_data(elem_code, elem_num, data)
+        block = (data_offset, data_size, elem_code, elem_num)
+        if block not in blocks:
+            claimed += data_size
+            if claimed > file_size:
+                raise ValueError(
+                    f"ABIF directory entries 0 to {index} claim {claimed} bytes "
+                    f"of data, but the file has only {file_size} bytes"
+                )
+            stream.seek(data_offset)
+            data = stream.read(data_size)
+            blocks[block] = _parse_tag_data(elem_code, elem_num, data)
+        yield tag_name, tag_number, blocks[block]
 
 
 def _abi_trim(seq_record):

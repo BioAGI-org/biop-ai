@@ -4,6 +4,7 @@
 # as part of this package.
 """Tests for SeqIO AbiIO module."""
 
+import struct
 import unittest
 from io import BytesIO
 from os.path import basename
@@ -590,6 +591,71 @@ class TestAbiCorrupt(unittest.TestCase):
             ValueError,
             "^ABIF directory entry 128 at offset 222099 runs past the end of "
             "the file$",
+        ):
+            SeqIO.read(BytesIO(data), "abi")
+
+    @staticmethod
+    def abif(data, entries):
+        """Return an ABIF file with data at offset 128, then the directory."""
+        header = struct.pack(
+            ">4sH4sI2H3I",
+            b"ABIF",
+            101,
+            b"tdir",
+            1,
+            1023,
+            28,
+            len(entries),
+            28 * len(entries),
+            128 + len(data),
+        )
+        directory = b"".join(struct.pack(">4sI2H4I", *entry) for entry in entries)
+        return header.ljust(128, b"\0") + data + directory
+
+    def test_entries_sharing_one_data_block(self):
+        """Test directory entries that all point at the same data block."""
+        block = bytes(range(250)) * 4
+        # 50 entries of 1000 chars (type 2) each, all at offset 128:
+        entries = [(b"ZZZZ", i, 2, 1, 1000, 1000, 128, 0) for i in range(1, 51)]
+        data = self.abif(block, entries)
+        self.assertEqual(len(data), 2528)
+        raw = SeqIO.read(BytesIO(data), "abi").annotations["abif_raw"]
+        self.assertEqual(len(raw), 50)
+        self.assertEqual(raw["ZZZZ1"], block)
+        # Each entry used to decode the block again, so memory grew with the
+        # number of entries times the block size. Now they share one value:
+        self.assertEqual(len({id(value) for value in raw.values()}), 1)
+
+    def test_overlapping_data_blocks(self):
+        """Test directory entries whose data blocks overlap."""
+        # 50 entries of 1000 chars (type 2), each starting one byte after
+        # the one before, decoding 50 kB from a 2.6 kB file:
+        entries = [(b"ZZZZ", i, 2, 1, 1000, 1000, 127 + i, 0) for i in range(1, 51)]
+        data = self.abif(bytes(1049), entries)
+        self.assertEqual(len(data), 2577)
+        with self.assertRaisesRegex(
+            ValueError,
+            "^ABIF directory entries 0 to 2 claim 3000 bytes of data, but the "
+            "file has only 2577 bytes$",
+        ):
+            SeqIO.read(BytesIO(data), "abi")
+
+    def test_data_size_past_end_of_file(self):
+        """Test a directory entry claiming more data than the file holds."""
+        with open(support.DATA / "Abi" / "310.ab1", "rb") as handle:
+            data = handle.read()
+        self.assertEqual(len(data), 222099)
+        # Directory entry 48, FTab1, 19 bytes of user defined type 1024:
+        self.assertEqual(data[219859:219863], b"FTab")
+        self.assertEqual(data[219867:219869], (1024).to_bytes(2, "big"))
+        self.assertEqual(data[219875:219879], (19).to_bytes(4, "big"))
+        # Reading this many bytes from a file on disk asks for 4 GiB at once:
+        data = data[:219875] + (0xFFFFFFF0).to_bytes(4, "big") + data[219879:]
+        # The 48 entries before it claim 172388 bytes of data:
+        with self.assertRaisesRegex(
+            ValueError,
+            "^ABIF directory entries 0 to 48 claim 4295139668 bytes of data, "
+            "but the file has only 222099 bytes$",
         ):
             SeqIO.read(BytesIO(data), "abi")
 
