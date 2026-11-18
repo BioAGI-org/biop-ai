@@ -652,12 +652,21 @@ class Node:
         nodes = [self]
         if self.scop:
             return self.scop.getDescendentsFromSQL(self, node_type)
+        # In a tree no node is reached twice; a HIE file listing a node as
+        # its own descendant, or a child twice, would loop or blow up here.
+        seen = {id(self)}
         while nodes[0].type != node_type:
             if nodes[0].type == "px":
                 return []  # Fell of the bottom of the hierarchy
             child_list = []
             for n in nodes:
                 for child in n.getChildren():
+                    if id(child) in seen:
+                        raise ValueError(
+                            f"SCOP hierarchy is not a tree: walking down from "
+                            f"node {self.sunid} reaches node {child.sunid} twice"
+                        )
+                    seen.add(id(child))
                     child_list.append(child)
                 nodes = child_list
 

@@ -10,10 +10,12 @@
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
+from unittest import mock
 
 import support
 
 from Bio.SCOP import cmp_sccs
+from Bio.SCOP import Node
 from Bio.SCOP import parse_domain
 from Bio.SCOP import Scop
 
@@ -181,6 +183,46 @@ class ScopTests(unittest.TestCase):
         # cl has no cl descendent
         cl = fold.getDescendents("cl")
         self.assertEqual(cl, [])
+
+    def test_get_descendents_not_a_tree(self):
+        """getDescendents raises ValueError if the HIE file gives no tree."""
+        with open(support.DATA / "SCOP" / "dir.cla.scop.txt_test") as f:
+            cla = f.read()
+        with open(support.DATA / "SCOP" / "dir.des.scop.txt_test") as f:
+            des = f.read()
+        with open(support.DATA / "SCOP" / "dir.hie.scop.txt_test") as f:
+            hie = f.read()
+        domains = "14984,14985,14986,14987,14988,14989,14990,14991,14992"
+
+        # Without the check the walk never ends; stop it if so.
+        get_children = Node.getChildren
+        calls = 0
+
+        def bounded_get_children(node):
+            nonlocal calls
+            calls += 1
+            if calls > 1000:
+                raise AssertionError("getDescendents did not terminate")
+            return get_children(node)
+
+        for old, new, sunid in [
+            # sf 46458 lists itself as a child
+            ("46458\t46457\t46463\n", "46458\t46457\t46458,46463\n", 46458),
+            # fa 46463 lists its child dm 46464 twice
+            ("46463\t46458\t46464\n", "46463\t46458\t46464,46464\n", 46464),
+            # sp 46465 lists its ancestor cf 46457 as a child
+            (f"\t{domains}", f"\t46457,{domains}", 46457),
+        ]:
+            with self.subTest(new=new):
+                self.assertIn(old, hie)
+                broken = StringIO(hie.replace(old, new, 1))
+                scop = Scop(StringIO(cla), StringIO(des), broken)
+                calls = 0
+                with mock.patch.object(Node, "getChildren", bounded_get_children):
+                    with self.assertRaisesRegex(
+                        ValueError, f"not a tree.* reaches node {sunid} twice"
+                    ):
+                        scop.getRoot().getDescendents("px")
 
 
 if __name__ == "__main__":
