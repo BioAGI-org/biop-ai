@@ -305,6 +305,18 @@ class Test_build(unittest.TestCase):
                 self.aln1, self.seqlist1, complete_protein=True
             )
 
+    def test_build_protein_id_not_in_corr_dict(self):
+        """A protein ID missing from corr_dict raises ValueError.
+
+        This printed a message and called exit(1), and so ended the process.
+        """
+        # Two entries for two proteins, so the count check passes
+        corr_dict = {"pro1": "pro1", "PRO2": "pro2"}
+        with self.assertRaisesRegex(
+            ValueError, r"^Protein record \(pro2\) is not in corr_dict$"
+        ):
+            codonalign.build(self.aln1, self.seqlist1, corr_dict=corr_dict)
+
     def test_build_frameshift_dn_ds(self):
         """Test dN and dS of codon alignments with frameshifts."""
         from Bio.codonalign.codonseq import cal_dn_ds
