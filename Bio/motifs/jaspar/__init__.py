@@ -289,7 +289,10 @@ def _read_jaspar(handle):
     record = Record()
 
     head_pat = re.compile(r"^>\s*(\S+)(\s+(\S+))?")
-    row_pat_long = re.compile(r"\s*([ACGT])\s*\[\s*(.*)\s*\]")
+    # Group 2 is None if the row has no closing bracket. It keeps the
+    # whitespace inside the brackets, which split() drops: "\s*(.*)\s*"
+    # would backtrack cubically over a long run of it with no "]".
+    row_pat_long = re.compile(r"\s*([ACGT])\s*\[(?:(.*)\])?")
     row_pat_short = re.compile(r"\s*(.+)\s*")
 
     identifier = None
@@ -311,6 +314,8 @@ def _read_jaspar(handle):
                 name = identifier
         elif row_match_long:
             (letter, counts_str) = row_match_long.group(1, 2)
+            if counts_str is None:
+                raise ValueError(f"JASPAR matrix row for {letter} has no closing ']'")
             words = counts_str.split()
             counts[letter] = [float(x) for x in words]
             row_count += 1

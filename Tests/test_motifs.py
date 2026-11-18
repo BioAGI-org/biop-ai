@@ -2978,6 +2978,53 @@ class TestJASPAR(unittest.TestCase):
         )
         self.assertEqual(m[::2].consensus, "CCT")
 
+    def test_jaspar_parsing(self):
+        """Test if Bio.motifs can parse JASPAR-style matrix files."""
+        stream = StringIO(
+            ">MA0004.1 Arnt\n"
+            "A  [ 4 19  0  0  0  0 ]\n"
+            "C  [16  0 20  0  0  0 ]\n"
+            "G  [ 0  1  0 20  0 20 ]\n"
+            "T  [ 0  0  0  0 20  0 ]\n"
+            ">MA0001.1 AGL3\n"
+            "0\t3\t79\t40\n"
+            "94\t75\t4\t3\n"
+            "1\t0\t3\t4\n"
+            "2\t19\t11\t50\n"
+        )
+        record = motifs.parse(stream, "jaspar")
+        self.assertEqual(len(record), 2)
+        m = record[0]
+        self.assertEqual(m.matrix_id, "MA0004.1")
+        self.assertEqual(m.name, "Arnt")
+        self.assertEqual(m.counts["A"], [4, 19, 0, 0, 0, 0])
+        self.assertEqual(m.counts["C"], [16, 0, 20, 0, 0, 0])
+        self.assertEqual(m.counts["G"], [0, 1, 0, 20, 0, 20])
+        self.assertEqual(m.counts["T"], [0, 0, 0, 0, 20, 0])
+        m = record[1]
+        self.assertEqual(m.matrix_id, "MA0001.1")
+        self.assertEqual(m.name, "AGL3")
+        self.assertEqual(m.counts["A"], [0, 3, 79, 40])
+        self.assertEqual(m.counts["C"], [94, 75, 4, 3])
+        self.assertEqual(m.counts["G"], [1, 0, 3, 4])
+        self.assertEqual(m.counts["T"], [2, 19, 11, 50])
+
+    def test_jaspar_row_without_closing_bracket(self):
+        """Test that a JASPAR matrix row missing its ']' raises ValueError."""
+        # The row pattern used to backtrack cubically over a run of
+        # whitespace inside an unclosed bracket: this row took 18 seconds.
+        stream = StringIO(
+            ">MA0004.1 Arnt\n"
+            "A  [ 4 19  0  0  0  0 ]\n"
+            "C  [" + " " * 3000 + "16  0 20  0  0  0\n"
+            "G  [ 0  1  0 20  0 20 ]\n"
+            "T  [ 0  0  0  0 20  0 ]\n"
+        )
+        with self.assertRaisesRegex(
+            ValueError, r"^JASPAR matrix row for C has no closing '\]'$"
+        ):
+            motifs.parse(stream, "jaspar")
+
 
 class TestMEME(unittest.TestCase):
     def test_meme_parser_1(self):
