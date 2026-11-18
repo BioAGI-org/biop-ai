@@ -147,6 +147,46 @@ class Parsing(unittest.TestCase):
                         "too many blocks for a file of 770 bytes" % (field, count),
                     )
 
+    def test_block_past_end_of_sequence(self):
+        """Check N and mask blocks must end inside their sequence."""
+        path = support.DATA / "TwoBit" / "sequence.littleendian.2bit"
+        data = path.read_bytes()
+        # The record of seq11111 (480 bases) starts at byte 81. Its first N
+        # block starts at 77 and has its size at byte 97; its first mask
+        # block has its start at byte 109 and its size at byte 117.
+        mask_start = int.from_bytes(data[109:113], "little")
+        cases = (
+            # a size that wraps the 32-bit end round to 7, before the start
+            ("N", 97, 77, 2**32 - 70),
+            ("N", 97, 77, 480 - 77 + 1),
+            ("mask", 117, mask_start, 2**32 - 1),
+            ("mask", 117, mask_start, 480 - mask_start + 1),
+        )
+        for kind, position, start, size in cases:
+            patched = bytearray(data)
+            patched[position : position + 4] = size.to_bytes(4, "little")
+            with self.subTest(kind=kind, size=size):
+                # np.fromfile needs a real file, not an io.BytesIO
+                with tempfile.TemporaryFile() as stream:
+                    stream.write(patched)
+                    stream.seek(0)
+                    with self.assertRaises(ValueError) as cm:
+                        SeqIO.parse(stream, "twobit")
+                self.assertEqual(
+                    str(cm.exception),
+                    "Found %s block of size %u at position %u for sequence "
+                    "seq11111, which has length 480" % (kind, size, start),
+                )
+        # A block may end exactly at the end of the sequence
+        patched = bytearray(data)
+        patched[97:101] = (480 - 77).to_bytes(4, "little")
+        with tempfile.TemporaryFile() as stream:
+            stream.write(patched)
+            stream.seek(0)
+            record = next(SeqIO.parse(stream, "twobit"))
+            self.assertEqual(record.id, "seq11111")
+            self.assertEqual(record.seq[77:].upper(), "N" * (480 - 77))
+
     def test_overlapping_block_tables(self):
         """Check overlapping records cannot claim more blocks than the file holds."""
         # The records start one word apart in a run of 18 words holding 8,
