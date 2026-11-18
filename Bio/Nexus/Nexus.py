@@ -1079,6 +1079,12 @@ class Nexus:
         self.matrix = {}
         taxcount = 0
         first_matrix_block = True
+        # the labels a repeated label must not take in this block, and for
+        # each label as read, the unique label it was last given: as no label
+        # is ever freed, the next repeat can carry on from there, rather than
+        # walk past all the copies before it again
+        taken = self.matrix
+        renamed = {}
 
         # eliminate empty lines and leading/trailing whitespace
         lines = [_.strip() for _ in options.split("\n") if _.strip() != ""]
@@ -1103,6 +1109,11 @@ class Nexus:
                 else:
                     taxcount = 1
                     first_matrix_block = False
+                    taken = set()
+                    renamed = {}
+                    # the taxa are now fixed, so look them up as
+                    # _check_taxlabels does, but build its dict once a block
+                    present = {t.replace(" ", "_"): t for t in self.taxlabels}
             # get taxon name and sequence
             linechars = CharBuffer(line)
             id = quotestrip(linechars.next_word())
@@ -1177,15 +1188,19 @@ class Nexus:
                                 )
 
             # add sequence to matrix
+            unique_id = _unique_label(taken, renamed.get(id, id))
+            renamed[id] = unique_id
             if first_matrix_block:
                 self.unaltered_taxlabels.append(id)
-                id = _unique_label(list(self.matrix.keys()), id)
+                id = unique_id
                 self.matrix[id] = iupac_seq
                 self.taxlabels.append(id)
             else:
-                # taxon names need to be in the same order in each interleaved block
-                id = _unique_label(self.taxlabels[: taxcount - 1], id)
-                taxon_present = self._check_taxlabels(id)
+                # taxon names need to be in the same order in each interleaved
+                # block, so the labels taken are those of the taxa above
+                taken.add(self.taxlabels[taxcount - 1])
+                id = unique_id
+                taxon_present = present.get(id.replace(" ", "_"))
                 if taxon_present:
                     self.matrix[taxon_present] += iupac_seq
                 else:
@@ -2050,7 +2065,7 @@ class Nexus:
             sequence += self.missing * diff
 
         if name in self.taxlabels:
-            unique_name = _unique_label(self.taxlabels, name)
+            unique_name = _unique_label(set(self.taxlabels), name)
             # print("WARNING: Sequence name %s is already present. Sequence was added as %s." % (name,unique_name))
         else:
             unique_name = name

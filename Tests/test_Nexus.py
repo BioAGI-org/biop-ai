@@ -2088,6 +2088,82 @@ class TestLongInput(unittest.TestCase):
         self.assertEqual(str(nexus.matrix["t1"]), "ACGT")
 
 
+class TestRepeatedLabels(unittest.TestCase):
+    """Repeated taxon labels in a matrix are renamed in linear time.
+
+    The repeats of a label are renamed "a.copy", "a.copy1", "a.copy2" and so
+    on. The name for the k-th repeat was found by walking past the k-1 names
+    given before it, checking each against a list of all the labels so far,
+    so the time grew with the cube of the number of repeats: a matrix of
+    5,000 rows named "a", a 20 KB file, took several minutes to parse. Each
+    row after the first block of an interleaved matrix was also looked up in
+    a dict of all the taxa built again for that row.
+    """
+
+    @staticmethod
+    def renamed(n):
+        """Return the names n rows named "a" are given."""
+        return ["a", "a.copy"] + [f"a.copy{i}" for i in range(1, n - 1)]
+
+    def test_matrix(self):
+        """A matrix of 5,000 rows named "a"."""
+        n = 5000
+        nexus = Nexus.Nexus(
+            f"#NEXUS\nbegin data;\ndimensions ntax={n} nchar=1;\n"
+            "format datatype=dna;\nmatrix\n" + "a A\n" * n + ";\nend;\n"
+        )
+        self.assertEqual(nexus.unaltered_taxlabels, ["a"] * n)
+        self.assertEqual(nexus.taxlabels, self.renamed(n))
+        self.assertEqual(list(nexus.matrix), self.renamed(n))
+
+    def test_interleaved_matrix(self):
+        """An interleaved matrix of two blocks of 2,500 rows named "a"."""
+        n = 2500
+        nexus = Nexus.Nexus(
+            f"#NEXUS\nbegin data;\ndimensions ntax={n} nchar=2;\n"
+            "format datatype=dna interleave;\nmatrix\n"
+            + "a A\n" * n
+            + "a C\n" * n
+            + ";\nend;\n"
+        )
+        self.assertEqual(nexus.taxlabels, self.renamed(n))
+        self.assertEqual(
+            {label: str(seq) for label, seq in nexus.matrix.items()},
+            dict.fromkeys(self.renamed(n), "AC"),
+        )
+
+    def test_labels_like_copies(self):
+        """Labels that already look like copies are renamed as before."""
+        read = ["a", "a", "a.copy", "a", "a.copy1", "a.copy", "a", "b.copy", "b"]
+        renamed = [
+            "a",
+            "a.copy",
+            "a.copy1",
+            "a.copy2",
+            "a.copy3",
+            "a.copy4",
+            "a.copy5",
+            "b.copy",
+            "b",
+        ]
+        n = len(read)
+        rows = "".join(f"{label} A\n" for label in read)
+        for interleave, nchar, matrix in (("", 1, rows), ("interleave", 2, rows * 2)):
+            with self.subTest(interleave=interleave):
+                nexus = Nexus.Nexus(
+                    f"#NEXUS\nbegin data;\ndimensions ntax={n} nchar={nchar};\n"
+                    f"format datatype=dna {interleave};\nmatrix\n{matrix};\nend;\n"
+                )
+                self.assertEqual(nexus.unaltered_taxlabels, read)
+                self.assertEqual(nexus.taxlabels, renamed)
+        nexus = Nexus.Nexus(
+            "#NEXUS\nbegin data; dimensions ntax=0 nchar=0; format datatype=dna; end;"
+        )
+        for label in read:
+            nexus.add_sequence(label, "A")
+        self.assertEqual(nexus.taxlabels, renamed)
+
+
 @unittest.skipIf(cnexus is None, "C extension Bio.Nexus.cnexus not available")
 @unittest.skipUnless(
     sys.platform.startswith("linux") and sys.maxsize > 2**32,
