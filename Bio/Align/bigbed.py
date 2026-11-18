@@ -2205,6 +2205,11 @@ class _BPlusTreeFormatter:
 
         targets = []
         node = None
+        # Offsets of the nodes reached so far, starting with the root. In a
+        # tree each node is reached once; reaching one again means a loop,
+        # which would never end, or a node shared by two parents, which can
+        # double the work at each level.
+        visited = {stream.tell()}
         while True:
             data = stream.read(formatter_node.size)
             isLeaf, count = formatter_node.unpack(data)
@@ -2244,6 +2249,12 @@ class _BPlusTreeFormatter:
                     node = node.parent
                 else:
                     break
+            if pos in visited:
+                raise ValueError(
+                    f"Chromosome index is not a tree: the node at offset {pos} "
+                    "is reached more than once"
+                )
+            visited.add(pos)
             stream.seek(pos)
 
     def write(self, items, blockSize, output):
