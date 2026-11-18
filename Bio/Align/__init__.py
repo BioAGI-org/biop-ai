@@ -2610,11 +2610,14 @@ class Alignment:
                     s = seq[start_index:end_index]
                 segment_start = start
                 segment_start_index = start_index
-                while column + len(s) >= line_width:
+                # Index into s instead of slicing off what has been written,
+                # which would copy the rest of a long segment for every line.
+                written = 0
+                while column + len(s) - written >= line_width:
                     rest = line_width - column
                     if rest > 0:
-                        lines[-1] += s[:rest]
-                        s = s[rest:]
+                        lines[-1] += s[written : written + rest]
+                        written += rest
                         if start != end:
                             if (end_index - segment_start_index) == abs(
                                 end - segment_start
@@ -2646,11 +2649,11 @@ class Alignment:
                     line += " "
                     lines.append(line)
                     column = name_width + position_width
-                lines[-1] += s
+                lines[-1] += s[written:]
                 if start_index != end_index:
                     start_index = end_index
                     start = end
-                column += len(s)
+                column += len(s) - written
         if write_pattern is True:
             dash = "-"
             position = 0

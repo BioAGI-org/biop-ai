@@ -3830,6 +3830,39 @@ query           222 GACGGA 228
         )
 
 
+class TestAlign_long_gap_str(unittest.TestCase):
+    """Test printing an alignment with a long gap."""
+
+    def test_pairwise_long_gap(self):
+        # A read aligned across a 3 Mb intron of a reference given without
+        # its sequence, as a SAM line with CIGAR 1M3000000N1M parses to.
+        # Printing each line of a segment used to copy the rest of the
+        # segment, in time quadratic in its length: about 10 s for this one.
+        gap = 3_000_000
+        target = Seq({0: "A", gap + 1: "C"}, length=gap + 2)
+        query = Seq("AC")
+        coordinates = np.array([[0, 1, gap + 1, gap + 2], [0, 1, 1, 2]])
+        alignment = Align.Alignment([target, query], coordinates)
+        blocks = [
+            "target            0 A" + "?" * 59 + "\n"
+            "                  0 |" + "-" * 59 + "\n"
+            "query             0 A" + "-" * 59 + "\n"
+        ]
+        for start in range(60, gap, 60):
+            blocks.append(
+                f"target    {start:9d} {'?' * 60}\n"
+                f"          {start:9d} {'-' * 60}\n"
+                f"query             1 {'-' * 60}\n"
+            )
+        blocks.append(
+            "target      3000000 ?C 3000002\n"
+            "            3000000 -| 3000002\n"
+            "query             1 -C       2\n"
+        )
+        self.assertEqual(len(blocks), 50001)
+        self.assertEqual(str(alignment), "\n".join(blocks))
+
+
 class TestAlign_mapall(unittest.TestCase):
     def test_mapall(self):
         assemblies = (
