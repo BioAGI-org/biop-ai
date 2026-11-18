@@ -189,6 +189,27 @@ class ClusterExtensionTests(unittest.TestCase):
 
         assert_bounded_growth(self, cluster)
 
+    def test_somcluster(self):
+        """Calculate a self-organizing map repeatedly.
+
+        The mask is released on success and when the C code rejects an
+        argument (niter=0), whether somcluster makes the mask (mask=None)
+        or uses the caller's.
+        """
+        from Bio import Cluster
+
+        rng = np.random.default_rng(0)
+        data = rng.random((30, 8))
+        mask = np.ones(data.shape, dtype=np.intc)
+
+        def cluster():
+            Cluster.somcluster(data, niter=1, rng_seed=0)
+            Cluster.somcluster(data, mask=mask, niter=1, rng_seed=0)
+            with self.assertRaisesRegex(ValueError, r"^number of iterations"):
+                Cluster.somcluster(data, mask=mask, niter=0, rng_seed=0)
+
+        assert_bounded_growth(self, cluster)
+
     def test_index_copies_and_tree_methods(self):
         """Compute centroids and distances, and use a tree, repeatedly.
 
