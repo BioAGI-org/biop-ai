@@ -26,7 +26,11 @@ _RE_VERSION = re.compile(r"# \w+ ([\w+\.]+) .*; http.*$")
 # regex for option string capture
 _RE_OPT = re.compile(r"^# (.+):\s+(.+)$")
 # regex for parsing query id and length, for parsing
-_QRE_ID_LEN_PTN = r"^Query:\s*(.*)\s+\[\w=(\d+)\]"
+# The callers strip the whitespace around the id in group 1. Keep a single
+# \s before the length and no \s* after "Query:": if two parts of the
+# pattern can match the same run of whitespace, a long run takes time
+# quadratic or cubic in its length to match or reject.
+_QRE_ID_LEN_PTN = r"^Query:(.*)\s\[\w=(\d+)\]"
 _QRE_ID_LEN = re.compile(_QRE_ID_LEN_PTN)
 # regex for hsp validation
 _HRE_VALIDATE = re.compile(r"score:\s(-?\d+\.?\d+)\sbits.*value:\s(.*)")
