@@ -637,6 +637,13 @@ class BlastTabIndexer(SearchIndexer):
 
         while True:
             line = handle.readline()
+            if not line:
+                if qresult_key is None:
+                    # The index no longer matches the file (truncated or
+                    # replaced after indexing)
+                    raise ValueError(f"File ended before the query at offset {offset}")
+                # the last query in the file ends at end of file
+                break
             # get the key if the first line (qresult key)
             if qresult_key is None:
                 qresult_key = line.split(b"\t")[key_idx]
