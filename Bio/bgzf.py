@@ -479,7 +479,15 @@ def _load_bgzf_block(handle, text_mode=False):
             "of its header and trailer"
         )
     d = zlib.decompressobj(-15)  # Negative window size means no headers
-    data = d.decompress(handle.read(deflate_size)) + d.flush()
+    # A block holds at most 65536 bytes of data, but deflate can expand about
+    # 1000 times, so inflate no more than one byte past that. Once that limit
+    # is hit, d.flush() would inflate the rest of the input without one.
+    data = d.decompress(handle.read(deflate_size), 65537)
+    if len(data) > 65536:
+        raise ValueError(
+            f"Block of {block_size} bytes decompresses to more than 65536 bytes"
+        )
+    data += d.flush()
     expected_crc = handle.read(4)
     expected_size = struct.unpack("<I", handle.read(4))[0]
     if expected_size != len(data):
