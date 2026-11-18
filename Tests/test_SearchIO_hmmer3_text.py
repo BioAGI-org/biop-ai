@@ -6,6 +6,7 @@
 """Tests for SearchIO HmmerIO parsers."""
 
 import unittest
+from io import StringIO
 
 import support
 
@@ -763,6 +764,20 @@ class HmmscanCases(unittest.TestCase):
         # test if we've properly finished iteration
         self.assertRaises(StopIteration, next, qresults)
         self.assertEqual(1, counter)
+
+    def test_30_hmmscan_002_padded_query_line(self):
+        """Parsing hmmscan 3.0 (text_30_hmmscan_002) after a padded Query line."""
+        # The parser skips a "Query:" line without [L=N]. Rejecting this one
+        # took the old id regex over a minute: its time was cubic in the
+        # number of spaces.
+        with open(get_file("text_30_hmmscan_002.out")) as handle:
+            text = handle.read()
+        query = "Query:       random_s00  [L=32]\n"
+        self.assertIn(query, text)
+        text = text.replace(query, "Query: " + " " * 5000 + "x\n" + query, 1)
+        qresults = list(parse(StringIO(text), FMT))
+        self.assertEqual(["random_s00"], [qresult.id for qresult in qresults])
+        self.assertEqual(32, qresults[0].seq_len)
 
     def test_30_hmmscan_003(self):
         """Parsing hmmscan 3.0 (text_30_hmmscan_003)."""

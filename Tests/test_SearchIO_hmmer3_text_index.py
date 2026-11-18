@@ -5,11 +5,15 @@
 
 """Tests for SearchIO hmmer3-text indexing."""
 
+import os
+import tempfile
 import unittest
 
 import support
 from search_tests_common import CheckIndex
 from search_tests_common import CheckRaw
+
+from Bio import SearchIO
 
 
 class Hmmer3TextRawCases(CheckRaw):
@@ -333,6 +337,24 @@ class Hmmer3TextIndexCases(CheckIndex):
         """Test hmmer3-text indexing, HMMER 3.0, multiple queries."""
         filename = support.DATA / "Hmmer" / "text_30_hmmsearch_005.out"
         self.check_index(filename, self.fmt)
+
+    def test_hmmertext_query_line_trailing_whitespace(self):
+        """Test hmmer3-text indexing, Query line ending in whitespace."""
+        # The old id regex took time quadratic in the number of spaces after
+        # [L=32], here about 15 seconds for each of the six times it is read.
+        with open(support.DATA / "Hmmer" / "text_30_hmmscan_002.out") as handle:
+            text = handle.read()
+        query = "Query:       random_s00  [L=32]\n"
+        self.assertIn(query, text)
+        text = text.replace(query, query[:-1] + " " * 100000 + "\n", 1)
+        handle, filename = tempfile.mkstemp(suffix=".out")
+        self.addCleanup(os.remove, filename)
+        with os.fdopen(handle, "w") as handle:
+            handle.write(text)
+        self.check_index(filename, self.fmt)
+        qresult = SearchIO.read(filename, self.fmt)
+        self.assertEqual("random_s00", qresult.id)
+        self.assertEqual(32, qresult.seq_len)
 
 
 if __name__ == "__main__":
