@@ -477,15 +477,27 @@ def _abi_parse_header(header, stream):
     head_elem_size = header[4]
     head_elem_num = header[5]
     head_offset = header[7]
+    dir_size = struct.calcsize(_DIRFMT)
+    # Entries closer together than this overlap; at size 0 every entry is
+    # the first one, read again up to 2**32 - 1 times.
+    if head_elem_num and head_elem_size < dir_size:
+        raise ValueError(
+            f"ABIF directory entry size is {head_elem_size} bytes, "
+            f"expected at least {dir_size}"
+        )
 
     for index in range(head_elem_num):
         start = head_offset + index * head_elem_size
         # add directory offset to tuple
         # to handle directories with data size <= 4 bytes
         stream.seek(start)
-        dir_entry = struct.unpack(_DIRFMT, stream.read(struct.calcsize(_DIRFMT))) + (
-            start,
-        )
+        entry = stream.read(dir_size)
+        if len(entry) < dir_size:
+            raise ValueError(
+                f"ABIF directory entry {index} at offset {start} runs past "
+                "the end of the file"
+            )
+        dir_entry = struct.unpack(_DIRFMT, entry) + (start,)
         # only parse desired dirs
         key = dir_entry[0].decode()
         key += str(dir_entry[1])
