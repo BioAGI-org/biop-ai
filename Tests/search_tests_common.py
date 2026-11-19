@@ -69,6 +69,47 @@ class EndOfFileGuard(BytesIO):
         return line
 
 
+class _CountedLine(bytes):
+    """Line read from a CopyCountingHandle.
+
+    Adding it to bytes, on either side, adds the length of the new bytes to
+    its handle's count. Python tries a bytes subclass's __radd__ before
+    bytes.__add__, so ``record += line`` is counted when record is bytes.
+    """
+
+    def __add__(self, other):
+        """Concatenate, counting the bytes copied."""
+        result = bytes(self) + bytes(other)
+        self.handle.copied += len(result)
+        return result
+
+    def __radd__(self, other):
+        """Concatenate, counting the bytes copied."""
+        result = bytes(other) + bytes(self)
+        self.handle.copied += len(result)
+        return result
+
+
+class CopyCountingHandle(BytesIO):
+    """Binary handle that counts the bytes copied by adding its lines together.
+
+    Building a record of L lines and B bytes with ``record += line`` copies
+    about L * B / 2 bytes, in time quadratic in the size of the record.
+    Collecting the lines in a list and joining them once copies none this way.
+    """
+
+    def __init__(self, data):
+        """Initialize the handle with the bytes to read."""
+        super().__init__(data)
+        self.copied = 0
+
+    def readline(self, *args):
+        """Read a line, as bytes that count their concatenations."""
+        line = _CountedLine(super().readline(*args))
+        line.handle = self
+        return line
+
+
 class SearchTestBaseClass(unittest.TestCase):
     def compare_attrs(self, obj_a, obj_b, attrs):
         """Compare attribute values of two objects."""
@@ -158,7 +199,9 @@ class CheckRaw(unittest.TestCase):
         repeated count times to give a record of tens of thousands of lines.
         get_raw used to build a record with bytes +=, in time quadratic in
         its size: seconds to tens of seconds for these records, where it now
-        takes well under a second.
+        takes well under a second. The handle counts the bytes that adding
+        lines together copies, and get_raw must copy no more than the record
+        itself; with += it copied thousands of times that.
         """
         filename = os.fspath(filename)
         with open(filename, "rb") as handle:
@@ -170,12 +213,20 @@ class CheckRaw(unittest.TestCase):
         raw = idx.get_raw(id)
         idx.close()
         self.assertEqual(raw.count(lines), 1)
-        handle = BytesIO(data.replace(lines, lines * count))
+        handle = CopyCountingHandle(data.replace(lines, lines * count))
         with mock.patch(
             "Bio.SearchIO._index._open_for_random_access", return_value=handle
         ):
             idx = SearchIO.index(filename, self.fmt, **kwargs)
-        self.assertEqual(idx.get_raw(id), raw.replace(lines, lines * count))
+        expected = raw.replace(lines, lines * count)
+        handle.copied = 0
+        self.assertEqual(idx.get_raw(id), expected)
+        self.assertLessEqual(
+            handle.copied,
+            len(expected),
+            f"get_raw copied {handle.copied} bytes to build"
+            f" a record of {len(expected)}",
+        )
         idx.close()
 
 
