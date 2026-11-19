@@ -4381,6 +4381,17 @@ class TestRecordSave(unittest.TestCase):
                 # Nothing is written for an invalid solution
                 self.assertEqual(os.listdir(self.directory), [])
 
+    def test_kmeans_bad_expclusters_with_geneclusters(self):
+        """Check save writes nothing if only the samples' solution is invalid.
+
+        The genes' solution was checked and its .kgg file written before the
+        samples' solution was checked.
+        """
+        with self.assertRaises(ValueError) as cm:
+            self.record.save(self.jobname, [0, 1, 0, 1, 0], [0, -1, 0])
+        self.assertEqual(str(cm.exception), "expclusters contains negative values")
+        self.assertEqual(os.listdir(self.directory), [])
+
     def test_kmeans_short_order(self):
         """Check save rejects a gorder or eorder of the wrong size.
 

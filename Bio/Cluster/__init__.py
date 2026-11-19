@@ -1201,6 +1201,11 @@ class Record:
                 "clustering solution in geneclusters and "
                 "expclusters"
             )
+        # Check both k-means solutions before writing any file
+        if geneclusters is not None and not isinstance(geneclusters, Tree):
+            geneclusters = self._checkkmeans(geneclusters, gorder, False)
+        if expclusters is not None and not isinstance(expclusters, Tree):
+            expclusters = self._checkkmeans(expclusters, eorder, True)
         gid = 0
         aid = 0
         filename = jobname
@@ -1213,7 +1218,6 @@ class Record:
             gid = 1
         elif geneclusters is not None:
             # This is a k-means clustering result.
-            geneclusters = self._checkkmeans(geneclusters, gorder, False)
             filename = jobname + "_K"
             k = max(geneclusters) + 1
             kggfilename = "%s_K_G%d.kgg" % (jobname, k)
@@ -1227,7 +1231,6 @@ class Record:
             aid = 1
         elif expclusters is not None:
             # This is a k-means clustering result.
-            expclusters = self._checkkmeans(expclusters, eorder, True)
             filename = jobname + "_K"
             k = max(expclusters) + 1
             kagfilename = "%s_K_A%d.kag" % (jobname, k)
