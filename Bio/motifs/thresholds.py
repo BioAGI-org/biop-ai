@@ -5,6 +5,8 @@
 # as part of this package.
 """Approximate calculation of appropriate thresholds for motif finding."""
 
+import contextlib
+
 import numpy as np
 
 
@@ -81,10 +83,12 @@ class _Types:
     def errstate(self, kind):
         """Return the numpy error state for a product of the given kind.
 
-        The per-bin loop's Python floats rounded a product too small for
-        the type to zero, whatever numpy.seterr says; so does this.
+        Python floats round a product too small for a float to zero,
+        whatever numpy.seterr says; numpy scalars follow numpy.seterr.
         """
-        return np.errstate(under="ignore")
+        if self.types[kind] is float:
+            return np.errstate(under="ignore")
+        return contextlib.nullcontext()
 
 
 class _Bins:
