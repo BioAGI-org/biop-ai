@@ -769,6 +769,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
         else:
             self._compressed = False
         self._uncompressBufSize = header.uncompressBufSize
+        stream.seek(0, io.SEEK_END)
+        self._file_size = stream.tell()
 
         stream.seek(header.chromosomeTreeOffset)
         self.targets = _BPlusTreeFormatter(byteorder).read(stream)
@@ -843,8 +845,22 @@ class AlignmentIterator(interfaces.AlignmentIterator):
         # decompress no more than that: without a limit, a block of a few
         # kilobytes could expand to gigabytes.
         offset = node.dataOffset
+        size = node.dataSize
+        # The offset and size come from the index; a block past the end of
+        # the file is malformed, and reading a huge size raises MemoryError.
+        file_size = self._file_size
+        if offset + size > file_size:
+            raise ValueError(
+                f"The data block at offset {offset}, of {size} bytes, extends "
+                f"past the end of the file ({file_size} bytes)"
+            )
         stream.seek(offset)
-        data = stream.read(node.dataSize)
+        data = stream.read(size)
+        if len(data) != size:
+            raise ValueError(
+                f"The data block at offset {offset} is incomplete: read "
+                f"{len(data)} of {size} bytes"
+            )
         if self._compressed:
             uncompressBufSize = self._uncompressBufSize
             decompressor = zlib.decompressobj()
