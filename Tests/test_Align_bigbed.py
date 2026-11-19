@@ -3,8 +3,9 @@
 # license.  Please see the LICENSE file that should have been included
 # as part of this package.
 """Tests for Align.bigbed module."""
-import itertools
+import os
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from io import StringIO
 
 import support
 
+import Bio
 from Bio import Align
 from Bio import SeqIO
 from Bio.Align import bigbed
@@ -8322,18 +8324,47 @@ class TestAlign_malformed_data_block(unittest.TestCase):
         self.check(b"", None, self.incomplete)
 
     def test_large_block(self):
-        # A valid block of 300000 empty items, 3.9 MB in all, that fits in
-        # uncompressBufSize. Each item read used to copy the rest of the
-        # block, so the first 20000 items took 6 seconds, and walking the
-        # whole block 44 seconds, for a file of 17 kB.
-        data = bytes(13 * 300000)
+        # A valid block of 3000000 empty items, 39 MB in all, that fits in
+        # uncompressBufSize, in a file of 51 kB. Each item read used to copy
+        # the rest of the block, so reading the first 100000 items copied
+        # about 4 TB, and 2000 of them took 57 seconds. They now take about
+        # a second. Read them in a child process, which a timeout can stop.
+        data = bytes(13 * 3000000)
         stream, _ = self.make_stream(zlib.compress(data), len(data))
-        with Align.parse(stream, "bigbed") as alignments:
-            coordinates = [
-                alignment.coordinates.tolist()
-                for alignment in itertools.islice(alignments, 20000)
-            ]
-        self.assertEqual(coordinates, [[[0, 0], [0, 0]]] * 20000)
+        code = """\
+import itertools
+import sys
+from Bio import Align
+count = 0
+with Align.parse(sys.argv[1], "bigbed") as alignments:
+    for alignment in itertools.islice(alignments, 100000):
+        assert alignment.coordinates.tolist() == [[0, 0], [0, 0]]
+        count += 1
+print(count)
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "large_block.bb")
+            with open(path, "wb") as output:
+                output.write(stream.getvalue())
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-c", code, path],
+                    timeout=60,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+            except subprocess.TimeoutExpired:
+                self.fail("Reading 100000 items of the block took over 60 seconds")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "100000\n")
 
 
 if __name__ == "__main__":
