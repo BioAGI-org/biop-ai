@@ -3211,6 +3211,21 @@ class TruncatedCases(unittest.TestCase):
                         "\n' version'",
                     )
 
+    def test_blank_version(self):
+        """Test a complete file whose ' version' line has only spaces after it."""
+        with open(get_file("output001.m10")) as handle:
+            lines = handle.readlines()
+        for version_line in (" version \n", " version  \n", " version\n"):
+            text = "".join(lines[:2] + [version_line] + lines[3:])
+            with self.subTest(line=version_line):
+                with self.assertRaises(ValueError) as cm:
+                    list(parse(StringIO(text), FMT))
+                self.assertEqual(
+                    str(cm.exception),
+                    "Expected a version number on the FASTA version line:\n"
+                    + repr(version_line),
+                )
+
     def test_cut_before_first_hit(self):
         """Test a query whose alignments end before the first '>>' hit."""
         # In output001.m10, line 24 is ">>>gi|10955263|ref|NP_052604.1|, ...",

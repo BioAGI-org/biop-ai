@@ -312,7 +312,7 @@ class FastaM10Parser:
             # try to match for version line
             elif line.startswith(" version"):
                 fields = line.split(" ")
-                if len(fields) < 3:
+                if len(fields) < 3 or not fields[2].strip():
                     raise ValueError(
                         f"Expected a version number on the FASTA version line:\n{line!r}"
                     )
