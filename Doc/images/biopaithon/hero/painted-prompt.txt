@@ -1,0 +1,11 @@
+Prompt for ChatGPT / Midjourney, if you want a painted hero instead of the vector one:
+
+Editorial hero illustration for a blog post titled "BioPAIthon: same snakes, more silicon", about a fork of
+the Biopython scientific library that accepts code from AIs as well as humans. Two pythons intertwined in a
+double-helix spiral, seen side-on, filling a wide landscape frame. One snake is a living python with warm
+golden-yellow scales; the other is the same shape but made of silicon: dark blue-black circuit-board material
+with fine copper traces, tiny gold pads and faint glowing nodes along its body. Where the two bodies cross,
+scales and circuit traces blend into each other. Background: deep dark navy with a very subtle grid of circuit
+traces fading out, lots of empty space on the right for a title overlay. Clean, modern flat editorial style
+with soft lighting; limited palette of golden yellow, steel blue and copper. No text, no letters, no logos,
+no watermark. Aspect ratio 16:9.
