@@ -864,7 +864,13 @@ class AlignmentIterator(interfaces.AlignmentIterator):
         if self._compressed:
             uncompressBufSize = self._uncompressBufSize
             decompressor = zlib.decompressobj()
-            data = decompressor.decompress(data, uncompressBufSize)
+            try:
+                data = decompressor.decompress(data, uncompressBufSize)
+            except zlib.error as exception:
+                raise ValueError(
+                    f"The compressed data block at offset {offset} is invalid "
+                    f"({exception})"
+                ) from None
             if decompressor.unconsumed_tail:
                 raise ValueError(
                     f"The data block at offset {offset} decompresses to more "
