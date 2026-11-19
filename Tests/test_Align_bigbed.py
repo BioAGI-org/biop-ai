@@ -8253,13 +8253,19 @@ class TestAlign_malformed_data_block(unittest.TestCase):
         "uncompressBufSize ({}) bytes"
     )
     incomplete = "The compressed data block at offset {} is incomplete"
+    past_end = (
+        "The data block at offset {}, of {} bytes, extends past the end of "
+        "the file ({} bytes)"
+    )
 
-    def make_stream(self, block, uncompressBufSize=None):
+    def make_stream(self, block, uncompressBufSize=None, offset=None, size=None):
         """Return bed3.bb with its data block replaced, and the block offset.
 
         The new block, given compressed, is appended to the file, and the one
         leaf of the R tree index points to it instead. If uncompressBufSize is
-        given, it replaces the value of 16384 in the file header.
+        given, it replaces the value of 16384 in the file header. If offset or
+        size is given, the leaf gives it in place of the offset or size of the
+        new block.
         """
         with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
             data = bytearray(stream.read())
@@ -8271,8 +8277,11 @@ class TestAlign_malformed_data_block(unittest.TestCase):
         # The R tree index header is 48 bytes; its root node follows it. In
         # bed3.bb the root is a leaf holding one data block, and the offset
         # and size of the block are the last 16 of its 4 + 32 bytes.
-        offset = len(data)
-        struct.pack_into("<QQ", data, index_offset + 48 + 20, offset, len(block))
+        if offset is None:
+            offset = len(data)
+        if size is None:
+            size = len(block)
+        struct.pack_into("<QQ", data, index_offset + 48 + 20, offset, size)
         data += block
         return BytesIO(bytes(data)), offset
 
@@ -8281,6 +8290,9 @@ class TestAlign_malformed_data_block(unittest.TestCase):
         if uncompressBufSize is None:
             uncompressBufSize = 16384
         message = message.format(offset, uncompressBufSize)
+        self.check_message(stream, message)
+
+    def check_message(self, stream, message):
         # Iterating and searching read the data block alike.
         with Align.parse(stream, "bigbed") as alignments:
             with self.assertRaises(ValueError) as cm:
@@ -8322,6 +8334,40 @@ class TestAlign_malformed_data_block(unittest.TestCase):
         block = zlib.compress(self.items)
         self.check(block[:-1], None, self.incomplete)
         self.check(b"", None, self.incomplete)
+
+    def test_past_end_of_file(self):
+        block = zlib.compress(self.items)
+        # The file ends with the block, which used to read as it holds all
+        # of the compressed data, though the index gives one more byte.
+        stream, offset = self.make_stream(block, size=len(block) + 1)
+        file_size = offset + len(block)
+        message = self.past_end.format(offset, len(block) + 1, file_size)
+        self.check_message(stream, message)
+        # This used to raise OverflowError, or MemoryError for a file on disk.
+        stream, offset = self.make_stream(block, size=2**64 - 1)
+        message = self.past_end.format(offset, 2**64 - 1, file_size)
+        self.check_message(stream, message)
+        stream, _ = self.make_stream(block, offset=file_size + 1)
+        message = self.past_end.format(file_size + 1, len(block), file_size)
+        self.check_message(stream, message)
+
+    def test_short_read(self):
+        # The file loses the end of its block after it was opened. The
+        # compressed data are complete, and the short read used to pass.
+        block = zlib.compress(self.items) + bytes(8)
+        stream, offset = self.make_stream(block)
+        with Align.parse(stream, "bigbed") as alignments:
+            stream.truncate(offset + len(block) - 8)
+            message = (
+                f"The data block at offset {offset} is incomplete: read "
+                f"{len(block) - 8} of {len(block)} bytes"
+            )
+            with self.assertRaises(ValueError) as cm:
+                next(alignments)
+            self.assertEqual(str(cm.exception), message)
+            with self.assertRaises(ValueError) as cm:
+                next(alignments.search("chr22"))
+            self.assertEqual(str(cm.exception), message)
 
     def test_large_block(self):
         # A valid block of 3000000 empty items, 39 MB in all, that fits in
