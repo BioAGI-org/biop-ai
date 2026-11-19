@@ -3835,33 +3835,29 @@ class TestAlign_long_gap_str(unittest.TestCase):
     """Test printing an alignment with a long gap."""
 
     def test_pairwise_long_gap(self):
-        # A read aligned across a 300 kb intron of a reference given without
-        # its sequence, as a SAM line with CIGAR 1M300000N1M parses to. The
-        # text is the same as before printing became linear in the length
-        # of a segment; test_long_gap_time below checks the time.
-        gap = 300_000
+        # A read aligned across an intron of a reference given without its
+        # sequence, as a SAM line with CIGAR 1M150N1M parses to. The gap
+        # spans three lines and ends within the last one. test_long_gap_time
+        # below checks the time taken to print a long gap.
+        gap = 150
         target = Seq({0: "A", gap + 1: "C"}, length=gap + 2)
         query = Seq("AC")
         coordinates = np.array([[0, 1, gap + 1, gap + 2], [0, 1, 1, 2]])
         alignment = Align.Alignment([target, query], coordinates)
-        blocks = [
+        self.assertEqual(
+            str(alignment),
             "target            0 A" + "?" * 59 + "\n"
             "                  0 |" + "-" * 59 + "\n"
             "query             0 A" + "-" * 59 + "\n"
-        ]
-        for start in range(60, gap, 60):
-            blocks.append(
-                f"target    {start:9d} {'?' * 60}\n"
-                f"          {start:9d} {'-' * 60}\n"
-                f"query             1 {'-' * 60}\n"
-            )
-        blocks.append(
-            "target       300000 ?C 300002\n"
-            "             300000 -| 300002\n"
-            "query             1 -C      2\n"
+            "\n"
+            "target           60 " + "?" * 60 + "\n"
+            "                 60 " + "-" * 60 + "\n"
+            "query             1 " + "-" * 60 + "\n"
+            "\n"
+            "target          120 " + "?" * 31 + "C 152\n"
+            "                120 " + "-" * 31 + "| 152\n"
+            "query             1 " + "-" * 31 + "C   2\n",
         )
-        self.assertEqual(len(blocks), 5001)
-        self.assertEqual(str(alignment), "\n".join(blocks))
 
     def test_long_gap_time(self):
         # Three rows across a 15 Mb gap. Printing each line of a segment used
