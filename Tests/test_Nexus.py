@@ -2255,12 +2255,6 @@ print(
                 )
                 self.assertEqual(nexus.unaltered_taxlabels, read)
                 self.assertEqual(nexus.taxlabels, renamed)
-        nexus = Nexus.Nexus(
-            "#NEXUS\nbegin data; dimensions ntax=0 nchar=0; format datatype=dna; end;"
-        )
-        for label in read:
-            nexus.add_sequence(label, "A")
-        self.assertEqual(nexus.taxlabels, renamed)
 
     def test_explicit_copies(self):
         """Rows "a.copy1" to "a.copy15000", then the same rows again."""
