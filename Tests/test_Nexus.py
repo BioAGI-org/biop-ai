@@ -1945,6 +1945,31 @@ class TestMatchchar(unittest.TestCase):
         ):
             self.parse(".", "a ACGT", "b ACGTA.")
 
+    def test_short_rows_after_long_reference(self):
+        """Short rows after a long first row take time in their own length."""
+        # The first taxon's sequence was decoded again for every later row
+        # of the block, so 100,000 one-character rows under a 4,000,000
+        # character one took minutes before the length check rejected them.
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Nexus
+n, length = int(sys.argv[1]), int(sys.argv[2])
+try:
+    Nexus.Nexus(
+        f"#NEXUS\nbegin data;\ndimensions ntax={n} nchar={length};\n"
+        "format datatype=dna matchchar=. interleave;\nmatrix\n"
+        f"t0 {'A' * length}\n" + "".join(f"t{i} .\n" for i in range(1, n))
+        + ";\nend;\n"
+    )
+except Nexus.NexusError as error:
+    print(json.dumps(str(error)))
+"""
+        self.assertEqual(
+            parse_in_child(self, code, 100_000, 4_000_000),
+            "Matrix Nchar 4000000 does not match data length (1) for taxon t1",
+        )
+
 
 class TestIndexRange(unittest.TestCase):
     """Character and taxon numbers must lie between 1 and nchar or ntax."""

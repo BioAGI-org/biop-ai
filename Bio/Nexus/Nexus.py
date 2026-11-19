@@ -1140,13 +1140,15 @@ class Nexus:
                 # first taxon has the reference sequence if matchhar is used
                 if taxcount == 1:
                     refseq = iupac_seq
+                    # decoded once a block, as a later row may be much
+                    # shorter than the reference
+                    ref = str(refseq)
                 else:
                     if self.matchchar:
                         # Replace each matchchar by the reference character in
                         # one pass, as that may be the matchchar itself (when
                         # it is also the gap, missing or a state symbol)
                         seq = str(iupac_seq)
-                        ref = str(refseq)
                         if self.matchchar in seq[len(ref) :]:
                             raise NexusError(
                                 "Taxon %s: matchchar %s past the end of the first "
