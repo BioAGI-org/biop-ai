@@ -5795,12 +5795,18 @@ class TestScoreDistribution(unittest.TestCase):
         return mo_density, bg_density
 
     def count_python_calls(self, function, *args, **kwargs):
-        """Return what function returns, and how many Python calls it made."""
+        """Return what function returns, and its Python calls in thresholds.py.
+
+        Only calls of functions in Bio/motifs/thresholds.py are counted: how
+        many Python calls numpy makes inside differs between CPython and
+        PyPy, where more of numpy is written in Python.
+        """
+        filename = sys.modules[ScoreDistribution.__module__].__file__
         calls = 0
 
         def profile(frame, event, arg):
             nonlocal calls
-            if event == "call":
+            if event == "call" and frame.f_code.co_filename == filename:
                 calls += 1
 
         previous = sys.getprofile()
