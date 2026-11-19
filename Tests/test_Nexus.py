@@ -11,6 +11,7 @@
 
 """Tests for Nexus module."""
 
+import json
 import os.path
 import platform
 import subprocess
@@ -22,6 +23,7 @@ from unittest import mock
 
 import support
 
+import Bio
 from Bio import Phylo
 from Bio import SeqIO
 from Bio.Align import Alignment
@@ -2045,6 +2047,35 @@ class TestNcharBound(unittest.TestCase):
         self.assertEqual(str(nexus.matrix["t2"]), "ACGA")
 
 
+def parse_in_child(testcase, code, *args):
+    """Run code in a child Python that imports this checkout's Bio.
+
+    Return what the child prints, as JSON. The tests of quadratic and cubic
+    parsing below use this: the old code took minutes on their input, and
+    the child is stopped after 60 seconds, so on that code the test fails
+    instead of only running slowly.
+    """
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(
+            None,
+            [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+        )
+    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-W", "ignore", "-c", code, *map(str, args)],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        testcase.fail("parsing did not finish within 60 seconds")
+    testcase.assertEqual(result.returncode, 0, result.stderr)
+    return json.loads(result.stdout)
+
+
 class TestLongInput(unittest.TestCase):
     """Long commands, and many commands, parse in linear time.
 
@@ -2052,40 +2083,68 @@ class TestLongInput(unittest.TestCase):
     of a list of the command's characters for each character it read, and
     joined all the characters left for each item of a set; the block reader
     removed the first item of the list of commands for each command. So the
-    time grew with the square of the input: each input below took one and a
-    half to two minutes to parse, and now takes about a second or less.
+    time grew with the square of the input: each input below took several
+    minutes to parse, and now takes a second or two.
     """
 
     def test_translate(self):
-        """A TRANSLATE table of 50,000 taxa."""
-        n = 50_000
-        table = ",\n".join(f"{i} taxon_{i}" for i in range(1, n + 1))
-        nexus = Nexus.Nexus(
-            f"#NEXUS\nbegin trees;\ntranslate\n{table};\ntree t = (1,{n});\nend;\n"
-        )
-        self.assertEqual(nexus.translate, {i: f"taxon_{i}" for i in range(1, n + 1)})
-        self.assertEqual(nexus.trees[0].get_taxa(), ["taxon_1", f"taxon_{n}"])
+        """A TRANSLATE table of 100,000 taxa."""
+        n = 100_000
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Nexus
+n = int(sys.argv[1])
+table = ",\n".join(f"{i} taxon_{i}" for i in range(1, n + 1))
+nexus = Nexus.Nexus(
+    f"#NEXUS\nbegin trees;\ntranslate\n{table};\ntree t = (1,{n});\nend;\n"
+)
+print(json.dumps([list(nexus.translate.items()), nexus.trees[0].get_taxa()]))
+"""
+        translate, taxa = parse_in_child(self, code, n)
+        self.assertEqual(translate, [[i, f"taxon_{i}"] for i in range(1, n + 1)])
+        self.assertEqual(taxa, ["taxon_1", f"taxon_{n}"])
 
     def test_charset(self):
-        """A CHARSET of 80,000 items, half of them ranges."""
-        nexus = Nexus.Nexus(
-            "#NEXUS\nbegin data;\ndimensions ntax=1 nchar=4;\nformat datatype=dna;\n"
-            "matrix\nt1 ACGT\n;\nend;\nbegin sets;\n"
-            f"charset c = {'2 3-4 ' * 40_000};\nend;\n"
-        )
-        self.assertEqual(nexus.charsets, {"c": [1, 2, 3]})
+        """A CHARSET of 160,000 items, half of them ranges."""
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Nexus
+n = int(sys.argv[1])
+nexus = Nexus.Nexus(
+    "#NEXUS\nbegin data;\ndimensions ntax=1 nchar=4;\nformat datatype=dna;\n"
+    "matrix\nt1 ACGT\n;\nend;\nbegin sets;\n"
+    f"charset c = {'2 3-4 ' * n};\nend;\n"
+)
+print(json.dumps(nexus.charsets))
+"""
+        self.assertEqual(parse_in_child(self, code, 80_000), {"c": [1, 2, 3]})
 
     def test_many_commands(self):
-        """A block of 800,000 commands."""
-        n = 800_000
-        nexus = Nexus.Nexus(
-            "#NEXUS\nbegin foo;\n" + "x;" * n + "\nend;\nbegin data;\n"
-            "dimensions ntax=1 nchar=4;\nformat datatype=dna;\nmatrix\nt1 ACGT\n;\nend;\n"
-        )
-        self.assertEqual(len(nexus.unknown_blocks), 1)
-        self.assertEqual(nexus.unknown_blocks[0].title, "foo")
-        self.assertEqual(nexus.unknown_blocks[0].commandlines, [["x"] * n])
-        self.assertEqual(str(nexus.matrix["t1"]), "ACGT")
+        """A block of 1,600,000 commands."""
+        n = 1_600_000
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Nexus
+n = int(sys.argv[1])
+nexus = Nexus.Nexus(
+    "#NEXUS\nbegin foo;\n" + "x;" * n + "\nend;\nbegin data;\n"
+    "dimensions ntax=1 nchar=4;\nformat datatype=dna;\nmatrix\nt1 ACGT\n;\nend;\n"
+)
+print(
+    json.dumps(
+        [
+            [[block.title, block.commandlines] for block in nexus.unknown_blocks],
+            str(nexus.matrix["t1"]),
+        ]
+    )
+)
+"""
+        blocks, row = parse_in_child(self, code, n)
+        self.assertEqual(blocks, [["foo", [["x"] * n]]])
+        self.assertEqual(row, "ACGT")
 
 
 class TestRepeatedLabels(unittest.TestCase):
@@ -2108,29 +2167,44 @@ class TestRepeatedLabels(unittest.TestCase):
     def test_matrix(self):
         """A matrix of 5,000 rows named "a"."""
         n = 5000
-        nexus = Nexus.Nexus(
-            f"#NEXUS\nbegin data;\ndimensions ntax={n} nchar=1;\n"
-            "format datatype=dna;\nmatrix\n" + "a A\n" * n + ";\nend;\n"
-        )
-        self.assertEqual(nexus.unaltered_taxlabels, ["a"] * n)
-        self.assertEqual(nexus.taxlabels, self.renamed(n))
-        self.assertEqual(list(nexus.matrix), self.renamed(n))
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Nexus
+n = int(sys.argv[1])
+nexus = Nexus.Nexus(
+    f"#NEXUS\nbegin data;\ndimensions ntax={n} nchar=1;\n"
+    "format datatype=dna;\nmatrix\n" + "a A\n" * n + ";\nend;\n"
+)
+print(json.dumps([nexus.unaltered_taxlabels, nexus.taxlabels, list(nexus.matrix)]))
+"""
+        unaltered, taxlabels, matrix = parse_in_child(self, code, n)
+        self.assertEqual(unaltered, ["a"] * n)
+        self.assertEqual(taxlabels, self.renamed(n))
+        self.assertEqual(matrix, self.renamed(n))
 
     def test_interleaved_matrix(self):
-        """An interleaved matrix of two blocks of 2,500 rows named "a"."""
-        n = 2500
-        nexus = Nexus.Nexus(
-            f"#NEXUS\nbegin data;\ndimensions ntax={n} nchar=2;\n"
-            "format datatype=dna interleave;\nmatrix\n"
-            + "a A\n" * n
-            + "a C\n" * n
-            + ";\nend;\n"
-        )
-        self.assertEqual(nexus.taxlabels, self.renamed(n))
-        self.assertEqual(
-            {label: str(seq) for label, seq in nexus.matrix.items()},
-            dict.fromkeys(self.renamed(n), "AC"),
-        )
+        """An interleaved matrix of two blocks of 5,000 rows named "a"."""
+        n = 5000
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Nexus
+n = int(sys.argv[1])
+nexus = Nexus.Nexus(
+    f"#NEXUS\nbegin data;\ndimensions ntax={n} nchar=2;\n"
+    "format datatype=dna interleave;\nmatrix\n" + "a A\n" * n + "a C\n" * n
+    + ";\nend;\n"
+)
+print(
+    json.dumps(
+        [nexus.taxlabels, {label: str(seq) for label, seq in nexus.matrix.items()}]
+    )
+)
+"""
+        taxlabels, matrix = parse_in_child(self, code, n)
+        self.assertEqual(taxlabels, self.renamed(n))
+        self.assertEqual(matrix, dict.fromkeys(self.renamed(n), "AC"))
 
     def test_labels_like_copies(self):
         """Labels that already look like copies are renamed as before."""
@@ -2170,24 +2244,28 @@ class TestWideClade(unittest.TestCase):
     At each comma between two children of a clade, Tree._parse added up the
     lengths of all the pieces of the clade's text before that comma, so the
     time grew with the square of the number of children: the tree below, one
-    clade of 25,000 leaves, took about 100 seconds to parse, and now takes a
-    fraction of a second.
+    clade of 50,000 leaves, took several minutes to parse, and now takes
+    under a second.
     """
 
     def test_star_tree(self):
-        """A NEXUS tree of one clade with 25,000 leaves."""
-        n = 25_000
+        """A NEXUS tree of one clade with 50,000 leaves."""
+        n = 50_000
         # the commas inside the comments do not separate children
-        leaves = [(f"t{i}", float(i), f"[&r={{{i},{i}}}]") for i in range(n)]
-        newick = ",".join(
-            f"{taxon}{comment}:{length}" for taxon, length, comment in leaves
-        )
-        nexus = Nexus.Nexus(f"#NEXUS\nbegin trees;\ntree star = ({newick});\nend;\n")
-        tree = nexus.trees[0]
-        children = [tree.node(i).data for i in tree.node(tree.root).succ]
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Nexus
+n = int(sys.argv[1])
+newick = ",".join(f"t{i}[&r={{{i},{i}}}]:{float(i)}" for i in range(n))
+nexus = Nexus.Nexus(f"#NEXUS\nbegin trees;\ntree star = ({newick});\nend;\n")
+tree = nexus.trees[0]
+children = [tree.node(i).data for i in tree.node(tree.root).succ]
+print(json.dumps([[data.taxon, data.branchlength, data.comment] for data in children]))
+"""
         self.assertEqual(
-            [(data.taxon, data.branchlength, data.comment) for data in children],
-            leaves,
+            parse_in_child(self, code, n),
+            [[f"t{i}", float(i), f"[&r={{{i},{i}}}]"] for i in range(n)],
         )
 
 
