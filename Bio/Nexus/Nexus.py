@@ -1217,8 +1217,10 @@ class Nexus:
                 self.taxlabels.append(id)
             else:
                 # taxon names need to be in the same order in each interleaved
-                # block, so the labels taken are those of the taxa above
-                taken.add(self.taxlabels[taxcount - 1])
+                # block, so the labels taken are those of the taxa above (as
+                # many of them as there are, if the first block was short)
+                if taxcount <= len(self.taxlabels):
+                    taken.add(self.taxlabels[taxcount - 1])
                 id = unique_id
                 taxon_present = present.get(id.replace(" ", "_"))
                 if taxon_present:
