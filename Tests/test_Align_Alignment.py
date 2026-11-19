@@ -26,6 +26,7 @@ except ImportError:
 
 import support
 
+import Bio
 from Bio import Align
 from Bio import SeqIO
 from Bio.Align import _aligncore
@@ -3834,11 +3835,11 @@ class TestAlign_long_gap_str(unittest.TestCase):
     """Test printing an alignment with a long gap."""
 
     def test_pairwise_long_gap(self):
-        # A read aligned across a 3 Mb intron of a reference given without
-        # its sequence, as a SAM line with CIGAR 1M3000000N1M parses to.
-        # Printing each line of a segment used to copy the rest of the
-        # segment, in time quadratic in its length: about 10 s for this one.
-        gap = 3_000_000
+        # A read aligned across a 300 kb intron of a reference given without
+        # its sequence, as a SAM line with CIGAR 1M300000N1M parses to. The
+        # text is the same as before printing became linear in the length
+        # of a segment; test_long_gap_time below checks the time.
+        gap = 300_000
         target = Seq({0: "A", gap + 1: "C"}, length=gap + 2)
         query = Seq("AC")
         coordinates = np.array([[0, 1, gap + 1, gap + 2], [0, 1, 1, 2]])
@@ -3855,12 +3856,60 @@ class TestAlign_long_gap_str(unittest.TestCase):
                 f"query             1 {'-' * 60}\n"
             )
         blocks.append(
-            "target      3000000 ?C 3000002\n"
-            "            3000000 -| 3000002\n"
-            "query             1 -C       2\n"
+            "target       300000 ?C 300002\n"
+            "             300000 -| 300002\n"
+            "query             1 -C      2\n"
         )
-        self.assertEqual(len(blocks), 50001)
+        self.assertEqual(len(blocks), 5001)
         self.assertEqual(str(alignment), "\n".join(blocks))
+
+    def test_long_gap_time(self):
+        # Three rows across a 15 Mb gap. Printing each line of a segment used
+        # to copy the rest of the segment, in time quadratic in its length:
+        # about 5 TB of copying here, where a 4 Mb gap took 20 s. Printing
+        # now takes about a second. Print in a child process, which a
+        # timeout can stop.
+        code = """\
+import numpy as np
+from Bio.Align import Alignment
+from Bio.Seq import Seq
+gap = 15000000
+target = Seq({0: "A", gap + 1: "C"}, length=gap + 2)
+coordinates = np.array([[0, 1, gap + 1, gap + 2], [0, 1, 1, 2], [0, 1, 1, 2]])
+alignment = Alignment([target, Seq("AC"), Seq("AC")], coordinates)
+text = str(alignment)
+print(len(text), text.count("\\n"))
+print(text[:81], end="")
+print(text[-96:], end="")
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("Printing a 15 Mb gap took over 60 seconds")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # The size of the text, its number of lines, its first line, and the
+        # three lines of its last block.
+        self.assertEqual(
+            result.stdout,
+            "61000096 1000003\n"
+            "                  0 A" + "?" * 59 + "\n"
+            "           15000000 ?C 15000002\n"
+            "                  1 -C        2\n"
+            "                  1 -C        2\n",
+        )
 
 
 class TestAlign_mapall(unittest.TestCase):
