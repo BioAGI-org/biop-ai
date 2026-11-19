@@ -55,6 +55,58 @@ and the default branch is now ``main`` rather than ``master``.
 (In progress, not yet released): biop-ai 1.89
 =============================================
 
+A security audit of the code base (a Gemini review of the whole repository,
+with each finding reproduced independently before it was fixed) found many
+places where a small crafted or truncated file could make a parser hang, use
+memory far out of proportion to the file, run in quadratic or worse time, or
+crash the interpreter. Those fixed so far are in ``Bio.SCOP``,
+``Bio.NMR.xpktools``, ``GenomeDiagram``, ``Bio.SeqUtils.nt_search``, the
+``SeqIO`` twobit, abi, SnapGene, PdbIO, GFA and FASTQ index code, ``Bio.bgzf``,
+``Bio.Sequencing`` (Ace, Phd), ``Bio.GenBank``, ``Bio.SeqFeature``, the
+``SearchIO`` HMMER, Infernal, HHsuite, FASTA and BLAST code and indexers,
+``Bio.motifs``, ``Bio.Affy``, ``Bio.phenotype``, ``Bio.Emboss.Primer3``,
+``Bio.Nexus``, ``Bio.Phylo.PAML``, ``Bio.Cluster``, ``Bio.Align`` (bigBed,
+bigPsl, bigMaf, PHYLIP, hhr, printing) and ``Bio.AlignIO`` (PHYLIP, MAF
+index). The most serious was in the twobit reader: an N block whose end
+wrapped past 2**32 made the C code write far past the sequence buffer.
+Malformed input now raises ``ValueError`` (``NexusError``, ``ParserError``
+and so on where the module already used them), and results for valid files
+are unchanged except as listed here.
+
+Visible changes from these fixes, all for unusual input:
+
+- ``.2bit`` files: an N or mask block running past the end of its sequence
+  now raises ``ValueError`` instead of being clipped, and names sharing one
+  record share one ``Seq``.
+- ``.ab1`` files: entries sharing a data block share one decoded value; a
+  file whose earlier repeated PBAS2, PCON2 or SMPL1 entry fails to decode
+  but whose last one decodes now parses.
+- ``GenomeDiagram``: a scale tick class whose ticks would be under one point
+  apart is skipped with a ``BiopythonWarning``.
+- ``Bio.NMR.xpktools.data_table`` raises ``ValueError`` for a residue range
+  needing more than 1,000,000 rows.
+- ``SeqIO`` cif-atom raises ``ValueError`` when a chain's gap padding would
+  pass 100,000 residues.
+- MEME, MAST, XMS and SnapGene XML that declares an entity in its DTD
+  is rejected, even a harmless one.
+- A CEL v3 file with fewer distinct cells than Rows x Cols raises
+  ``ParserError`` instead of returning zero-filled arrays.
+- ``WellRecord`` slices without a stop are capped at 10**6 values.
+- ``Bio.Align.substitution_matrices.load()`` takes only a bundled matrix
+  name; use ``read()`` for a file path.
+- ``Bio.Cluster.kmedoids`` with a condensed (1-D) distance matrix returns one
+  label per item, as the 2-D form does; before it returned the wrong number.
+- ``Bio.Cluster.Record.save`` validates both k-means solutions before
+  writing any file.
+- ``codonalign.build`` raises ``ValueError`` instead of calling ``exit(1)``
+  for a protein missing from ``corr_dict``.
+- A header-only PHYLIP file such as ``2 0`` is an error, not an alignment of
+  empty rows; ``Bio.Align.hhr`` rejects sequence lengths over 1,000,000.
+- An empty fasta-m10 file gives no results instead of hanging.
+- ``Bio.Phylo.PAML.codeml.read`` is stricter on truncated multi-gene files,
+  and character number 0 in a NEXUS set is rejected (it used to mean the last
+  column).
+
 ``Bio.PDB.PDBIO.save`` has a new ``write_ter`` keyword. The default, ``True``,
 writes exactly what it wrote before. With ``write_ter=False`` no ``TER``
 records are written, for tools that do not expect them. In the default
