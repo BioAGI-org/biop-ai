@@ -20,7 +20,6 @@ from search_tests_common import EndOfFileGuard
 from Bio import SearchIO
 
 import Bio
-from Bio import SearchIO
 
 
 class Hmmer3TextRawCases(CheckRaw):
