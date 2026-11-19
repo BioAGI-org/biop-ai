@@ -16,6 +16,8 @@ import os
 import re
 import shutil
 import struct
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -29,6 +31,7 @@ import support
 from seq_tests_common import SeqRecordTestBaseClass
 from test_SeqIO import SeqIOTestBaseClass
 
+import Bio
 from Bio import BiopythonParserWarning
 from Bio import SeqIO
 from Bio.SeqIO._index import _FormatToRandomAccess
@@ -1219,19 +1222,55 @@ class MalformedFileTests(unittest.TestCase):
         """A record wrapped at one base per line is read back in linear time.
 
         get_raw used to build the record with bytes += line, which copies
-        the whole record so far on every line.  Done that way, each of the
-        two look-ups below took a minute or more on this 1.6 MB file.
+        the whole record so far on every line. It still gave the right
+        bytes in the end, so a long record is looked up in a child process,
+        and the timeout fails the test on the old code.
         """
-        lines = 400000
-        path = self.write(
-            "wrapped.fastq", "@r1\n" + "A\n" * lines + "+\n" + "I\n" * lines
+
+        def wrapped(lines):
+            """Write a record of the given number of bases, one per line."""
+            return self.write(
+                f"wrapped{lines}.fastq",
+                "@r1\n" + "A\n" * lines + "+\n" + "I\n" * lines,
+            )
+
+        # The old code took 0.5, 2 and 9 seconds to look up a record of
+        # 50,000, 100,000 and 200,000 lines, four to five times as long for
+        # each doubling, so 1,000,000 lines (4 MB) take it about 4 minutes.
+        # The new code takes half a second.
+        code = """\
+import sys
+from Bio import SeqIO
+index = SeqIO.index(sys.argv[1], "fastq")
+raw = index.get_raw("r1")
+index.close()
+with open(sys.argv[1], "rb") as handle:
+    print(raw == handle.read())
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
         )
+        result = subprocess.run(
+            [sys.executable, "-c", code, wrapped(1_000_000)],
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(result.stdout, "True\n", result.stderr)
+
+        # A shorter record gives the same bytes, and the right sequence.
+        path = wrapped(1000)
         with open(path, "rb") as handle:
             data = handle.read()
         index = SeqIO.index(path, "fastq")
         self.addCleanup(index.close)
         self.assertEqual(index.get_raw("r1"), data)
-        self.assertEqual(index["r1"].seq, "A" * lines)
+        self.assertEqual(index["r1"].seq, "A" * 1000)
 
     # GenBank ------------------------------------------------------------
 
