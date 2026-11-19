@@ -1,11 +1,15 @@
 """Tests for SeqIO GFA module."""
 
+import os
+import subprocess
+import sys
 import unittest
 import warnings
 from io import StringIO
 
 import support
 
+import Bio
 from Bio import BiopythonParserWarning
 from Bio import BiopythonWarning
 from Bio import SeqIO
@@ -153,14 +157,60 @@ class TestCorrupt(unittest.TestCase):
         The float pattern given by the GFA standard can match a run of digits
         in many ways, and Python's re tried them all on a value that did not
         match. That took time quadratic in the length of an f tag, and doubling
-        with each element of a B tag, so a B tag of 40 elements took days.
+        with each element of a B tag, so a B tag of 40 elements took days. It
+        still gave the right warnings in the end, so a long bad tag of each
+        kind is checked in a child process, and the timeout fails the test on
+        the old pattern.
         """
-        array = ",".join(["11"] * 28)
+        # The old pattern took 8.2 seconds on an f tag of 20,000 digits and
+        # "a", four times as long for each doubling, so 200,000 digits take
+        # it about 14 minutes. It took 6.7 seconds on a B tag of 24 elements
+        # "11" and "X", twice as long for each element, so 30 elements take
+        # it about 7 minutes. The new pattern takes milliseconds on each.
+        code = """\
+import sys
+import warnings
+from Bio import SeqIO
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    for record in SeqIO.parse(sys.stdin, "gfa1"):
+        print(record.id, [str(w.message).split(",")[0] for w in caught])
+        caught.clear()
+"""
+        lines = [
+            "S\tf\tAAA\tAB:f:" + "1" * 200_000 + "a\n",
+            "S\tB\tAAA\tAB:B:f," + ",".join(["11"] * 30) + "X\n",
+        ]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            input="".join(lines),
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        float_warning = "Tag has incorrect type. Expected float"
+        array_warning = "Tag has incorrect type. Expected array of integers or floats"
+        self.assertEqual(
+            result.stdout,
+            f"f {[float_warning]}\nB {[array_warning]}\n",
+            result.stderr,
+        )
+
+        # Shorter bad tags give the same warnings, and long good tags none.
+        array = ",".join(["11"] * 10)
         for value, message in (
-            ("f:" + "1" * 60000 + "a", "Expected float"),
+            ("f:" + "1" * 1000 + "a", "Expected float"),
             ("B:f," + array + "X", "integers or floats"),
             ("f:" + "1" * 60000, None),
-            ("B:f," + array, None),
+            ("B:f," + ",".join(["11"] * 28), None),
             ("B:i,-1.5,+.5,2e-3,7E+10," + array, None),
         ):
             with self.subTest(value=value[:12], message=message):
