@@ -335,18 +335,37 @@ def _make_unique(values):
     return sorted(set(values))
 
 
-def _unique_label(previous_labels, label):
-    """Return a unique name if label is already in previous_labels (PRIVATE)."""
+def _next_label(label):
+    """Return the name that follows label in its chain of copies (PRIVATE)."""
+    label_split = label.split(".")
+    if label_split[-1].startswith("copy"):
+        copy_num = 1
+        if label_split[-1] != "copy":
+            copy_num = int(label_split[-1][4:]) + 1
+        return f"{'.'.join(label_split[:-1])}.copy{copy_num}"
+    return label + ".copy"
+
+
+def _unique_label(previous_labels, label, skip=None):
+    """Return a unique name if label is already in previous_labels (PRIVATE).
+
+    The name is the first of label, _next_label(label), its next label and
+    so on, that is not in previous_labels. When previous_labels only grows
+    between calls, pass the same dict as skip to each: it records, for each
+    label passed over, the name found after it, so that a later call
+    meeting that label, from whatever label it started, carries on from
+    there instead of walking the same chain again.
+    """
+    passed = []
     while label in previous_labels:
-        label_split = label.split(".")
-        if label_split[-1].startswith("copy"):
-            copy_num = 1
-            if label_split[-1] != "copy":
-                copy_num = int(label_split[-1][4:]) + 1
-            new_label = f"{'.'.join(label_split[:-1])}.copy{copy_num}"
-            label = new_label
+        passed.append(label)
+        if skip is not None and label in skip:
+            label = skip[label]
         else:
-            label += ".copy"
+            label = _next_label(label)
+    if skip is not None:
+        for name in passed:
+            skip[name] = label
     return label
 
 
@@ -1079,12 +1098,12 @@ class Nexus:
         self.matrix = {}
         taxcount = 0
         first_matrix_block = True
-        # the labels a repeated label must not take in this block, and for
-        # each label as read, the unique label it was last given: as no label
-        # is ever freed, the next repeat can carry on from there, rather than
-        # walk past all the copies before it again
+        # the labels a repeated label must not take in this block, and the
+        # names found after the labels passed over: as no label is ever
+        # freed in a block, a later repeat can carry on from there, rather
+        # than walk past all the copies before it again
         taken = self.matrix
-        renamed = {}
+        skip = {}
 
         # eliminate empty lines and leading/trailing whitespace
         lines = [_.strip() for _ in options.split("\n") if _.strip() != ""]
@@ -1110,7 +1129,7 @@ class Nexus:
                     taxcount = 1
                     first_matrix_block = False
                     taken = set()
-                    renamed = {}
+                    skip = {}
                     # the taxa are now fixed, so look them up as
                     # _check_taxlabels does, but build its dict once a block
                     present = {t.replace(" ", "_"): t for t in self.taxlabels}
@@ -1190,8 +1209,7 @@ class Nexus:
                                 )
 
             # add sequence to matrix
-            unique_id = _unique_label(taken, renamed.get(id, id))
-            renamed[id] = unique_id
+            unique_id = _unique_label(taken, id, skip)
             if first_matrix_block:
                 self.unaltered_taxlabels.append(id)
                 id = unique_id
