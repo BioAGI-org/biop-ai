@@ -2085,7 +2085,7 @@ class Nexus:
             sequence += self.missing * diff
 
         if name in self.taxlabels:
-            unique_name = _unique_label(set(self.taxlabels), name)
+            unique_name = _unique_label(self.taxlabels, name)
             # print("WARNING: Sequence name %s is already present. Sequence was added as %s." % (name,unique_name))
         else:
             unique_name = name
