@@ -5876,16 +5876,27 @@ class TestScoreDistribution(unittest.TestCase):
     def test_float32_background(self):
         """A float32 background gives the per-bin loop's thresholds.
 
-        That loop summed float32 probabilities in float32, and the threshold
-        methods then summed its float32 densities in float32 as well. Here
-        0.7 + 0.1 is 0.8 in float32 but just under it in float64, so summing
-        in float64 made threshold_fpr(0.8) pass the score of 1 and give -1.
+        With NumPy 2, that loop summed float32 probabilities in float32, and
+        the threshold methods then summed its float32 densities in float32
+        as well. Here 0.7 + 0.1 is 0.8 in float32 but just under it in
+        float64, so summing in float64 made threshold_fpr(0.8) pass the
+        score of 1 and give -1 instead of 1. NumPy 1 promotes a float32 and
+        a Python float to float64, so there the loop gave -1 too.
         """
         pssm = PositionSpecificScoringMatrix(
             "ACGT", {"A": [1.0], "C": [1.0], "G": [-1.0], "T": [-1.0]}
         )
         background = dict(zip("ACGT", np.array([0.7, 0.1, 0.1, 0.1], np.float32)))
-        self.assertEqual(pssm.distribution(background).threshold_fpr(0.8), 1.0)
+        distribution = pssm.distribution(background)
+        # The threshold from the per-bin loop's densities, for the background
+        # normalised as pssm.distribution normalises it
+        total = sum(background.values())
+        normalised = {letter: value / total for letter, value in background.items()}
+        reference = pssm.distribution(background)
+        reference.bg_density = self.per_bin_loop(
+            reference, self.columns(pssm, normalised)
+        )[1]
+        self.assertEqual(distribution.threshold_fpr(0.8), reference.threshold_fpr(0.8))
         # The hand-made matrix's last column leaves its top bins unreached, and
         # the per-bin loop left them as Python floats among float32 values.
         background = dict.fromkeys("ACGT", np.float32(0.25))
@@ -5960,7 +5971,10 @@ class TestScoreDistribution(unittest.TestCase):
         The per-bin loop multiplied numpy scalars, which follow
         numpy.seterr, so a NumPy scalar background whose products underflow
         raised FloatingPointError there; the caller's setting must not be
-        overridden.
+        overridden. The float64 products underflow with any NumPy. NumPy 1
+        multiplies a float32 and a Python float in float64, where the
+        float32 background's products do not underflow, so the per-bin
+        loop decides what to expect.
         """
         pssm = PositionSpecificScoringMatrix(
             "ACGT",
@@ -5969,14 +5983,23 @@ class TestScoreDistribution(unittest.TestCase):
         for value_type, tiny in ((np.float64, 1e-200), (np.float32, 1e-30)):
             background = {"A": tiny, "C": 0.3, "G": 0.3, "T": 0.4}
             background = {k: value_type(v) for k, v in background.items()}
-            with self.subTest(value_type=value_type):
-                with np.errstate(under="raise"):
+            distribution = ScoreDistribution(
+                precision=10, pssm=pssm, background=background
+            )
+            columns = list(self.columns(pssm, background))
+            with self.subTest(value_type=value_type), np.errstate(under="raise"):
+                try:
+                    self.per_bin_loop(distribution, columns)
+                except FloatingPointError:
                     with self.assertRaises(FloatingPointError):
                         pssm.distribution(background, 10)
                     with self.assertRaises(FloatingPointError):
                         ScoreDistribution(
                             precision=10, pssm=pssm, background=background
                         )
+                else:
+                    self.assertIs(value_type, np.float32)
+                    self.assert_same_as_per_bin_loop(pssm, 10, background, direct=True)
 
 
 # Run only while the GIL is off. A free-threaded build turns it back on when
