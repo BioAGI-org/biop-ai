@@ -5,10 +5,12 @@
 
 """Tests for SearchIO FastaIO parsers."""
 
+import os
 import unittest
 from io import StringIO
 
 import support
+from search_tests_common import run_python
 
 from Bio.SearchIO import parse
 
@@ -3269,8 +3271,28 @@ class LongLineCases(unittest.TestCase):
         """Test a query line without its '- <length> aa' ending."""
         # Line 8 of output001.m10 is the first query line, "  1>>>gi|...
         # [Escherichia coli O157:H7 s 107 aa - 107 aa". With its "- 107 aa"
-        # replaced by spaces, the old regular expression took about 7 seconds
-        # to reject it, then the parser failed with AttributeError.
+        # replaced by spaces, the old regular expression took time growing
+        # with about the fourth power of the number of spaces to reject the
+        # line: 0.5 s for 300 spaces, 7 s for 600, about 3 minutes for 1200.
+        # It still rejected the line in the end, so time it in a child
+        # process: with 2400 spaces the old pattern would take well over 20
+        # minutes and the new one takes milliseconds, so the 60 second
+        # timeout fails the test on the old pattern.
+        filename = os.fspath(get_file("output001.m10"))
+        code = f"""\
+from io import StringIO
+from Bio.SearchIO import parse
+with open({filename!r}) as handle:
+    lines = handle.readlines()
+line = lines[7].replace(" - 107 aa\\n", " " * 2400 + "\\n")
+try:
+    list(parse(StringIO("".join(lines[:7]) + line), "fasta-m10"))
+except ValueError:
+    print("ValueError")
+"""
+        result = run_python(code)
+        self.assertEqual(result.stdout, "ValueError\n", result.stderr)
+        # With 600 spaces, in this process, the error quotes the line.
         with open(get_file("output001.m10")) as handle:
             lines = handle.readlines()
         line = lines[7].replace(" - 107 aa\n", " " * 600 + "\n")
@@ -3286,8 +3308,26 @@ class LongLineCases(unittest.TestCase):
     def test_long_run_of_gaps(self):
         """Test an aligned sequence that starts with a long run of gaps."""
         # Line 59 of output001.m10 starts the aligned query of the first HSP
-        # with 26 '-' filling its flank; the parser trims them off. With 40000
-        # more, trimming took the old code about 5 seconds.
+        # with 26 '-' filling its flank; the parser trims them off. The old
+        # regular expression for trailing gaps took time quadratic in the
+        # length of the run: 5 s for 40,000 more, 21 s for 80,000. It still
+        # trimmed them correctly, so time it in a child process: with 400,000
+        # more the old pattern would take about 9 minutes and the new one
+        # takes milliseconds, so the 60 second timeout fails the test on the
+        # old pattern.
+        filename = os.fspath(get_file("output001.m10"))
+        code = f"""\
+from io import StringIO
+from Bio.SearchIO import parse
+with open({filename!r}) as handle:
+    text = handle.read()
+flank = "\\n" + "-" * 26 + "MTKRSGSNT"
+text = text.replace(flank, "\\n" + "-" * 400_000 + flank[1:])
+print(next(parse(StringIO(text), "fasta-m10")).hsps[0].query_range)
+"""
+        result = run_python(code)
+        self.assertEqual(result.stdout, "(4, 103)\n", result.stderr)
+        # With 40,000 more, in this process, every HSP is as in the file.
         with open(get_file("output001.m10")) as handle:
             text = handle.read()
         flank = "\n" + "-" * 26 + "MTKRSGSNT"
