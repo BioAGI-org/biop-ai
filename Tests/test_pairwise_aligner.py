@@ -6,6 +6,7 @@
 """Tests for the PairwiseAligner in Bio.Align."""
 
 import array
+import gc
 import math
 import mmap
 import os
@@ -16,6 +17,7 @@ import sys
 import sysconfig
 import threading
 import unittest
+import weakref
 from concurrent.futures import ThreadPoolExecutor
 
 try:
@@ -22826,6 +22828,25 @@ class TestMatrixAllocationGuards(unittest.TestCase):
             buffer = mmap.mmap(-1, size, **kwargs)
         except (OSError, OverflowError, MemoryError):
             self.skipTest(f"cannot reserve address space for {length} letters")
+        # Unmap it once the test is over.  PyPy frees an object only when
+        # its garbage collector runs, not when the last reference goes, so
+        # the gigabytes would stay mapped into later tests.  PyPy's
+        # subprocess forks, and by default the kernel refuses a fork with
+        # ENOMEM if one private mapping is larger than RAM plus swap.  The
+        # two tests' maps lie side by side and merge into one of 16 GB,
+        # more than some of the 16 GB CI runners have.  The array is a C
+        # extension object on PyPy, which frees it and then the mmap over
+        # several collections (three here).  Closing the mmap instead
+        # would leave the array pointing at unmapped memory on PyPy.
+        mapping = weakref.ref(buffer)
+
+        def unmap():
+            for _ in range(5):
+                if mapping() is None:
+                    break
+                gc.collect()
+
+        self.addCleanup(unmap)
         return np.frombuffer(buffer, dtype=np.int32)
 
     @unittest.skipUnless(sys.maxsize > 2**32, "requires a 64-bit build")
