@@ -2262,6 +2262,75 @@ print(
             nexus.add_sequence(label, "A")
         self.assertEqual(nexus.taxlabels, renamed)
 
+    def test_explicit_copies(self):
+        """Rows "a.copy1" to "a.copy15000", then the same rows again."""
+        # Each repeat of the second half started its own walk up the chain
+        # "a.copy1", "a.copy2", ... past all the names the first half and
+        # the repeats before it had taken, which took minutes.
+        n = 15_000
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Nexus
+n = int(sys.argv[1])
+rows = "".join(f"a.copy{i} A\n" for i in range(1, n + 1))
+nexus = Nexus.Nexus(
+    f"#NEXUS\nbegin data;\ndimensions ntax={2 * n} nchar=1;\n"
+    f"format datatype=dna;\nmatrix\n{rows * 2};\nend;\n"
+)
+print(json.dumps(nexus.taxlabels))
+"""
+        self.assertEqual(
+            parse_in_child(self, code, n),
+            [f"a.copy{i}" for i in range(1, 2 * n + 1)],
+        )
+
+    def test_repeats_meeting_in_one_chain(self):
+        """Repeats of different labels in one chain of copies are named as before."""
+        read = [
+            "a.copy1",
+            "a.copy3",
+            "a",
+            "a.copy",
+            "a.copy2",
+            "a.copy1",
+            "a",
+            "a.copy3",
+            "a.copy",
+            "a",
+            "b",
+            "a.copy1.copy",
+            "a.copy1",
+            "b",
+        ]
+        renamed = [
+            "a.copy1",
+            "a.copy3",
+            "a",
+            "a.copy",
+            "a.copy2",
+            "a.copy4",
+            "a.copy5",
+            "a.copy6",
+            "a.copy7",
+            "a.copy8",
+            "b",
+            "a.copy1.copy",
+            "a.copy9",
+            "b.copy",
+        ]
+        n = len(read)
+        rows = "".join(f"{label} A\n" for label in read)
+        for interleave, nchar, matrix in (("", 1, rows), ("interleave", 2, rows * 2)):
+            with self.subTest(interleave=interleave):
+                nexus = Nexus.Nexus(
+                    f"#NEXUS\nbegin data;\ndimensions ntax={n} nchar={nchar};\n"
+                    f"format datatype=dna {interleave};\nmatrix\n{matrix};\nend;\n"
+                )
+                self.assertEqual(nexus.unaltered_taxlabels, read)
+                self.assertEqual(nexus.taxlabels, renamed)
+                self.assertEqual(list(nexus.matrix), renamed)
+
 
 class TestWideClade(unittest.TestCase):
     """A clade with many children parses in linear time.
