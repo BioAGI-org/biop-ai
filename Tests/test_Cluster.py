@@ -4335,6 +4335,44 @@ class TestRecordSave(unittest.TestCase):
             "UNIQID\tGROUP\nG4\t0\nG5\t0\nG1\t0\nG3\t0\nG2\t1000000000\n",
         )
 
+    def test_kmeans_large_clusterids(self):
+        """Check save writes cluster numbers that do not fit in 64 bits.
+
+        NumPy stored a list holding 2**63 + 1 as floats, so save wrote the
+        cluster number as 2**63, and it found the number of clusters for
+        the file names as an int64, so 2**63 - 1 gave a negative number.
+        """
+        big = 2**63
+        self.record.save(self.jobname, [0, big + 1, 0, 0, 0], [0, big - 1, 0])
+        self.record.save(self.jobname, [0, big - 1, 0, 0, 0], [0, big + 1, 0])
+        self.assertEqual(
+            sorted(os.listdir(self.directory)),
+            [
+                "job_K_A9223372036854775808.kag",
+                "job_K_A9223372036854775810.kag",
+                "job_K_G9223372036854775808.kgg",
+                "job_K_G9223372036854775808_A9223372036854775810.cdt",
+                "job_K_G9223372036854775810.kgg",
+                "job_K_G9223372036854775810_A9223372036854775808.cdt",
+            ],
+        )
+        self.assertEqual(
+            self.read_output("job_K_G9223372036854775810.kgg"),
+            "UNIQID\tGROUP\nG4\t0\nG5\t0\nG1\t0\nG3\t0\nG2\t9223372036854775809\n",
+        )
+        self.assertEqual(
+            self.read_output("job_K_G9223372036854775808.kgg"),
+            "UNIQID\tGROUP\nG4\t0\nG5\t0\nG1\t0\nG3\t0\nG2\t9223372036854775807\n",
+        )
+        self.assertEqual(
+            self.read_output("job_K_A9223372036854775810.kag"),
+            "ARRAY\tGROUP\nEXP3\t0\nEXP1\t0\nEXP2\t9223372036854775809\n",
+        )
+        self.assertEqual(
+            self.read_output("job_K_A9223372036854775808.kag"),
+            "ARRAY\tGROUP\nEXP3\t0\nEXP1\t0\nEXP2\t9223372036854775807\n",
+        )
+
     def test_kmeans_bad_clusterids(self):
         """Check save rejects cluster numbers it cannot write.
 
