@@ -2184,6 +2184,21 @@ class TestRepeatedLabels(unittest.TestCase):
     a dict of all the taxa built again for that row.
     """
 
+    def test_negative_ntax_interleaved(self):
+        """An interleaved matrix with a negative ntax raises NexusError."""
+        # Each row starts a new block, before the first block has any taxa.
+        for ntax in (-1, -2):
+            text = (
+                "#NEXUS\nbegin data;\n"
+                f"dimensions ntax={ntax} nchar=4;\n"
+                "format datatype=dna interleave;\n"
+                "matrix\nA ACGT\nB ACGT\n;\nend;\n"
+            )
+            with self.subTest(ntax=ntax):
+                with self.assertRaises(Nexus.NexusError) as cm:
+                    Nexus.Nexus(text)
+                self.assertIn("not in first block", str(cm.exception))
+
     @staticmethod
     def renamed(n):
         """Return the names n rows named "a" are given."""
