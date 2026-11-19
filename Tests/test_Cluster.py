@@ -4327,9 +4327,41 @@ class TestRecordSave(unittest.TestCase):
             "G3\tn3\t1.000000\t8.0\t9.0\t7.0\n"
             "G4\tn4\t1.000000\t2.5\t3.5\t1.5\n",
         )
-        # A large cluster number used to cost one pass over the genes for
-        # every smaller number.
-        self.record.save(self.jobname, LimitedReads([0, 10**9, 0, 0, 0]))
+
+    def test_kmeans_large_clusterid_time(self):
+        """Check save is quick for a large cluster number.
+
+        save used to look for cluster 0, 1, 2, ... in turn, so a cluster
+        number of 10**9 cost a billion passes over the genes. It runs in a
+        child process, so that a slow save fails the test after 60 seconds
+        rather than hanging the test run.
+        """
+        import Bio
+
+        code = f"""\
+import io
+from Bio.Cluster import read
+record = read(io.StringIO({self.TEXT!r}))
+record.save({self.jobname!r}, [0, 10**9, 0, 0, 0])
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("save took more than 60 seconds")
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             self.read_output("job_K_G1000000001.kgg"),
             "UNIQID\tGROUP\nG4\t0\nG5\t0\nG1\t0\nG3\t0\nG2\t1000000000\n",
