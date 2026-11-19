@@ -8253,6 +8253,7 @@ class TestAlign_malformed_data_block(unittest.TestCase):
         "uncompressBufSize ({}) bytes"
     )
     incomplete = "The compressed data block at offset {} is incomplete"
+    invalid = "The compressed data block at offset {} is invalid ({})"
     past_end = (
         "The data block at offset {}, of {} bytes, extends past the end of "
         "the file ({} bytes)"
@@ -8334,6 +8335,18 @@ class TestAlign_malformed_data_block(unittest.TestCase):
         block = zlib.compress(self.items)
         self.check(block[:-1], None, self.incomplete)
         self.check(b"", None, self.incomplete)
+
+    def test_invalid(self):
+        # These used to raise zlib.error. The last four bytes of the
+        # compressed data are the Adler-32 checksum of the block.
+        block = bytearray(zlib.compress(self.items))
+        block[-1] ^= 1
+        stream, offset = self.make_stream(bytes(block))
+        error = "Error -3 while decompressing data: incorrect data check"
+        self.check_message(stream, self.invalid.format(offset, error))
+        stream, offset = self.make_stream(b"not zlib" + zlib.compress(self.items))
+        error = "Error -3 while decompressing data: incorrect header check"
+        self.check_message(stream, self.invalid.format(offset, error))
 
     def test_past_end_of_file(self):
         block = zlib.compress(self.items)
