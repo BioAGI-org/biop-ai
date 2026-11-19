@@ -13001,6 +13001,26 @@ class TestAlign_malformed_first_block(unittest.TestCase):
         s_line = b"s mm10.chr7 27578831 3 + 158545518 AAA"
         self.check(b"a score=0;s mm10.chr7\0" + next_item + b"a score=0;" + s_line)
 
+    def test_many_lines_without_s_line(self):
+        # The lines are walked in place: splitting the item into a list of
+        # lines, and each line into words, used many times its size.
+        import tracemalloc
+
+        # Uncompressed, as the file header limits a compressed block to far
+        # less than this.
+        mafBlock = b"a score=0" + b";i x" * 200_000
+        block = self.make_block(mafBlock, compressed=False)
+        stream, offset = self.make_stream(block, compressed=False)
+        tracemalloc.start()
+        try:
+            with self.assertRaises(ValueError) as cm:
+                Align.parse(stream, "bigmaf")
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertEqual(str(cm.exception), self.no_s_line.format(offset))
+        self.assertLess(peak, 4 * len(mafBlock))
+
     def test_empty_block(self):
         # The block ends the file, so reading it starts at the end of the file.
         stream, offset = self.make_stream(b"", compressed=False)
