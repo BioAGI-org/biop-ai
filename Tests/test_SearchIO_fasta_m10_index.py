@@ -5,6 +5,7 @@
 
 """Tests for SearchIO fasta-m10 indexing."""
 
+import os
 import unittest
 from io import BytesIO
 from unittest import mock
@@ -12,6 +13,7 @@ from unittest import mock
 import support
 from search_tests_common import CheckIndex
 from search_tests_common import CheckRaw
+from search_tests_common import run_python
 
 from Bio import SearchIO
 
@@ -167,8 +169,31 @@ class LongLineCases(unittest.TestCase):
         """Test a query line without its '- <length> aa' ending."""
         # Line 8 of output001.m10 is the first query line, "  1>>>gi|...
         # [Escherichia coli O157:H7 s 107 aa - 107 aa". With its "- 107 aa"
-        # replaced by spaces, the old regular expression took about 7 seconds
-        # to reject it, then the indexer failed with AttributeError.
+        # replaced by spaces, the old regular expression took time growing
+        # with about the fourth power of the number of spaces to reject the
+        # line, as in test_SearchIO_fasta_m10.py: with 2400 spaces, well over
+        # 20 minutes. The indexer matches the line as bytes, so time that too
+        # in a child process, with the same 60 second timeout.
+        filename = os.fspath(support.DATA / "Fasta" / "output001.m10")
+        code = f"""\
+from io import BytesIO
+from unittest import mock
+from Bio import SearchIO
+with open({filename!r}, "rb") as handle:
+    lines = handle.readlines()
+line = lines[7].replace(b" - 107 aa\\n", b" " * 2400 + b"\\n")
+with mock.patch(
+    "Bio.SearchIO._index._open_for_random_access",
+    return_value=BytesIO(b"".join(lines[:7]) + line),
+):
+    try:
+        SearchIO.index("test.m10", "fasta-m10")
+    except ValueError:
+        print("ValueError")
+"""
+        result = run_python(code)
+        self.assertEqual(result.stdout, "ValueError\n", result.stderr)
+        # With 600 spaces, in this process, the error quotes the line.
         line = lines("output001.m10", 7, 8).replace(b" - 107 aa\n", b" " * 600 + b"\n")
         data = lines("output001.m10", 0, 7) + line
         with mock.patch(

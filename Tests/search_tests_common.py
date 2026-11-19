@@ -8,6 +8,8 @@
 
 import gzip
 import os
+import subprocess
+import sys
 import unittest
 from io import BytesIO
 from unittest import mock
@@ -17,8 +19,33 @@ try:
 except ImportError:
     sqlite3 = None
 
+import Bio
 from Bio import SearchIO
 from Bio.SeqRecord import SeqRecord
+
+
+def run_python(code):
+    """Run code in a child Python that imports this checkout's Bio.
+
+    Return the subprocess.CompletedProcess, with stdout and stderr as text.
+    A child that takes more than 60 seconds raises subprocess.TimeoutExpired,
+    which fails the calling test, so an input that takes the old code many
+    minutes fails the test in one, rather than only slowing the suite.
+    """
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(
+            None,
+            [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+        )
+    )
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        timeout=60,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
 
 
 class EndOfFileGuard(BytesIO):
