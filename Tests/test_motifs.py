@@ -32,6 +32,7 @@ import support
 import Bio
 from Bio import motifs
 from Bio.motifs.matrix import PositionSpecificScoringMatrix
+from Bio.motifs.thresholds import ScoreDistribution
 from Bio.Seq import Seq
 
 
@@ -5828,13 +5829,20 @@ class TestScoreDistribution(unittest.TestCase):
         )
         self.assertLess(calls, distribution.n_points)
 
-    def assert_same_as_per_bin_loop(self, pssm, precision, background):
+    def assert_same_as_per_bin_loop(self, pssm, precision, background, direct=False):
         """Assert that distribution() and modify() give the per-bin loop's.
 
         The densities must hold the same values, to the last bit, and values
         of the same types, as the threshold methods sum them in their types.
+        With direct, the background goes to ScoreDistribution as it is, not
+        normalised by pssm.distribution.
         """
-        distribution = pssm.distribution(background, precision)
+        if direct:
+            distribution = ScoreDistribution(
+                precision=precision, pssm=pssm, background=background
+            )
+        else:
+            distribution = pssm.distribution(background, precision)
         columns = list(self.columns(pssm, background))
         expected = self.per_bin_loop(distribution, columns)
         results = [(distribution.mo_density, distribution.bg_density)]
@@ -5886,6 +5894,46 @@ class TestScoreDistribution(unittest.TestCase):
             (self.make_hand_made_pssm(), 10),
         ):
             self.assert_same_as_per_bin_loop(pssm, precision, background)
+
+    def test_mixed_background_types(self):
+        """A background mixing value types gives the per-bin loop's results.
+
+        That loop multiplied and summed each letter's value in the type
+        that Python and numpy give it, so each bin has its own type, and
+        bins that no letter reaches stay Python floats. Promoting a whole
+        column to the values' combined type rounded differently: with A
+        and C in float32 and G and T in float64, 0.7 + 0.1 for A and C is
+        0.8 in float32 but just under it in float64, so threshold_fpr(0.8)
+        passed the score of 1 and gave -1.
+        """
+        pssm = PositionSpecificScoringMatrix(
+            "ACGT", {"A": [1.0], "C": [1.0], "G": [-1.0], "T": [-1.0]}
+        )
+        background = {
+            "A": np.float32(0.7),
+            "C": np.float32(0.1),
+            "G": np.float64(0.1),
+            "T": np.float64(0.1),
+        }
+        distribution = ScoreDistribution(pssm=pssm, background=background)
+        columns = self.columns(pssm, background)
+        distribution.bg_density = self.per_bin_loop(distribution, columns)[1]
+        expected = distribution.threshold_fpr(0.8)
+        distribution = ScoreDistribution(pssm=pssm, background=background)
+        self.assertEqual(distribution.threshold_fpr(0.8), expected)
+        self.assert_same_as_per_bin_loop(pssm, 1000, background, direct=True)
+        for values in (
+            (0.3, np.float32(0.2), np.float64(0.2), np.float32(0.3)),
+            (np.float64(0.3), 0.2, np.float32(0.2), 0.3),
+        ):
+            background = dict(zip("ACGT", values))
+            for pssm, precision in (
+                (self.make_pssm(), 10**2),
+                (self.make_hand_made_pssm(), 10),
+            ):
+                self.assert_same_as_per_bin_loop(
+                    pssm, precision, background, direct=True
+                )
 
     def test_underflow_under_errstate_raise(self):
         """A product too small for a float is zero, as in the per-bin loop.
