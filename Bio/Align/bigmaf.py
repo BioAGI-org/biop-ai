@@ -189,9 +189,19 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
         # Read the whole block, as iterating and searching do: reading on
         # until an 's' line turned up never ended if the block had none.
         data = self._read_block(stream, node)
-        i = data.find(b";s", size)
-        words = data[i + 1 :].split(maxsplit=2) if i >= 0 else []
-        if len(words) < 3:
+        # The first item of the block holds the first MAF block, after the
+        # chromosome number, start and end, with semicolons in place of
+        # newlines, and ended by a NUL byte. Its first 's' line names the
+        # reference sequence, and must hold all 7 fields of an 's' line.
+        end = data.find(b"\0", size)
+        lines = data[size:end].split(b";") if end >= 0 else []
+        for line in lines:
+            words = line.split()
+            if line.startswith(b"s") and words[0] == b"s":
+                break
+        else:
+            words = []
+        if len(words) != 7:
             raise ValueError(
                 f"The first data block, at offset {node.dataOffset}, has no "
                 "'s' line naming the reference sequence"

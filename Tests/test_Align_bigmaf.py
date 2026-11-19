@@ -12988,6 +12988,19 @@ class TestAlign_malformed_first_block(unittest.TestCase):
     def test_s_line_without_coordinates(self):
         self.check(b"a score=0;s hg16.chr7")
 
+    def test_s_line_by_token(self):
+        # Only a line whose first word is "s" is an 's' line. This one used
+        # to give the reference sequence "mm10".
+        self.check(b"a score=0;sx mm10.chr7 27578828 3 + 158545518 AAA")
+
+    def test_s_line_cut_short(self):
+        # All 7 fields of the 's' line must be on that line. These used to
+        # take the missing fields from the next line, or the next item.
+        self.check(b"a score=0;s hg16.chr7 27578828;i hg16.chr7 C 0 C 0")
+        next_item = struct.pack("<III", 0, 27578831, 27578834)
+        s_line = b"s mm10.chr7 27578831 3 + 158545518 AAA"
+        self.check(b"a score=0;s mm10.chr7\0" + next_item + b"a score=0;" + s_line)
+
     def test_empty_block(self):
         # The block ends the file, so reading it starts at the end of the file.
         stream, offset = self.make_stream(b"", compressed=False)
