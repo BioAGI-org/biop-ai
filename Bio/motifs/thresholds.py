@@ -99,8 +99,11 @@ class ScoreDistribution:
         dtype = np.dtype(value_type)
         density = density.astype(dtype, copy=False)
         new = np.zeros(self.n_points, dtype)
-        for d, weight in zip(shifts, weights):
-            self._shift(new, density, d, dtype.type(weight))
+        # The per-bin loop's Python floats rounded a product too small for
+        # the type to zero, whatever numpy.seterr says; so does this.
+        with np.errstate(under="ignore"):
+            for d, weight in zip(shifts, weights):
+                self._shift(new, density, d, dtype.type(weight))
         return new, value_type
 
     def _as_list(self, density, value_type, shifts):

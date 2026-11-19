@@ -5887,6 +5887,25 @@ class TestScoreDistribution(unittest.TestCase):
         ):
             self.assert_same_as_per_bin_loop(pssm, precision, background)
 
+    def test_underflow_under_errstate_raise(self):
+        """A product too small for a float is zero, as in the per-bin loop.
+
+        That loop multiplied Python floats, which round such a product to
+        zero whatever numpy.seterr says. With numpy set to raise on
+        underflow, the numpy work raised FloatingPointError instead.
+        """
+        pssm = PositionSpecificScoringMatrix(
+            "ACGT",
+            {"A": [1.0, 1.0], "C": [-1.0, -1.0], "G": [0.0, 0.0], "T": [0.5, 0.5]},
+        )
+        # Two A's in a row have a probability of 1e-400, which underflows.
+        background = {"A": 1e-200, "C": 0.3, "G": 0.3, "T": 0.4}
+        with np.errstate(under="raise"):
+            self.assert_same_as_per_bin_loop(pssm, 10, background)
+            distribution = pssm.distribution(background, 10)
+            # The threshold that the per-bin loop gave
+            self.assertEqual(distribution.threshold_fpr(0.1), 0.9473684210526314)
+
 
 # Run only while the GIL is off. A free-threaded build turns it back on when
 # an undeclared extension is imported, unless PYTHON_GIL=0 is set.
