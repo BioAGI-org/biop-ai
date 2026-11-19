@@ -4363,13 +4363,11 @@ class TestRecordSave(unittest.TestCase):
             "G4\tn4\t1.000000\t2.5\t3.5\t1.5\n",
         )
 
-    def test_kmeans_large_clusterid_time(self):
-        """Check save is quick for a large cluster number.
+    def save_in_child(self, *solutions):
+        """Run record.save with these solutions in a child process.
 
-        save used to look for cluster 0, 1, 2, ... in turn, so a cluster
-        number of 10**9 cost a billion passes over the genes. It runs in a
-        child process, so that a slow save fails the test after 60 seconds
-        rather than hanging the test run.
+        A save that is slow then fails the test after 60 seconds rather
+        than hanging the test run.
         """
         import Bio
 
@@ -4377,7 +4375,7 @@ class TestRecordSave(unittest.TestCase):
 import io
 from Bio.Cluster import read
 record = read(io.StringIO({self.TEXT!r}))
-record.save({self.jobname!r}, [0, 10**9, 0, 0, 0])
+record.save({self.jobname!r}, *{list(solutions)!r})
 """
         env = os.environ.copy()
         env["PYTHONPATH"] = os.pathsep.join(
@@ -4397,6 +4395,14 @@ record.save({self.jobname!r}, [0, 10**9, 0, 0, 0])
         except subprocess.TimeoutExpired:
             self.fail("save took more than 60 seconds")
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_kmeans_large_clusterid_time(self):
+        """Check save is quick for a large cluster number.
+
+        save used to look for cluster 0, 1, 2, ... in turn, so a cluster
+        number of 10**9 cost a billion passes over the genes.
+        """
+        self.save_in_child([0, 10**9, 0, 0, 0])
         self.assertEqual(
             self.read_output("job_K_G1000000001.kgg"),
             "UNIQID\tGROUP\nG4\t0\nG5\t0\nG1\t0\nG3\t0\nG2\t1000000000\n",
@@ -4410,8 +4416,8 @@ record.save({self.jobname!r}, [0, 10**9, 0, 0, 0])
         the file names as an int64, so 2**63 - 1 gave a negative number.
         """
         big = 2**63
-        self.record.save(self.jobname, [0, big + 1, 0, 0, 0], [0, big - 1, 0])
-        self.record.save(self.jobname, [0, big - 1, 0, 0, 0], [0, big + 1, 0])
+        self.save_in_child([0, big + 1, 0, 0, 0], [0, big - 1, 0])
+        self.save_in_child([0, big - 1, 0, 0, 0], [0, big + 1, 0])
         self.assertEqual(
             sorted(os.listdir(self.directory)),
             [
