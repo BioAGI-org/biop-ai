@@ -101,6 +101,17 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             lines = [target_sequence.encode(), query_sequence.encode()]
             seq_data, coordinates = Alignment.parse_printed_alignment(lines)
             target_seq_data, query_seq_data = seq_data
+            # The annotations are padded with start spaces, and Seq does not
+            # check where the data start for a declared length of zero.
+            for name, start, data, length in (
+                ("Query", query_start, query_seq_data, query_length),
+                ("Target", target_start, target_seq_data, target_length),
+            ):
+                if start < 0 or start + len(data) > length:
+                    raise ValueError(
+                        "%s sequence from %d to %d lies outside its length %d"
+                        % (name, start + 1, start + len(data), length)
+                    )
             coordinates[0, :] += target_start
             coordinates[1, :] += query_start
             sequence = {query_start: query_seq_data}

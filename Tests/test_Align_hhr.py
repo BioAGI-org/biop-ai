@@ -10075,6 +10075,35 @@ class Align_hhr_allx_too_long(unittest.TestCase):
             str(cm.exception), "Query length 1000001 exceeds the maximum of 1000000"
         )
 
+    def test_target_start_past_zero_length(self):
+        # Seq does not check the start of the data for a length of zero, so
+        # the annotations used to be padded with 2,000,000 spaces each.
+        stream = self.edit(
+            "T 1klr_A           24 T   24 (30)",
+            "T 1klr_A      2000000 T 2000000 (0)",
+        )
+        with Align.parse(stream, "hhr") as alignments:
+            with self.assertRaises(ValueError) as cm:
+                next(alignments)
+        self.assertEqual(
+            str(cm.exception),
+            "Target sequence from 2000000 to 2000000 lies outside its length 0",
+        )
+
+    def test_query_start_past_zero_length(self):
+        self.text = self.text.replace("Match_columns 39", "Match_columns 0")
+        stream = self.edit(
+            "Q Only             39 X   39 (39)",
+            "Q Only        2000000 X 2000000 (0)",
+        )
+        with Align.parse(stream, "hhr") as alignments:
+            with self.assertRaises(ValueError) as cm:
+                next(alignments)
+        self.assertEqual(
+            str(cm.exception),
+            "Query sequence from 2000000 to 2000000 lies outside its length 0",
+        )
+
 
 class Align_hhr_4p79_hhsearch_server_NOssm(unittest.TestCase):
     path = support.DATA / "HHsuite" / "4p79_hhsearch_server_NOssm.hhr"
