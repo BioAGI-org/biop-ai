@@ -669,7 +669,7 @@ except ValueError as err:
         with warnings.catch_warnings():
             warnings.simplefilter("error", BiopythonParserWarning)
             new = SeqIO.read(handle, "genbank")
-        for feature, location in zip(new.features, locations):
+        for feature, location in zip(new.features, locations, strict=True):
             self.assertEqual(repr(feature.location), repr(location))
 
     def test_fromstring_is_static(self):
