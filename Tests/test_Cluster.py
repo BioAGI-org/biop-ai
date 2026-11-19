@@ -3925,6 +3925,12 @@ print("OK")
         they dereferenced NULL when memory ran out, and kcluster returned
         nfound -1 and clusterid unset. Fail each allocation in turn, one
         per call: every call must give MemoryError or the usual result.
+
+        The arrays are prepared before the allocation hooks are armed, and
+        the C functions in _cluster are called directly, so the failures
+        hit the C module rather than NumPy's conversion of the input. Only
+        the buffer export the converters ask NumPy for can still fail; they
+        report that as RuntimeError "unexpected format.".
         """
         try:
             import _testcapi
@@ -3936,7 +3942,7 @@ print("OK")
             """
 import _testcapi
 import numpy as np
-from Bio.Cluster import clusterdistance, kcluster, somcluster
+from Bio.Cluster import _cluster
 
 data = np.array(
     [
@@ -3949,50 +3955,79 @@ data = np.array(
 )
 mask = np.ones(data.shape, np.intc)
 mask[4, 1] = 0
+index1 = np.array([0, 1], np.intc)
+index2 = np.array([2, 3], np.intc)
+
+
+def sizes(t):
+    # The number of items clustered, and of values per item
+    return data.shape[::-1] if t else data.shape
+
+
+# Each entry makes fresh arguments for one call, and names the arrays
+# the call fills in.
+def somcluster(t):
+    nitems, ndata = sizes(t)
+    clusterids = np.ones((nitems, 2), np.intc)
+    celldata = np.empty((2, 3, ndata))
+    weight = np.ones(ndata)
+    args = (clusterids, celldata, data, mask, weight, t, 0.02, 4, "e", 7)
+    return _cluster.somcluster, args, (clusterids, celldata)
+
+
+def clusterdistance(t, method):
+    weight = np.ones(sizes(t)[1])
+    args = (data, mask, weight, index1, index2, method, "e", t)
+    return _cluster.clusterdistance, args, ()
+
+
+def kcluster(t):
+    nitems, ndata = sizes(t)
+    clusterid = np.empty(nitems, np.intc)
+    weight = np.ones(ndata)
+    args = (data, 2, mask, weight, t, 3, "a", "e", clusterid, 7)
+    return _cluster.kcluster, args, (clusterid,)
+
+
 calls = {}
 for t in (0, 1):
-    calls["somcluster", t] = lambda t=t: somcluster(
-        data, mask, transpose=t, nxgrid=2, nygrid=3, niter=4, rng_seed=7
-    )
+    calls["somcluster", t] = lambda t=t: somcluster(t)
     for method in "am":
-        calls[method, t] = lambda t=t, method=method: clusterdistance(
-            data, mask, index1=[0, 1], index2=[2, 3], method=method, transpose=t
-        )
-    calls["kcluster", t] = lambda t=t: kcluster(
-        data, 2, mask, transpose=t, npass=3, rng_seed=7
-    )
+        calls[method, t] = lambda t=t, method=method: clusterdistance(t, method)
+    calls["kcluster", t] = lambda t=t: kcluster(t)
 
 
-def values(result):
-    if isinstance(result, tuple):
-        return [values(item) for item in result]
-    return np.asarray(result).tolist()
+def values(result, outputs):
+    return [np.asarray(item).tolist() for item in (result, *outputs)]
 
 
 ncalls = 150
-for name, call in calls.items():
-    expected = values(call())
+for name, prepare in calls.items():
+    function, args, outputs = prepare()
+    expected = values(function(*args), outputs)
     outcomes = []
     for start in range(ncalls):
+        function, args, outputs = prepare()
+        failed = False
         _testcapi.set_nomemory(start, start + 1)
         try:
-            result = call()
+            result = function(*args)
         except MemoryError:
-            result = None
+            failed = True
         except RuntimeError as error:
             # The converters report any failure to get a buffer this way.
             if not str(error).endswith("unexpected format."):
                 raise
-            result = None
+            failed = True
         finally:
             # Disarm before anything else allocates.
             _testcapi.remove_mem_hooks()
-        if result is None:
+        if failed:
             outcomes.append("MemoryError")
-        elif values(result) == expected:
+        elif values(result, outputs) == expected:
             outcomes.append("ok")
         else:
-            outcomes.append(f"wrong {values(result)}")
+            outcomes.append(f"wrong {values(result, outputs)}")
     failures = outcomes.count("MemoryError")
     assert failures > 0, (name, outcomes)
     # The last calls end before reaching the allocation set to fail.
