@@ -9,7 +9,9 @@
 """Tests for motifs module."""
 
 import math
+import os
 import random
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -27,6 +29,7 @@ except ImportError:
 
 import support
 
+import Bio
 from Bio import motifs
 from Bio.motifs.matrix import PositionSpecificScoringMatrix
 from Bio.Seq import Seq
@@ -3012,11 +3015,48 @@ class TestJASPAR(unittest.TestCase):
     def test_jaspar_row_without_closing_bracket(self):
         """Test that a JASPAR matrix row missing its ']' raises ValueError."""
         # The row pattern used to backtrack cubically over a run of
-        # whitespace inside an unclosed bracket: this row took 18 seconds.
+        # whitespace inside an unclosed bracket before it failed. Time it in
+        # a child process: this row takes the old pattern over an hour and
+        # the new one a millisecond, so the timeout fails the test on the
+        # old pattern.
+        code = """\
+from io import StringIO
+from Bio import motifs
+stream = StringIO(
+    ">MA0004.1 Arnt\\n"
+    "A  [ 4 19  0  0  0  0 ]\\n"
+    "C  [" + " " * 20_000 + "16  0 20  0  0  0\\n"
+    "G  [ 0  1  0 20  0 20 ]\\n"
+    "T  [ 0  0  0  0 20  0 ]\\n"
+)
+try:
+    motifs.parse(stream, "jaspar")
+except ValueError as error:
+    print(error)
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(
+            result.stdout, "JASPAR matrix row for C has no closing ']'\n", result.stderr
+        )
+
+        # A short row gives the error message.
         stream = StringIO(
             ">MA0004.1 Arnt\n"
             "A  [ 4 19  0  0  0  0 ]\n"
-            "C  [" + " " * 3000 + "16  0 20  0  0  0\n"
+            "C  [16  0 20  0  0  0\n"
             "G  [ 0  1  0 20  0 20 ]\n"
             "T  [ 0  0  0  0 20  0 ]\n"
         )
