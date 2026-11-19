@@ -15,6 +15,12 @@ import support
 
 from Bio import Align
 
+try:
+    import tracemalloc
+except ImportError:
+    # PyPy has no _tracemalloc.
+    tracemalloc = None
+
 
 class TestAlign_declaration(unittest.TestCase):
     def test_declaration(self):
@@ -13003,23 +13009,30 @@ class TestAlign_malformed_first_block(unittest.TestCase):
 
     def test_many_lines_without_s_line(self):
         # The lines are walked in place: splitting the item into a list of
-        # lines, and each line into words, used many times its size.
-        import tracemalloc
-
+        # lines, and each line into words, used many times its size. The
+        # memory is measured only where tracemalloc exists, not on PyPy.
         # Uncompressed, as the file header limits a compressed block to far
         # less than this.
         mafBlock = b"a score=0" + b";i x" * 200_000
         block = self.make_block(mafBlock, compressed=False)
         stream, offset = self.make_stream(block, compressed=False)
-        tracemalloc.start()
-        try:
+
+        def parse():
             with self.assertRaises(ValueError) as cm:
                 Align.parse(stream, "bigmaf")
-            _, peak = tracemalloc.get_traced_memory()
-        finally:
-            tracemalloc.stop()
-        self.assertEqual(str(cm.exception), self.no_s_line.format(offset))
-        self.assertLess(peak, 4 * len(mafBlock))
+            return str(cm.exception)
+
+        if tracemalloc is None:
+            message = parse()
+        else:
+            tracemalloc.start()
+            try:
+                message = parse()
+                _, peak = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+            self.assertLess(peak, 4 * len(mafBlock))
+        self.assertEqual(message, self.no_s_line.format(offset))
 
     def test_empty_block(self):
         # The block ends the file, so reading it starts at the end of the file.
