@@ -193,14 +193,21 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
         # chromosome number, start and end, with semicolons in place of
         # newlines, and ended by a NUL byte. Its first 's' line names the
         # reference sequence, and must hold all 7 fields of an 's' line.
+        # Walk the lines by offset and split only an 's' line, so that a
+        # large item costs no more than one pass over it.
         end = data.find(b"\0", size)
-        lines = data[size:end].split(b";") if end >= 0 else []
-        for line in lines:
-            words = line.split()
-            if line.startswith(b"s") and words[0] == b"s":
-                break
-        else:
-            words = []
+        words = []
+        start = size
+        while 0 <= start <= end:
+            stop = data.find(b";", start, end)
+            if stop < 0:
+                stop = end
+            if data.startswith(b"s", start, stop):
+                words = data[start:stop].split(None, 7)
+                if words[0] == b"s":
+                    break
+                words = []
+            start = stop + 1
         if len(words) != 7:
             raise ValueError(
                 f"The first data block, at offset {node.dataOffset}, has no "
