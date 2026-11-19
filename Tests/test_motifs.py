@@ -5954,6 +5954,30 @@ class TestScoreDistribution(unittest.TestCase):
             # The threshold that the per-bin loop gave
             self.assertEqual(distribution.threshold_fpr(0.1), 0.9473684210526314)
 
+    def test_underflow_of_numpy_scalars_raises(self):
+        """With numpy set to raise on underflow, numpy scalars raise.
+
+        The per-bin loop multiplied numpy scalars, which follow
+        numpy.seterr, so a NumPy scalar background whose products underflow
+        raised FloatingPointError there; the caller's setting must not be
+        overridden.
+        """
+        pssm = PositionSpecificScoringMatrix(
+            "ACGT",
+            {"A": [1.0, 1.0], "C": [-1.0, -1.0], "G": [0.0, 0.0], "T": [0.5, 0.5]},
+        )
+        for value_type, tiny in ((np.float64, 1e-200), (np.float32, 1e-30)):
+            background = {"A": tiny, "C": 0.3, "G": 0.3, "T": 0.4}
+            background = {k: value_type(v) for k, v in background.items()}
+            with self.subTest(value_type=value_type):
+                with np.errstate(under="raise"):
+                    with self.assertRaises(FloatingPointError):
+                        pssm.distribution(background, 10)
+                    with self.assertRaises(FloatingPointError):
+                        ScoreDistribution(
+                            precision=10, pssm=pssm, background=background
+                        )
+
 
 # Run only while the GIL is off. A free-threaded build turns it back on when
 # an undeclared extension is imported, unless PYTHON_GIL=0 is set.
