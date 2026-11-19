@@ -1284,7 +1284,7 @@ class Record:
         order: "ArrayLike",
         transpose: bool,
     ) -> "NDArray[Any]":
-        """Check a k-means clustering solution, returning it as an array (PRIVATE)."""
+        """Check a k-means solution, returning an array of Python ints (PRIVATE)."""
         if transpose:
             name = "expclusters"
             ordername = "eorder"
@@ -1293,29 +1293,32 @@ class Record:
             name = "geneclusters"
             ordername = "gorder"
             n = np.shape(self.data)[0]
-        clusterids = np.asarray(clusterids)
-        if clusterids.ndim != 1:
+        # A copy as objects, so that NumPy does not turn integers too large
+        # for int64 into floats. The cluster numbers become Python integers,
+        # so the number of clusters in the file names cannot overflow.
+        values = np.array(clusterids, dtype=object)
+        if values.ndim != 1:
             raise ValueError(f"{name} should be one-dimensional")
-        if len(clusterids) != n:
-            raise ValueError(
-                f"{name} has incorrect size {len(clusterids)} (expected {n})"
-            )
-        kind = clusterids.dtype.kind
-        if kind not in "biuf" or (
-            kind == "f"
-            and not (
-                np.isfinite(clusterids).all()
-                and (clusterids == np.floor(clusterids)).all()
-            )
-        ):
-            raise ValueError(f"{name} contains values that are not integers")
-        if (clusterids < 0).any():
+        if len(values) != n:
+            raise ValueError(f"{name} has incorrect size {len(values)} (expected {n})")
+        for i, value in enumerate(values):
+            if not (
+                isinstance(value, (numbers.Integral, np.bool_))
+                or (
+                    isinstance(value, (float, np.floating))
+                    and np.isfinite(value)
+                    and value == np.floor(value)
+                )
+            ):
+                raise ValueError(f"{name} contains values that are not integers")
+            values[i] = int(value)
+        if any(value < 0 for value in values):
             raise ValueError(f"{name} contains negative values")
         if np.shape(order) != (n,):
             raise ValueError(
                 f"{ordername} has incorrect size {np.size(order)} (expected {n})"
             )
-        return clusterids
+        return values
 
     def _savekmeans(
         self,
