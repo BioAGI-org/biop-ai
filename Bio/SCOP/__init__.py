@@ -286,6 +286,10 @@ class Scop:
                 sidDict = {}
                 records = Cla.parse(cla_handle)
                 for record in records:
+                    if record.sunid not in sunidDict:
+                        raise ValueError(
+                            f"Incomplete data? sunid {record.sunid} in CLA file is missing from DES file"
+                        )
                     n = sunidDict[record.sunid]
                     if n.sccs != record.sccs:
                         raise ValueError(

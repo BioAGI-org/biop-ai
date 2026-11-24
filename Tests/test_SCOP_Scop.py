@@ -90,6 +90,20 @@ class ScopTests(unittest.TestCase):
                 Scop(StringIO(cla), StringIO(des), StringIO(hie))
         self.assertEqual(stdout.getvalue(), "")
 
+    def testClaSunidMissingFromDes(self):
+        with open(support.DATA / "SCOP" / "dir.cla.scop.txt_test") as f:
+            cla = f.read() + (
+                "d9zzza_\t9zzz\tA:\ta.1.1.1\t999999\tcl=46456,cf=46457,"
+                "sf=46458,fa=46459,dm=46460,sp=46461,px=999999\n"
+            )
+        with open(support.DATA / "SCOP" / "dir.des.scop.txt_test") as f:
+            des = f.read()
+        with open(support.DATA / "SCOP" / "dir.hie.scop.txt_test") as f:
+            hie = f.read()
+
+        with self.assertRaisesRegex(ValueError, "sunid 999999 in CLA file"):
+            Scop(StringIO(cla), StringIO(des), StringIO(hie))
+
     def testClaDisagreesWithDes(self):
         with open(support.DATA / "SCOP" / "dir.des.scop.txt_test") as f:
             des = f.read()
