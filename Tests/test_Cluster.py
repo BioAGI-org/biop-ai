@@ -4621,6 +4621,31 @@ record.save({self.jobname!r}, *{list(solutions)!r})
         self.assertEqual(str(cm.exception), "gorder has incorrect size 1 (expected 2)")
         self.assertEqual(os.listdir(self.directory), [])
 
+    def test_kmeans_order_wrong_dimensions(self):
+        """Check save says a gorder or eorder of the wrong shape is not 1-D.
+
+        An order with the right number of values but the wrong shape gave
+        the message "gorder has incorrect size 2 (expected 2)".
+        """
+        from Bio.Cluster import read
+
+        text = "UNIQID\tEXP1\tEXP2\nG1\t1.0\t3.0\nG2\t2.0\t4.0\n"
+        record = read(io.StringIO(text))
+        record.gorder = [[0.0, 1.0]]
+        with self.assertRaises(ValueError) as cm:
+            record.save(self.jobname, geneclusters=[1, 0])
+        self.assertEqual(str(cm.exception), "gorder should be one-dimensional")
+        record.eorder = [[0.0], [1.0]]
+        with self.assertRaises(ValueError) as cm:
+            record.save(self.jobname, expclusters=[1, 0])
+        self.assertEqual(str(cm.exception), "eorder should be one-dimensional")
+        record = read(io.StringIO("UNIQID\tEXP1\nG1\t1.0\n"))
+        record.gorder = 1.0
+        with self.assertRaises(ValueError) as cm:
+            record.save(self.jobname, geneclusters=[0])
+        self.assertEqual(str(cm.exception), "gorder should be one-dimensional")
+        self.assertEqual(os.listdir(self.directory), [])
+
     def test_read_eweight_eorder_between_other_columns(self):
         """Check EWEIGHT and EORDER are read from the sample columns only.
 

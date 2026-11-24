@@ -1313,7 +1313,9 @@ class Record:
             values[i] = int(value)
         if any(value < 0 for value in values):
             raise ValueError(f"{name} contains negative values")
-        if np.shape(order) != (n,):
+        if np.ndim(order) != 1:
+            raise ValueError(f"{ordername} should be one-dimensional")
+        if np.size(order) != n:
             raise ValueError(
                 f"{ordername} has incorrect size {np.size(order)} (expected {n})"
             )
