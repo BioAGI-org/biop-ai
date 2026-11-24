@@ -113,14 +113,22 @@ def parse(handle):
             record = Record()
             record.comments += line
             primer = None
-        elif line.startswith("#"):
-            if (
-                line.strip()
-                != "#                      Start  Len   Tm     GC%   Sequence"
-            ):
-                record.comments += line
-        elif not line.strip():
+        elif not line.strip() or line.strip() == (
+            "#                      Start  Len   Tm     GC%   Sequence"
+        ):
             pass
+        elif record is None:
+            if line.startswith("#") or line[5:19] in (
+                "PRODUCT SIZE: ",
+                "FORWARD PRIMER",
+                "REVERSE PRIMER",
+                "INTERNAL OLIGO",
+            ):
+                raise ValueError(
+                    f"Found {line!r} before a '# EPRIMER3' or '# PRIMER3' line"
+                )
+        elif line.startswith("#"):
+            record.comments += line
         elif line[5:19] == "PRODUCT SIZE: ":
             primer = Primers()
             primer.size = int(line[19:])
