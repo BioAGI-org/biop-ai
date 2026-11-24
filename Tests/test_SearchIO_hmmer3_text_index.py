@@ -5,6 +5,7 @@
 
 """Tests for SearchIO hmmer3-text indexing."""
 
+import io
 import os
 import subprocess
 import sys
@@ -430,8 +431,48 @@ class TruncatedCases(unittest.TestCase):
                 with self.assertRaises(ValueError) as cm:
                     get(key)
                 self.assertEqual(
-                    str(cm.exception), "File ended before the first 'Query: ' line"
+                    str(cm.exception), "File ended before the first 'Query:' line"
                 )
+
+
+class MalformedCases(unittest.TestCase):
+    """A malformed query raises ValueError when the file is indexed."""
+
+    def test_malformed_query(self):
+        """Test indexing a Query line with no length, and a '//' with no Query."""
+        header = (
+            b"# hmmscan :: search sequence(s) against a profile database\n"
+            b"# HMMER 3.0 (March 2010); http://hmmer.org/\n"
+        )
+        cases = (
+            (
+                b"Query:       q1\n//\n",
+                "'Query:' line does not end in the query length,"
+                " such as [L=154] or [M=46]",
+            ),
+            (b"//\n", "Found a '//' line before any 'Query:' line"),
+            # The file ends with no '//', and the line has no space after
+            # "Query:", as the parser allows
+            (
+                b"Query:",
+                "'Query:' line does not end in the query length,"
+                " such as [L=154] or [M=46]",
+            ),
+            (
+                b"Query:\tq1\n",
+                "'Query:' line does not end in the query length,"
+                " such as [L=154] or [M=46]",
+            ),
+        )
+        for body, message in cases:
+            with self.subTest(body=body):
+                with mock.patch(
+                    "Bio.SearchIO._index._open_for_random_access",
+                    return_value=io.BytesIO(header + body),
+                ):
+                    with self.assertRaises(ValueError) as cm:
+                        SearchIO.index("test.out", "hmmer3-text")
+                self.assertEqual(str(cm.exception), message)
 
 
 if __name__ == "__main__":

@@ -485,7 +485,7 @@ class Hmmer3TextIndexer(_BaseHmmerTextIndexer):
     """Indexer class for HMMER plain text output."""
 
     _parser = Hmmer3TextParser
-    qresult_start = b"Query: "
+    qresult_start = b"Query:"
     qresult_end = b"//"
 
     def __iter__(self):
@@ -494,6 +494,7 @@ class Hmmer3TextIndexer(_BaseHmmerTextIndexer):
         handle.seek(0)
         start_offset = handle.tell()
         regex_id = re.compile(_QRE_ID_LEN_PTN.encode())
+        qresult_key = None
 
         while True:
             line = read_forward(handle)
@@ -501,11 +502,18 @@ class Hmmer3TextIndexer(_BaseHmmerTextIndexer):
 
             if line.startswith(self.qresult_start):
                 regx = re.search(regex_id, line)
+                if not regx:
+                    raise ValueError(
+                        "'Query:' line does not end in the query length,"
+                        " such as [L=154] or [M=46]"
+                    )
                 qresult_key = regx.group(1).strip()
                 # qresult start offset is the offset of this line
                 # (starts with the start mark)
                 start_offset = end_offset - len(line)
             elif line.startswith(self.qresult_end):
+                if qresult_key is None:
+                    raise ValueError("Found a '//' line before any 'Query:' line")
                 yield qresult_key.decode(), start_offset, 0
                 start_offset = end_offset
             elif not line:
