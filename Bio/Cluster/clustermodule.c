@@ -1103,10 +1103,11 @@ PyTree_str(PyTree* self)
     return result;
 }
 
-static int
-PyTree_length(PyTree *self)
+static Py_ssize_t
+PyTree_length(PyObject *op)
 {
-    int n;
+    PyTree *self = (PyTree *)op;
+    Py_ssize_t n;
 
     Py_BEGIN_CRITICAL_SECTION(self);
     n = self->n;
@@ -1191,7 +1192,7 @@ PyTree_subscript(PyTree* self, PyObject* item)
 }
 
 static PyMappingMethods PyTree_mapping = {
-    (lenfunc)PyTree_length,           /* mp_length */
+    PyTree_length,                    /* mp_length */
     (binaryfunc)PyTree_subscript,     /* mp_subscript */
 };
 
@@ -1878,7 +1879,7 @@ py_treecluster(PyObject* self, PyObject* args, PyObject* keywords)
                                      distancematrix_converter, &distances))
         return NULL;
 
-    if (PyTree_length(tree) != 0) {
+    if (PyTree_length((PyObject *)tree) != 0) {
         PyErr_SetString(PyExc_RuntimeError, "expected an empty tree");
         goto exit;
     }
