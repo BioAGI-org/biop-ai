@@ -207,6 +207,8 @@ handle.name: {handle.name}
                 yield build_hsp()
             state = state_NONE
             query_descr = line[line.find(">>>") + 3 :].strip()
+            if not query_descr:
+                raise ValueError(f"Query start line with no identifier: {line!r}")
             query_id = query_descr.split(None, 1)[0]
             match_id = None
             header_tags = {}
@@ -283,6 +285,8 @@ handle.name: {handle.name}
             match_seq = ""
             cons_seq = ""
             match_descr = line[2:].strip()
+            if not match_descr:
+                raise ValueError(f"Match line with no identifier: {line!r}")
             match_id = match_descr.split(None, 1)[0]
             state = state_ALIGN_HEADER
         elif line.startswith(">--"):
