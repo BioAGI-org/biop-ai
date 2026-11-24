@@ -329,11 +329,17 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             )
 
     def _read_next_alignment(self, stream):
+        records = None  # until the header starts an alignment
         for line in stream:
             line = line.strip()
             if not line:
                 continue
             elif line == "# STOCKHOLM 1.0":
+                if records is not None:
+                    raise ValueError(
+                        "Expected '//' to end the alignment, found the next "
+                        "'# STOCKHOLM 1.0' header"
+                    )
                 # Starting a new alignment
                 records = []
                 # The aligned sequences may be split over several blocks, each
@@ -541,6 +547,11 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 # Generic per-Sequence AND per-Column markup
                 # Format: "#=GR <seqname> <feature> <exactly 1 char per column>"
                 terms = line[5:].split(None, 2)
+                if len(terms) != 3:
+                    raise ValueError(
+                        "Expected '#=GR <seqname> <feature> <annotation>', "
+                        f"found:\n{line}"
+                    )
                 if terms[0] != seqname:
                     raise ValueError(
                         f"Expected #=GR line for {seqname} (the preceding "
@@ -560,6 +571,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                         f"{len(text)}, expected {widths[-1]}"
                     )
                 gr[seqname][feature] += text  # append to any previous piece
+        if records is not None:
+            raise ValueError("Expected '//' to end the alignment, found end of file")
 
 
 class AlignmentWriter(interfaces.AlignmentWriter):

@@ -7883,7 +7883,7 @@ B G-
         )
 
     def test_missing_end_of_alignment(self):
-        """Do not join the sequences of an alignment lacking its // to the next."""
+        """Reject an alignment lacking its //, rather than dropping it."""
         stream = StringIO(
             """\
 # STOCKHOLM 1.0
@@ -7895,12 +7895,13 @@ B TT-T
 //
 """
         )
-        # As before, a new header starts a new alignment, dropping the first.
-        alignments = list(Align.parse(stream, "stockholm"))
-        self.assertEqual(len(alignments), 1)
-        self.assertEqual(alignments[0].shape, (2, 4))
-        self.assertEqual(alignments[0][0], "TTTT")
-        self.assertEqual(alignments[0][1], "TT-T")
+        message = "^Expected '//' to end the alignment, found the next '# STOCKHOLM"
+        with self.assertRaisesRegex(ValueError, message):
+            list(Align.parse(stream, "stockholm"))
+        stream = StringIO("# STOCKHOLM 1.0\nA ACGT\nB ACGT\n")
+        message = "^Expected '//' to end the alignment, found end of file$"
+        with self.assertRaisesRegex(ValueError, message):
+            list(Align.parse(stream, "stockholm"))
 
     def test_block_order(self):
         """Read a block that lists the sequences in another order."""
@@ -8113,12 +8114,12 @@ B GGGGG
 
     def test_gr_before_any_sequence(self):
         """Reject a #=GR line that precedes every sequence of its alignment."""
-        # The second alignment lacks its //; the first's last sequence name
-        # must not carry over to it.
+        # The first alignment's last sequence name must not carry over.
         stream = StringIO(
             """\
 # STOCKHOLM 1.0
 A ACGT
+//
 # STOCKHOLM 1.0
 #=GR A SS <<<<
 A ACGT
@@ -8126,11 +8127,20 @@ A ACGT
 """
         )
         with self.assertRaisesRegex(ValueError, "^Expected #=GR line for None "):
-            Align.read(stream, "stockholm")
+            list(Align.parse(stream, "stockholm"))
         # A #=GS line naming the sequence does not make it the preceding one.
         stream = StringIO("# STOCKHOLM 1.0\n#=GS A DE x\n#=GR A SS <<<<\nA ACGT\n//\n")
         with self.assertRaisesRegex(ValueError, "^Expected #=GR line for None "):
             Align.read(stream, "stockholm")
+
+    def test_gr_without_annotation(self):
+        """Reject a #=GR line lacking its feature or annotation."""
+        for gr in ("#=GR A SS", "#=GR A"):
+            with self.subTest(gr=gr):
+                stream = StringIO(f"# STOCKHOLM 1.0\nA ACGT\n{gr}\nB AC-T\n//\n")
+                message = "^Expected '#=GR <seqname> <feature> <annotation>', found:"
+                with self.assertRaisesRegex(ValueError, message):
+                    Align.read(stream, "stockholm")
 
     def test_gs_between_sequence_and_gr(self):
         """Accept a #=GS line for another sequence between a sequence and its #=GR."""
