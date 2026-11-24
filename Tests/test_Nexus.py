@@ -2209,8 +2209,10 @@ def parse_in_child(testcase, code, *args):
 
     Return what the child prints, as JSON. The tests of quadratic and cubic
     parsing below use this: the old code took minutes on their input, and
-    the child is stopped after 60 seconds, so on that code the test fails
-    instead of only running slowly.
+    the child is stopped after 20 seconds, so on that code the test fails
+    instead of only running slowly. The fixed code takes a few seconds at most,
+    even on a busy machine, so the limit is kept low: old code that takes 7
+    minutes here must still fail on a machine many times faster.
     """
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(
@@ -2225,10 +2227,10 @@ def parse_in_child(testcase, code, *args):
             capture_output=True,
             text=True,
             env=env,
-            timeout=60,
+            timeout=20,
         )
     except subprocess.TimeoutExpired:
-        testcase.fail("parsing did not finish within 60 seconds")
+        testcase.fail("parsing did not finish within 20 seconds")
     testcase.assertEqual(result.returncode, 0, result.stderr)
     return json.loads(result.stdout)
 
