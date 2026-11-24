@@ -128,17 +128,19 @@ class ModTest(unittest.TestCase):
     def testResultsParsable(self):
         self.assertRaises(ValueError, yn00.read, self.results_file)
 
-    def testParseLongDashRun(self):
-        """Parse NG86 and YN00 lines with a long run of dashes quickly."""
-        # The number pattern once allowed any run of '-' before a number, so
-        # findall on a run of n dashes took time growing as n squared. Run in
-        # a child process, so that a regression fails, not hangs.
+    def testParseLongRun(self):
+        """Parse NG86 and YN00 lines with a long run of dashes or digits quickly."""
+        # The number pattern was once tried from every character of a run of
+        # '-' or of digits, and each try scanned the rest of the run, so the
+        # time grew as the square of the run length: 20,000 digits took about
+        # 1 s. Run in a child process, so that a regression fails, not hangs.
         code = r"""
+import sys
 from Bio.Phylo.PAML import _parse_yn00
-dashes = "-" * 300000
-line = "a  0.0000 (0.0000 0.0000) " + dashes + "\n"
+run = sys.argv[1] * 300000
+line = "a  0.0000 (0.0000 0.0000) " + run + "\n"
 results, sequences = _parse_yn00.parse_ng86([line], {})
-_parse_yn00.parse_yn00([dashes + "\n"], results, sequences)
+_parse_yn00.parse_yn00([run + "\n"], results, sequences)
 print(sequences)
 """
         env = os.environ.copy()
@@ -148,18 +150,20 @@ print(sequences)
                 [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
             )
         )
-        try:
-            result = subprocess.run(
-                [sys.executable, "-c", code],
-                timeout=60,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            self.fail("parsing yn00 output took over 60 s on 300,000 dashes")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "['a']\n")
+        for char in "-1":
+            with self.subTest(char=char):
+                try:
+                    result = subprocess.run(
+                        [sys.executable, "-c", code, char],
+                        timeout=60,
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                    )
+                except subprocess.TimeoutExpired:
+                    self.fail(f"parsing yn00 output took over 60 s on 300,000 {char!r}")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, "['a']\n")
 
     def testParseAllVersions(self):
         pattern = os.path.join(self.results_dir, "yn00", "yn00-*")
