@@ -105,21 +105,29 @@ class Paml:
         # Move to the desired working directory
         if not os.path.exists(self.working_dir):
             os.mkdir(self.working_dir)
-        os.chdir(self.working_dir)
-        # If no external control file was specified...
-        if ctl_file is None:
-            # Dynamically build a control file
-            self.write_ctl_file()
-            ctl_file = self.ctl_file
-        else:
-            if not os.path.exists(ctl_file):
-                raise FileNotFoundError("The specified control file does not exist.")
-        if verbose:
-            result_code = subprocess.call([command, ctl_file])
-        else:
-            with open(os.devnull) as dn:
-                result_code = subprocess.call([command, ctl_file], stdout=dn, stderr=dn)
-        os.chdir(cwd)
+        # Change back even if something below raises, including a
+        # KeyboardInterrupt that comes just after the change
+        try:
+            os.chdir(self.working_dir)
+            # If no external control file was specified...
+            if ctl_file is None:
+                # Dynamically build a control file
+                self.write_ctl_file()
+                ctl_file = self.ctl_file
+            else:
+                if not os.path.exists(ctl_file):
+                    raise FileNotFoundError(
+                        "The specified control file does not exist."
+                    )
+            if verbose:
+                result_code = subprocess.call([command, ctl_file])
+            else:
+                with open(os.devnull) as dn:
+                    result_code = subprocess.call(
+                        [command, ctl_file], stdout=dn, stderr=dn
+                    )
+        finally:
+            os.chdir(cwd)
         if result_code > 0:
             # If the program fails for any reason
             raise PamlError(
