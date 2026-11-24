@@ -527,6 +527,18 @@ class CmsearchCases(unittest.TestCase):
             [(1, 36), (84, 193)],
         )
 
+    def test_cmsearch_truncated_alignment(self):
+        """Test a file that ends inside the hit alignments section."""
+        # This used to raise a bare IndexError instead of ValueError.
+        lines = get_file("cmsearch_114_5S_Yeast.txt").read_text().splitlines(True)
+        # cut partway through the first alignment block, and after the
+        # complete two-block alignment of the first hit
+        for n in (39, 45):
+            with self.subTest(lines=n):
+                handle = io.StringIO("".join(lines[:n]))
+                with self.assertRaisesRegex(ValueError, "Unexpected end of file"):
+                    list(parse(handle, FMT))
+
     def test_cmsearch_1q_mm_1h_shuffled(self):
         """Test parsing infernal-text, cmsearch, one queries, multiple non-consecutive hits, one hsp, multiple fragments (U2_Yeast_full_shuffled)"""
         tab_file = get_file("cmsearch_114_U2_Yeast_full_shuffled.txt")

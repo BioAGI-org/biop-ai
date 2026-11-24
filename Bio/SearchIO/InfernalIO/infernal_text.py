@@ -466,6 +466,8 @@ class InfernalTextParser(_BaseInfernalParser):
             offset = 1 if model == "cm" else 0  # offset for the annotation line indexes
             lines = [None] * block_size
             for i in range(block_size):
+                if not self.line:
+                    raise ValueError("Unexpected end of file in alignment block")
                 lines[i] = self.line
                 self.line = read_forward(self.handle)
 
