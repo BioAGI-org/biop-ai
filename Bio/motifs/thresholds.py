@@ -342,28 +342,40 @@ class ScoreDistribution:
 
     def threshold_fpr(self, fpr):
         """Approximate the log-odds threshold which makes the type I error (false positive rate)."""
+        if not 0 <= fpr <= 1:
+            raise ValueError(f"fpr must be between 0 and 1, not {fpr}")
         i = self.n_points
         prob = 0.0
-        while prob < fpr:
+        # Rounding can make the density add up to just under 1.
+        while prob < fpr and i > 0:
             i -= 1
             prob += self.bg_density[i]
         return self.min_score + i * self.step
 
     def threshold_fnr(self, fnr):
         """Approximate the log-odds threshold which makes the type II error (false negative rate)."""
+        if not 0 <= fnr <= 1:
+            raise ValueError(f"fnr must be between 0 and 1, not {fnr}")
         i = -1
         prob = 0.0
-        while prob < fnr:
+        # Rounding can make the density add up to just under 1.
+        while prob < fnr and i < self.n_points - 1:
             i += 1
             prob += self.mo_density[i]
         return self.min_score + i * self.step
 
     def threshold_balanced(self, rate_proportion=1.0, return_rate=False):
         """Approximate log-odds threshold making FNR equal to FPR times rate_proportion."""
+        if not 0 < rate_proportion < float("inf"):
+            raise ValueError(
+                "rate_proportion must be a finite number greater than 0, "
+                f"not {rate_proportion}"
+            )
         i = self.n_points
         fpr = 0.0
         fnr = 1.0
-        while fpr * rate_proportion < fnr:
+        # Rounding can leave fnr just above 0 at the lowest bin.
+        while fpr * rate_proportion < fnr and i > 0:
             i -= 1
             fpr += self.bg_density[i]
             fnr -= self.mo_density[i]
