@@ -171,9 +171,11 @@ outside the checkout. So build data paths from `support.DATA` (see
 `Tests/support.py`), never relative to the current directory. The docstring
 examples are the exception. They run inside `Tests/`.
 
-Tests needing the network use the `@requires_internet` decorator. Tests
-needing external binaries must detect their absence and skip rather than
-fail. A test module may skip only by raising `MissingExternalDependencyError`
+A test module needing the network imports `requires_internet` (from
+`Tests/`) and calls `requires_internet.check()` when it is imported. That
+raises `MissingExternalDependencyError` when the network is unavailable or
+`--offline` is given, so the module is skipped. Tests needing external
+binaries must detect their absence and skip rather than fail. A test module may skip only by raising `MissingExternalDependencyError`
 (or `MissingPythonDependencyError`) when it is imported, and you must then
 list it in `Tests/expected_skips.txt`.
 
