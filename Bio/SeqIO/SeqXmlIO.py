@@ -253,8 +253,8 @@ class ContentHandler(handler.ContentHandler):
         if attrs:
             raise ValueError("Unexpected attributes found in description element")
         if self.data is not None:
-            raise RuntimeError(f"Unexpected data found: '{self.data}'")
-        self.data = ""
+            raise RuntimeError(f"Unexpected data found: '{''.join(self.data)}'")
+        self.data = []
         self.endElementNS = self.endDescriptionElement
 
     def endDescriptionElement(self, name, qname):
@@ -269,7 +269,7 @@ class ContentHandler(handler.ContentHandler):
         if localname != "description":
             raise RuntimeError("Failed to find end of description element")
         record = self.records[-1]
-        description = self.data
+        description = "".join(self.data)
         if description:  # ignore if empty string
             record.description = description
         self.data = None
@@ -280,8 +280,8 @@ class ContentHandler(handler.ContentHandler):
         if attrs:
             raise ValueError("Unexpected attributes found in sequence element")
         if self.data is not None:
-            raise RuntimeError(f"Unexpected data found: '{self.data}'")
-        self.data = ""
+            raise RuntimeError(f"Unexpected data found: '{''.join(self.data)}'")
+        self.data = []
         self.endElementNS = self.endSequenceElement
 
     def endSequenceElement(self, name, qname):
@@ -308,7 +308,7 @@ class ContentHandler(handler.ContentHandler):
             raise RuntimeError(
                 f"Failed to find end of sequence (localname = {localname})"
             )
-        record.seq = Seq(self.data)
+        record.seq = Seq("".join(self.data))
         self.data = None
         self.endElementNS = self.endEntryElement
 
@@ -345,8 +345,8 @@ class ContentHandler(handler.ContentHandler):
         ):
             raise ValueError("Failed to find type for DBRef element")
         if self.data is not None:
-            raise RuntimeError(f"Unexpected data found: '{self.data}'")
-        self.data = ""
+            raise RuntimeError(f"Unexpected data found: '{''.join(self.data)}'")
+        self.data = []
         record = self.records[-1]
         dbxref = f"{source}:{ID}"
         if dbxref not in record.dbxrefs:
@@ -366,7 +366,7 @@ class ContentHandler(handler.ContentHandler):
             raise RuntimeError(f"Unexpected localname '{localname}' for DBRef element")
         if self.data:
             raise RuntimeError(
-                f"Unexpected data received for DBRef element: '{self.data}'"
+                f"Unexpected data received for DBRef element: '{''.join(self.data)}'"
             )
         self.data = None
         self.endElementNS = self.endEntryElement
@@ -431,7 +431,7 @@ class ContentHandler(handler.ContentHandler):
     def characters(self, data):
         """Handle character data."""
         if self.data is not None:
-            self.data += data
+            self.data.append(data)
 
 
 class SeqXmlIterator(SequenceIterator):

@@ -4,11 +4,15 @@
 # as part of this package.
 """Tests for SeqIO SeqXML module."""
 
+import os
+import subprocess
+import sys
 import unittest
 from io import BytesIO
 
 import support
 
+import Bio
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -295,6 +299,55 @@ class TestReadCorruptFiles(unittest.TestCase):
             "its DNA sequence$",
         ):
             list(SeqIO.parse(BytesIO(data), "seqxml"))
+
+    def test_nested_entities_linear_time(self):
+        """Parse sequence text given in many small pieces in linear time.
+
+        Expat passes the expanded text of each entity in a separate call.
+        Appending each piece to a string took quadratic time: a 1.5 kB file
+        with nested entities that expand to 4,000,000 letters ran for well
+        over a minute. With the pieces joined once it takes well under a
+        second. Run it in a child process so a regression cannot hang the
+        test suite.
+        """
+        code = """\
+from io import BytesIO
+from Bio import SeqIO
+entities = (
+    '<!ENTITY a "ACGTACGTAC">'
+    '<!ENTITY b "' + "&a;" * 10 + '">'
+    '<!ENTITY c "' + "&b;" * 10 + '">'
+    '<!ENTITY d "' + "&c;" * 10 + '">'
+)
+data = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    "<!DOCTYPE seqXML [" + entities + "]>"
+    '<seqXML seqXMLversion="0.4"><entry id="x"><DNAseq>'
+    + "&d;" * 400
+    + "</DNAseq></entry></seqXML>"
+).encode()
+record = next(SeqIO.parse(BytesIO(data), "seqxml"))
+print(len(record.seq), record.seq[:12])
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("parsing 4,000,000 letters of entity text took over 60 s")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "4000000 ACGTACGTACAC\n")
 
 
 class TestOldVersions(unittest.TestCase):
