@@ -5,12 +5,16 @@
 
 """Tests for SearchIO BlastIO parsers."""
 
+import os
+import subprocess
+import sys
 import unittest
 import warnings
 from io import BytesIO
 
 import support
 
+import Bio
 from Bio import BiopythonParserWarning
 from Bio.SearchIO import parse
 
@@ -4074,6 +4078,53 @@ class BlastXmlErrorTests(unittest.TestCase):
 """
         with self.assertRaisesRegex(ValueError, "^XML entity declarations are not"):
             list(parse(BytesIO(data), FMT))
+
+    def test_version_without_number(self):
+        """Check a version text with no x.y.z number is kept, and fast."""
+        template = """\
+<?xml version="1.0"?>
+<BlastOutput>
+  <BlastOutput_program>blastn</BlastOutput_program>
+  <BlastOutput_version>%s</BlastOutput_version>
+  <BlastOutput_iterations>
+    <Iteration>
+      <Iteration_iter-num>1</Iteration_iter-num>
+      <Iteration_query-ID>q</Iteration_query-ID>
+      <Iteration_query-def>d</Iteration_query-def>
+      <Iteration_query-len>10</Iteration_query-len>
+      <Iteration_hits></Iteration_hits>
+    </Iteration>
+  </BlastOutput_iterations>
+</BlastOutput>
+"""
+        qresult = next(parse(BytesIO(template.encode() % b"BLASTN"), FMT))
+        self.assertEqual(qresult.version, "BLASTN")
+        # A long run of digits took quadratic time in the version regex
+        # (about 4 s for 40,000 digits), so parse it in a child process.
+        code = f"""\
+from io import BytesIO
+from Bio.SearchIO import parse
+data = {template!r} % ("1" * 300_000)
+print(len(next(parse(BytesIO(data.encode()), "blast-xml")).version))
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("Parsing a 300,000 digit version took over 60 seconds")
+        self.assertEqual(result.stdout, "300000\n", result.stderr)
 
 
 if __name__ == "__main__":
