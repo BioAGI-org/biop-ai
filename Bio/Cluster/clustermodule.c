@@ -38,6 +38,49 @@ parse_rng_seed(PyObject* object, uint64_t* rng_seed)
     return 0;
 }
 
+/* The C kernels run without the GIL, so Python cannot act on Ctrl-C (or any
+ * other signal) until they return.  The wrappers therefore give each kernel
+ * a ClusterInterrupt that calls check_signals.  The kernels report the work
+ * they do; about every SIGNAL_CHECK_WORK operations, which takes a few
+ * milliseconds, check_signals takes the GIL back briefly to run
+ * PyErr_CheckSignals, as Bio/Align/_pairwisealigner.c does.  If a signal
+ * handler raised an exception (KeyboardInterrupt for Ctrl-C), the kernel
+ * stops early, and the wrapper returns NULL with that exception set.
+ *
+ * Call signal_check_init with the GIL held, just before releasing it. */
+
+#define SIGNAL_CHECK_WORK 0x100000
+
+typedef struct {
+    ClusterInterrupt interrupt;  /* pass &interrupt to the kernel */
+    PyThreadState* tstate;
+    size_t work;
+} SignalCheck;
+
+static int
+check_signals(void* context, size_t work)
+{
+    SignalCheck* signal_check = context;
+    int stop;
+
+    signal_check->work += work;
+    if (signal_check->work < SIGNAL_CHECK_WORK) return 0;
+    signal_check->work = 0;
+    PyEval_RestoreThread(signal_check->tstate);
+    stop = PyErr_CheckSignals() < 0;
+    PyEval_SaveThread();
+    return stop;
+}
+
+static void
+signal_check_init(SignalCheck* signal_check)
+{
+    signal_check->interrupt.check = check_signals;
+    signal_check->interrupt.context = signal_check;
+    signal_check->tstate = PyThreadState_Get();
+    signal_check->work = 0;
+}
+
 static char
 extract_single_character(PyObject* object, const char variable[],
                          const char allowed[])
@@ -1408,14 +1451,15 @@ static PyTypeObject PyTreeType = {
 
 /* Each function below releases the GIL around its call into the C
  * Clustering Library, once every argument is checked. The library calls no
- * Python API, and allocates in the raw memory domain (see cluster.c). It
- * touches only buffers whose exports the function holds until the call
- * returns, and memory the function allocated itself. The index arrays it
- * reads are private copies made by copy_indices (clustercentroids,
- * clusterdistance, kcluster, kmedoids). Another thread may still write the
- * caller's data, mask, weight or distance values meanwhile. The results
- * are then unspecified, but the library never uses those values as
- * indices or sizes.
+ * Python API itself, and allocates in the raw memory domain (see
+ * cluster.c); only the check_signals callback it is given takes the GIL
+ * back, briefly, to run PyErr_CheckSignals. It touches only buffers whose
+ * exports the function holds until the call returns, and memory the
+ * function allocated itself. The index arrays it reads are private copies
+ * made by copy_indices (clustercentroids, clusterdistance, kcluster,
+ * kmedoids). Another thread may still write the caller's data, mask,
+ * weight or distance values meanwhile. The results are then unspecified,
+ * but the library never uses those values as indices or sizes.
  *
  * Tree.sort and Tree.cut keep the GIL: they run in the tree's critical
  * section, which releasing the GIL would suspend. */
@@ -1507,6 +1551,7 @@ py_kcluster(PyObject* self, PyObject* args, PyObject* keywords)
     int ifound = 0;
     PyObject* rng_seed_obj;
     uint64_t rng_seed;
+    SignalCheck signal_check;
 
     static char* kwlist[] = {"data",
                              "nclusters",
@@ -1591,6 +1636,7 @@ py_kcluster(PyObject* self, PyObject* args, PyObject* keywords)
         goto exit;
     }
     if (!check_writable(&clusterid, "clusterid")) goto exit;
+    signal_check_init(&signal_check);
     Py_BEGIN_ALLOW_THREADS
     kcluster(nclusters,
              nrows,
@@ -1605,7 +1651,8 @@ py_kcluster(PyObject* self, PyObject* args, PyObject* keywords)
              ids,
              &error,
              &ifound,
-             rng_seed);
+             rng_seed,
+             &signal_check.interrupt);
     Py_END_ALLOW_THREADS
     if (ifound > 0) memcpy(clusterid.buf, ids, clusterid.len);
 exit:
@@ -1614,7 +1661,11 @@ exit:
     vector_converter(NULL, &weight);
     index_converter(NULL, &clusterid);
     PyMem_Free(ids);
-    if (ifound == -1) return PyErr_NoMemory();
+    if (ifound == -1) {
+        /* Out of memory, or interrupted with an exception already set */
+        if (!PyErr_Occurred()) PyErr_NoMemory();
+        return NULL;
+    }
     if (ifound) return Py_BuildValue("di", error, ifound);
     return NULL;
 }
@@ -1689,6 +1740,7 @@ py_kmedoids(PyObject* self, PyObject* args, PyObject* keywords)
     int ifound = -2;
     PyObject* rng_seed_obj;
     uint64_t rng_seed;
+    SignalCheck signal_check;
 
     static char* kwlist[] = {"distance",
                              "nclusters",
@@ -1739,6 +1791,7 @@ py_kmedoids(PyObject* self, PyObject* args, PyObject* keywords)
         goto exit;
     }
     if (!check_writable(&clusterid, "clusterid")) goto exit;
+    signal_check_init(&signal_check);
     Py_BEGIN_ALLOW_THREADS
     kmedoids(nclusters,
              distances.n,
@@ -1747,7 +1800,8 @@ py_kmedoids(PyObject* self, PyObject* args, PyObject* keywords)
              ids,
              &error,
              &ifound,
-             rng_seed);
+             rng_seed,
+             &signal_check.interrupt);
     Py_END_ALLOW_THREADS
     if (ifound > 0) memcpy(clusterid.buf, ids, clusterid.len);
 
@@ -1759,7 +1813,9 @@ exit:
         case -2:
             return NULL;
         case -1:
-            return PyErr_NoMemory();
+            /* Out of memory, or interrupted with an exception already set */
+            if (!PyErr_Occurred()) PyErr_NoMemory();
+            return NULL;
         case 0: /* should not occur */
             PyErr_SetString(PyExc_RuntimeError,
                         "error in kmedoids input arguments");
@@ -1870,6 +1926,7 @@ py_treecluster(PyObject* self, PyObject* args, PyObject* keywords)
     Node* nodes;
     int nitems;
     PyObject* result = NULL;
+    SignalCheck signal_check;
 
     static char* kwlist[] = {"tree",
                              "data",
@@ -1938,6 +1995,7 @@ py_treecluster(PyObject* self, PyObject* args, PyObject* keywords)
             goto exit;
         }
 
+        signal_check_init(&signal_check);
         Py_BEGIN_ALLOW_THREADS
         nodes = treecluster(nrows,
                             ncols,
@@ -1947,7 +2005,8 @@ py_treecluster(PyObject* self, PyObject* args, PyObject* keywords)
                             transpose,
                             dist,
                             method,
-                            NULL);
+                            NULL,
+                            &signal_check.interrupt);
         Py_END_ALLOW_THREADS
     }
     else { /* use the distance matrix instead of the values in data */
@@ -1961,6 +2020,7 @@ py_treecluster(PyObject* self, PyObject* args, PyObject* keywords)
         if (method != 's' && !check_distancematrix_writable(&distances))
             goto exit;
         nitems = distances.n;
+        signal_check_init(&signal_check);
         Py_BEGIN_ALLOW_THREADS
         nodes = treecluster(nitems,
                             nitems,
@@ -1970,14 +2030,18 @@ py_treecluster(PyObject* self, PyObject* args, PyObject* keywords)
                             transpose,
                             dist,
                             method,
-                            distances.values);
+                            distances.values,
+                            &signal_check.interrupt);
         Py_END_ALLOW_THREADS
     }
 
     if (!nodes) {
         /* treecluster returns NULL without allocating anything if there are
-         * fewer than two items; otherwise, NULL means it ran out of memory. */
-        if (nitems < 2)
+         * fewer than two items; otherwise, NULL means it ran out of memory,
+         * or was interrupted with an exception already set. */
+        if (PyErr_Occurred())
+            ;
+        else if (nitems < 2)
             PyErr_SetString(PyExc_ValueError,
                 "at least two items are needed for hierarchical clustering");
         else
@@ -2084,6 +2148,7 @@ py_somcluster(PyObject* self, PyObject* args, PyObject* keywords)
     PyObject* rng_seed_obj;
     uint64_t rng_seed;
     int ok;
+    SignalCheck signal_check;
 
     static char* kwlist[] = {"clusterids",
                              "celldata",
@@ -2154,6 +2219,7 @@ py_somcluster(PyObject* self, PyObject* args, PyObject* keywords)
     }
     if (!check_writable(&indices, "clusterids")) goto exit;
     if (!check_writable(&celldata.view, "celldata")) goto exit;
+    signal_check_init(&signal_check);
     Py_BEGIN_ALLOW_THREADS
     ok = somcluster(nrows,
                     ncols,
@@ -2168,10 +2234,12 @@ py_somcluster(PyObject* self, PyObject* args, PyObject* keywords)
                     dist,
                     celldata.values,
                     indices.buf,
-                    rng_seed);
+                    rng_seed,
+                    &signal_check.interrupt);
     Py_END_ALLOW_THREADS
     if (!ok) {
-        PyErr_NoMemory();
+        /* Out of memory, or interrupted with an exception already set */
+        if (!PyErr_Occurred()) PyErr_NoMemory();
         goto exit;
     }
     Py_INCREF(Py_None);
@@ -2545,6 +2613,8 @@ py_distancematrix(PyObject* self, PyObject* args, PyObject* keywords)
     char dist = 'e';
     int nrows, ncols, ndata, nitems;
     PyObject* result = NULL;
+    SignalCheck signal_check;
+    int ok;
 
     /* -- Read the input variables --------------------------------------- */
     static char* kwlist[] = {"data",
@@ -2595,16 +2665,19 @@ py_distancematrix(PyObject* self, PyObject* args, PyObject* keywords)
     }
     if (!check_distancematrix_writable(&distances)) goto exit;
 
+    signal_check_init(&signal_check);
     Py_BEGIN_ALLOW_THREADS
-    distancematrix(nrows,
-                   ncols,
-                   data.values,
-                   mask.values,
-                   weight.buf,
-                   dist,
-                   transpose,
-                   distances.values);
+    ok = distancematrix(nrows,
+                        ncols,
+                        data.values,
+                        mask.values,
+                        weight.buf,
+                        dist,
+                        transpose,
+                        distances.values,
+                        &signal_check.interrupt);
     Py_END_ALLOW_THREADS
+    if (!ok) goto exit; /* interrupted, with an exception set */
 
     Py_INCREF(Py_None);
     result = Py_None;

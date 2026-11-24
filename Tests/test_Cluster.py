@@ -8,6 +8,7 @@ import functools
 import gc
 import io
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -3900,6 +3901,59 @@ print("OK")
 """
 
 
+# PyPy's PyErr_CheckSignals (in pypy/module/cpyext/pyerrors.py) is a stub
+# that always returns 0, so a C extension cannot see Ctrl-C until its call
+# returns. The Ctrl-C tests below therefore cannot pass on PyPy.
+skip_ctrl_c_on_pypy = unittest.skipIf(
+    platform.python_implementation() == "PyPy",
+    "PyPy's PyErr_CheckSignals always returns 0, so Ctrl-C waits for the C call",
+)
+
+
+# Child process for TestClusterThreads.test_ctrl_c_stops_kcluster. The
+# million passes of kcluster would take about an hour; _thread.interrupt_main
+# simulates Ctrl-C half a second in.
+CTRL_C_KCLUSTER = """\
+import _thread
+import threading
+
+import numpy as np
+
+from Bio.Cluster import kcluster
+
+data = np.random.default_rng(0).random((500, 10))
+threading.Timer(0.5, _thread.interrupt_main).start()
+try:
+    kcluster(data, nclusters=10, npass=10**6)
+except KeyboardInterrupt:
+    print("OK")
+else:
+    print("kcluster finished")
+"""
+
+
+# Child process for TestClusterThreads.test_ctrl_c_stops_kendall_distancematrix.
+# Each Kendall distance between rows of 25,000 values takes seconds, and the
+# 66 of them minutes; _thread.interrupt_main simulates Ctrl-C half a second in.
+CTRL_C_KENDALL = """\
+import _thread
+import threading
+
+import numpy as np
+
+from Bio.Cluster import distancematrix
+
+data = np.random.default_rng(0).random((12, 25000))
+threading.Timer(0.5, _thread.interrupt_main).start()
+try:
+    distancematrix(data, dist="k")
+except KeyboardInterrupt:
+    print("OK")
+else:
+    print("distancematrix finished")
+"""
+
+
 class TestClusterThreads(unittest.TestCase):
     """Tests of Bio.Cluster called from several threads at once."""
 
@@ -4045,6 +4099,50 @@ class TestClusterThreads(unittest.TestCase):
         used from a private copy, so they cannot go out of bounds.
         """
         self.run_child(CHANGING_INDEX_ARRAYS)
+
+    def run_ctrl_c(self, code, name):
+        import Bio
+
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                capture_output=True,
+                env=env,
+                text=True,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail(f"{name} ignored Ctrl-C for 60 seconds")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "OK", result.stderr)
+
+    @skip_ctrl_c_on_pypy
+    def test_ctrl_c_stops_kcluster(self):
+        """Check Ctrl-C stops a long kcluster call.
+
+        The kernels run without the GIL, so Python can only act on a
+        signal if they take the GIL back now and then to check. Without
+        that, KeyboardInterrupt waited for kcluster to finish.
+        """
+        self.run_ctrl_c(CTRL_C_KCLUSTER, "kcluster")
+
+    @skip_ctrl_c_on_pypy
+    def test_ctrl_c_stops_kendall_distancematrix(self):
+        """Check Ctrl-C stops a long distancematrix call with Kendall's tau.
+
+        Kendall's tau compares every pair of values, so it takes far
+        longer than the other metrics on the same data. When the kernels
+        counted it as one pass over the values, they first checked for a
+        signal after 45 of the 66 distances, minutes into the call.
+        """
+        self.run_ctrl_c(CTRL_C_KENDALL, "distancematrix")
 
     def test_changing_clusterid_while_clustering(self):
         """Check another thread changing clusterid cannot crash kcluster.

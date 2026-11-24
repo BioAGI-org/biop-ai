@@ -2724,10 +2724,33 @@ centroid.
 /* ********************************************************************* */
 
 static int
+interrupted(ClusterInterrupt* interrupt, size_t work)
+/* Report work done to the caller's interrupt check, if any. Return nonzero
+ * if the calling routine should stop. */
+{
+    return interrupt && interrupt->check(interrupt->context, work);
+}
+
+static size_t
+metric_work(char dist, int ndata)
+/* Return roughly how many operations one call of the metric for dist
+ * takes on ndata values, to report to interrupted. Kendall's tau compares
+ * every pair of values; the other metrics make one pass over them. */
+{
+    const size_t n = ndata;
+    return (dist == 'k') ? n*(n+1)/2 : n;
+}
+
+/* ********************************************************************* */
+
+static int
 kmeans(int nclusters, int nrows, int ncolumns, double** data, int** mask,
     double weight[], int transpose, int npass, char dist,
     double** cdata, int** cmask, int clusterid[], double* error,
-    int tclusterid[], int counts[], int mapping[], ClusterRNG* rng)
+    int tclusterid[], int counts[], int mapping[], ClusterRNG* rng,
+    ClusterInterrupt* interrupt)
+/* Return the number of times the best solution was found, or -1 if memory
+ * allocation fails or interrupt stops it. */
 {
     int i, j, k;
     const int nelements = (transpose == 0) ? nrows : ncolumns;
@@ -2795,6 +2818,11 @@ kmeans(int nclusters, int nrows, int ncolumns, double** data, int** mask,
                 }
                 total += distance;
             }
+            if (interrupted(interrupt, (size_t)nelements*nclusters
+                                       *metric_work(dist, ndata))) {
+                FREE(saved);
+                return -1;
+            }
             if (total >= previous) break;
             /* total >= previous is FALSE on some machines even if total and
              * previous are bitwise identical. */
@@ -2838,7 +2866,9 @@ kmedians(int nclusters, int nrows, int ncolumns, double** data, int** mask,
     double weight[], int transpose, int npass, char dist,
     double** cdata, int** cmask, int clusterid[], double* error,
     int tclusterid[], int counts[], int mapping[], double cache[],
-    ClusterRNG* rng)
+    ClusterRNG* rng, ClusterInterrupt* interrupt)
+/* Return the number of times the best solution was found, or -1 if memory
+ * allocation fails or interrupt stops it. */
 {
     int i, j, k;
     const int nelements = (transpose == 0) ? nrows : ncolumns;
@@ -2907,6 +2937,11 @@ kmedians(int nclusters, int nrows, int ncolumns, double** data, int** mask,
                 }
                 total += distance;
             }
+            if (interrupted(interrupt, (size_t)nelements*nclusters
+                                       *metric_work(dist, ndata))) {
+                FREE(saved);
+                return -1;
+            }
             if (total >= previous) break;
             /* total >= previous is FALSE on some machines even if total and
              * previous are bitwise identical. */
@@ -2948,7 +2983,8 @@ kmedians(int nclusters, int nrows, int ncolumns, double** data, int** mask,
 void
 kcluster(int nclusters, int nrows, int ncolumns, double** data, int** mask,
     double weight[], int transpose, int npass, char method, char dist,
-    int clusterid[], double* error, int* ifound, uint64_t rng_seed)
+    int clusterid[], double* error, int* ifound, uint64_t rng_seed,
+    ClusterInterrupt* interrupt)
 /*
 Purpose
 =======
@@ -3029,13 +3065,16 @@ The number of times the optimal clustering solution was
 found. The value of ifound is at least 1; its maximum value is npass. If the
 number of clusters is larger than the number of elements being clustered,
 *ifound is set to 0 as an error code. If a memory allocation error occurs,
-*ifound is set to -1.
+or interrupt stops kcluster, *ifound is set to -1.
 
 rng_seed   (input) uint64_t
 The seed for the random number generator used to choose the random initial
 clusterings. A given seed yields bit-identical results on every run. The
 seed is used only if npass > 0; with npass == 0 the algorithm is fully
 deterministic and starts from the clusterid array.
+
+interrupt  (input) ClusterInterrupt*
+An optional check that can stop the routine early (see cluster.h), or NULL.
 
 ========================================================================
 */
@@ -3102,14 +3141,15 @@ deterministic and starts from the clusterid array.
             *ifound = kmedians(nclusters, nrows, ncolumns, data, mask, weight,
                                transpose, npass, dist, cdata, cmask, clusterid,
                                error, tclusterid, counts, mapping, cache,
-                               &rng);
+                               &rng, interrupt);
             FREE(cache);
         }
     }
     else
         *ifound = kmeans(nclusters, nrows, ncolumns, data, mask, weight,
                          transpose, npass, dist, cdata, cmask, clusterid,
-                         error, tclusterid, counts, mapping, &rng);
+                         error, tclusterid, counts, mapping, &rng,
+                         interrupt);
 
     /* Deallocate temporarily used space */
     if (npass > 1) {
@@ -3127,7 +3167,8 @@ deterministic and starts from the clusterid array.
 
 void
 kmedoids(int nclusters, int nelements, double** distmatrix, int npass,
-    int clusterid[], double* error, int* ifound, uint64_t rng_seed)
+    int clusterid[], double* error, int* ifound, uint64_t rng_seed,
+    ClusterInterrupt* interrupt)
 /*
 Purpose
 =======
@@ -3179,13 +3220,17 @@ ifound     (output) int
 If kmedoids is successful: the number of times the optimal clustering solution
 was found. The value of ifound is at least 1; its maximum value is npass.
 If the user requested more clusters than elements available, ifound is set
-to 0. If kmedoids fails due to a memory allocation error, ifound is set to -1.
+to 0. If kmedoids fails due to a memory allocation error, or interrupt stops
+it, ifound is set to -1.
 
 rng_seed   (input) uint64_t
 The seed for the random number generator used to choose the random initial
 clusterings. A given seed yields bit-identical results on every run. The
 seed is used only if npass > 0; with npass == 0 the algorithm is fully
 deterministic and starts from the clusterid array.
+
+interrupt  (input) ClusterInterrupt*
+An optional check that can stop the routine early (see cluster.h), or NULL.
 
 ========================================================================
 */
@@ -3278,6 +3323,11 @@ deterministic and starts from the clusterid array.
                 }
                 total += distance;
             }
+            if (interrupted(interrupt,
+                            (size_t)nelements*(nelements+nclusters))) {
+                *ifound = -1;
+                goto stop;
+            }
             if (total >= previous) break;
             /* total >= previous is FALSE on some machines even if total and
              * previous are bitwise identical. */
@@ -3313,6 +3363,7 @@ deterministic and starts from the clusterid array.
         if (i == nelements) (*ifound)++; /* break statement not encountered */
     } while (++ipass < npass);
 
+stop:
     /* Deallocate temporarily used space */
     if (npass > 1) FREE(tclusterid);
 
@@ -3323,9 +3374,10 @@ deterministic and starts from the clusterid array.
 
 /* ******************************************************************** */
 
-void
+int
 distancematrix(int nrows, int ncolumns, double** data, int** mask,
-    double weights[], char dist, int transpose, double** matrix)
+    double weights[], char dist, int transpose, double** matrix,
+    ClusterInterrupt* interrupt)
 /*
 Purpose
 =======
@@ -3387,6 +3439,13 @@ A ragged array, with the number of columns in each row is equal to the
 row index (so distmatrix[i] has i columns). Upon return, the values of
 the distance matrix are stored in this array.
 
+interrupt  (input) ClusterInterrupt*
+An optional check that can stop the routine early (see cluster.h), or NULL.
+
+Return value
+============
+
+1, or 0 if interrupt stopped the calculation.
 
 ========================================================================
 */
@@ -3401,10 +3460,13 @@ the distance matrix are stored in this array.
                       const double[], int, int, int) = setmetric(dist);
 
     /* Calculate the distances and save them in the ragged array */
-    for (i = 1; i < n; i++)
+    for (i = 1; i < n; i++) {
         for (j = 0; j < i; j++)
             matrix[i][j] = metric(ndata, data, data, mask, mask, weights,
                                   i, j, transpose);
+        if (interrupted(interrupt, i*metric_work(dist, ndata))) return 0;
+    }
+    return 1;
 }
 
 /* ******************************************************************** */
@@ -3601,7 +3663,7 @@ If a memory error occurs, cuttree returns 0.
 
 static Node*
 pclcluster(int nrows, int ncolumns, double** data, int** mask, double weight[],
-    double** distmatrix, char dist, int transpose)
+    double** distmatrix, char dist, int transpose, ClusterInterrupt* interrupt)
 
 /*
 
@@ -3664,7 +3726,7 @@ hierarchical clustering solution consisting of nelements-1 nodes. Depending
 on whether genes (rows) or samples (columns) were clustered, nelements is
 equal to nrows or ncolumns. See src/cluster.h for a description of the Node
 structure.
-If a memory error occurs, pclcluster returns NULL.
+If a memory error occurs, or interrupt stops it, pclcluster returns NULL.
 ========================================================================
 */
 {
@@ -3722,6 +3784,8 @@ If a memory error occurs, pclcluster returns NULL.
         /* Find the pair with the shortest distance */
         int is = 1;
         int js = 0;
+        const size_t n = nelements - inode;
+        if (interrupted(interrupt, n*(n+metric_work(dist, ndata)))) break;
         result[inode].distance = find_closest_pair(nelements-inode, distmatrix,
                                                    &is, &js);
         result[inode].left = distid[js];
@@ -3754,13 +3818,19 @@ If a memory error occurs, pclcluster returns NULL.
                                        js, i, 0);
     }
 
-    /* Free temporarily allocated space */
-    FREE(data[0]);
-    FREE(mask[0]);
+    /* Free temporarily allocated space; nelements-inode rows are left */
+    for (i = 0; i < nelements-inode; i++) {
+        FREE(data[i]);
+        FREE(mask[i]);
+    }
     FREE(data);
     FREE(mask);
     FREE(distid);
 
+    if (inode < nnodes) { /* interrupted */
+        FREE(result);
+        return NULL;
+    }
     return result;
 }
 
@@ -3784,7 +3854,8 @@ nodecompare(const void* a, const void* b)
 
 static Node*
 pslcluster(int nrows, int ncolumns, double** data, int** mask,
-    double weight[], double** distmatrix, char dist, int transpose)
+    double weight[], double** distmatrix, char dist, int transpose,
+    ClusterInterrupt* interrupt)
 
 /*
 
@@ -3862,7 +3933,7 @@ hierarchical clustering solution consisting of nelements-1 nodes. Depending
 on whether genes (rows) or samples (columns) were clustered, nelements is
 equal to nrows or ncolumns. See src/cluster.h for a description of the Node
 structure.
-If a memory error occurs, pslcluster returns NULL.
+If a memory error occurs, or interrupt stops it, pslcluster returns NULL.
 
 ========================================================================
 */
@@ -3900,6 +3971,7 @@ If a memory error occurs, pslcluster returns NULL.
 
     if (distmatrix) {
         for (i = 0; i < nrows; i++) {
+            if (interrupted(interrupt, i)) goto stop;
             result[i].distance = DBL_MAX;
             for (j = 0; j < i; j++) temp[j] = distmatrix[i][j];
             for (j = 0; j < i; j++) {
@@ -3925,6 +3997,7 @@ If a memory error occurs, pslcluster returns NULL.
                           const double[], int, int, int) = setmetric(dist);
 
         for (i = 0; i < nelements; i++) {
+            if (interrupted(interrupt, i*metric_work(dist, ndata))) goto stop;
             result[i].distance = DBL_MAX;
             for (j = 0; j < i; j++) temp[j] =
                 metric(ndata, data, data, mask, mask, weight, i, j, transpose);
@@ -3962,11 +4035,18 @@ If a memory error occurs, pslcluster returns NULL.
     result = REALLOC(result, nnodes*sizeof(Node));
 
     return result;
+
+stop:
+    FREE(temp);
+    FREE(vector);
+    FREE(index);
+    FREE(result);
+    return NULL;
 }
 /* ******************************************************************** */
 
 static Node*
-pmlcluster(int nelements, double** distmatrix)
+pmlcluster(int nelements, double** distmatrix, ClusterInterrupt* interrupt)
 /*
 
 Purpose
@@ -3994,7 +4074,7 @@ hierarchical clustering solution consisting of nelements-1 nodes. Depending on
 whether genes (rows) or samples (columns) were clustered, nelements is equal
 to nrows or ncolumns. See src/cluster.h for a description of the Node
 structure.
-If a memory error occurs, pmlcluster returns NULL.
+If a memory error occurs, or interrupt stops it, pmlcluster returns NULL.
 ========================================================================
 */
 {
@@ -4015,6 +4095,7 @@ If a memory error occurs, pmlcluster returns NULL.
     for (j = 0; j < nelements; j++) clusterid[j] = j;
 
     for (n = nelements; n > 1; n--) {
+        if (interrupted(interrupt, (size_t)n*n)) break;
         int is = 1;
         int js = 0;
 
@@ -4040,13 +4121,17 @@ If a memory error occurs, pmlcluster returns NULL.
     }
     FREE(clusterid);
 
+    if (n > 1) { /* interrupted */
+        FREE(result);
+        return NULL;
+    }
     return result;
 }
 
 /* ******************************************************************* */
 
 static Node*
-palcluster(int nelements, double** distmatrix)
+palcluster(int nelements, double** distmatrix, ClusterInterrupt* interrupt)
 /*
 Purpose
 =======
@@ -4073,7 +4158,7 @@ hierarchical clustering solution consisting of nelements-1 nodes. Depending on
 whether genes (rows) or samples (columns) were clustered, nelements is equal
 to nrows or ncolumns. See src/cluster.h for a description of the Node
 structure.
-If a memory error occurs, palcluster returns NULL.
+If a memory error occurs, or interrupt stops it, palcluster returns NULL.
 ========================================================================
 */
 {
@@ -4106,6 +4191,7 @@ If a memory error occurs, palcluster returns NULL.
     }
 
     for (n = nelements; n > 1; n--) {
+        if (interrupted(interrupt, (size_t)n*n)) break;
         int sum;
         int is = 1;
         int js = 0;
@@ -4148,6 +4234,10 @@ If a memory error occurs, palcluster returns NULL.
     FREE(clusterid);
     FREE(number);
 
+    if (n > 1) { /* interrupted */
+        FREE(result);
+        return NULL;
+    }
     return result;
 }
 
@@ -4156,7 +4246,7 @@ If a memory error occurs, palcluster returns NULL.
 Node*
 treecluster(int nrows, int ncolumns, double** data, int** mask,
     double weight[], int transpose, char dist, char method,
-    double** distmatrix)
+    double** distmatrix, ClusterInterrupt* interrupt)
 /*
 Purpose
 =======
@@ -4227,6 +4317,9 @@ part of the clustering algorithm, but will not deallocate it. The calling
 routine should deallocate the distance matrix after the return from
 treecluster.
 
+interrupt  (input) ClusterInterrupt*
+An optional check that can stop the routine early (see cluster.h), or NULL.
+
 Return value
 ============
 
@@ -4235,7 +4328,7 @@ hierarchical clustering solution consisting of nelements-1 nodes. Depending on
 whether genes (rows) or samples (columns) were clustered, nelements is equal
 to nrows or ncolumns. See src/cluster.h for a description of the Node
 structure.
-If a memory error occurs, treecluster returns NULL.
+If a memory error occurs, or interrupt stops it, treecluster returns NULL.
 
 ========================================================================
 */
@@ -4243,6 +4336,7 @@ If a memory error occurs, treecluster returns NULL.
     Node* result = NULL;
     const int nelements = (transpose == 0) ? nrows : ncolumns;
     const int ldistmatrix = (distmatrix == NULL && method != 's') ? 1 : 0;
+    int ok = 1;
 
     if (nelements < 2) return NULL;
 
@@ -4261,24 +4355,24 @@ If a memory error occurs, treecluster returns NULL.
                 return NULL;
             }
         }
-        distancematrix(nrows, ncolumns, data, mask, weight, dist, transpose,
-                       distmatrix);
+        ok = distancematrix(nrows, ncolumns, data, mask, weight, dist,
+                            transpose, distmatrix, interrupt);
     }
 
-    switch(method) {
+    if (ok) switch(method) {
         case 's':
             result = pslcluster(nrows, ncolumns, data, mask, weight,
-                                distmatrix, dist, transpose);
+                                distmatrix, dist, transpose, interrupt);
             break;
         case 'm':
-            result = pmlcluster(nelements, distmatrix);
+            result = pmlcluster(nelements, distmatrix, interrupt);
             break;
         case 'a':
-            result = palcluster(nelements, distmatrix);
+            result = palcluster(nelements, distmatrix, interrupt);
             break;
         case 'c':
             result = pclcluster(nrows, ncolumns, data, mask, weight,
-                                distmatrix, dist, transpose);
+                                distmatrix, dist, transpose, interrupt);
             break;
     }
 
@@ -4440,8 +4534,9 @@ freedummymask(int nrows, int** dummymask)
 static int
 somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
     const double weights[], int transpose, int nxgrid, int nygrid,
-    double inittau, double*** celldata, int niter, char dist)
-/* Return 1 on success, or 0 if memory allocation fails. */
+    double inittau, double*** celldata, int niter, char dist,
+    ClusterInterrupt* interrupt)
+/* Return 1 on success, or 0 if memory allocation fails or interrupt stops it. */
 {
     const int nelements = (transpose == 0) ? nrows : ncolumns;
     const int ndata = (transpose == 0) ? ncolumns : nrows;
@@ -4530,6 +4625,8 @@ somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
         int ixbest = 0;
         int iybest = 0;
         int iobject = iter % nelements;
+        if (interrupted(interrupt, (size_t)nxgrid*nygrid
+                                   *metric_work(dist, ndata))) break;
         iobject = index[iobject];
         if (transpose == 0) {
             double closest = metric(ndata, data, celldata[ixbest], mask,
@@ -4629,7 +4726,7 @@ somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
     FREE(stddata);
     FREE(index);
     FREE(celldatavector);
-    return 1;
+    return iter == niter;
 }
 
 /* ******************************************************************* */
@@ -4637,9 +4734,12 @@ somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
 static int
 somassign(int nrows, int ncolumns, double** data, int** mask,
     const double weights[], int transpose, int nxgrid, int nygrid,
-    double*** celldata, char dist, int clusterid[][2])
-/* Collect clusterids. Return 1 on success, or 0 if memory allocation fails. */
+    double*** celldata, char dist, int clusterid[][2],
+    ClusterInterrupt* interrupt)
+/* Collect clusterids. Return 1 on success, or 0 if memory allocation fails
+ * or interrupt stops it. */
 {
+    const int nelements = (transpose == 0) ? nrows : ncolumns;
     const int ndata = (transpose == 0) ? ncolumns : nrows;
     /* The number of rows of dummymask, the mask of a cell of the grid */
     const int nmask = (transpose == 0) ? nygrid : ndata;
@@ -4658,6 +4758,8 @@ somassign(int nrows, int ncolumns, double** data, int** mask,
             double closest = metric(ndata, data, celldata[ixbest], mask,
                                     dummymask, weights, i, iybest, transpose);
             int ix, iy;
+            if (interrupted(interrupt, (size_t)nxgrid*nygrid
+                                       *metric_work(dist, ndata))) break;
             for (ix = 0; ix < nxgrid; ix++) {
                 for (iy = 0; iy < nygrid; iy++) {
                     double distance = metric(ndata, data, celldata[ix], mask,
@@ -4685,6 +4787,8 @@ somassign(int nrows, int ncolumns, double** data, int** mask,
             int iybest = 0;
             double closest;
             int ix, iy;
+            if (interrupted(interrupt, (size_t)nxgrid*nygrid
+                                       *metric_work(dist, ndata))) break;
             for (j = 0; j < ndata; j++)
                 celldatavector[j] = &(celldata[ixbest][iybest][j]);
             closest = metric(ndata, data, celldatavector, mask, dummymask,
@@ -4709,7 +4813,7 @@ somassign(int nrows, int ncolumns, double** data, int** mask,
         FREE(celldatavector);
     }
     freedummymask(nmask, dummymask);
-    return 1;
+    return i == nelements;
 }
 
 /* ******************************************************************* */
@@ -4718,7 +4822,7 @@ int
 somcluster(int nrows, int ncolumns, double** data, int** mask,
     const double weight[], int transpose, int nxgrid, int nygrid,
     double inittau, int niter, char dist, double*** celldata,
-    int clusterid[][2], uint64_t rng_seed)
+    int clusterid[][2], uint64_t rng_seed, ClusterInterrupt* interrupt)
 /*
 
 Purpose
@@ -4799,11 +4903,14 @@ The seed for the random number generator used to initialize the nodes and
 to randomize the order in which the items are presented. A given seed
 yields bit-identical results on every run.
 
+interrupt  (input) ClusterInterrupt*
+An optional check that can stop the routine early (see cluster.h), or NULL.
+
 Return value
 ============
 
 If no errors occur, somcluster returns 1.
-If a memory error occurs, somcluster returns 0.
+If a memory error occurs, or interrupt stops it, somcluster returns 0.
 
 ========================================================================
 */
@@ -4835,10 +4942,10 @@ If a memory error occurs, somcluster returns 0.
 
     if (ok)
         ok = somworker(&rng, nrows, ncolumns, data, mask, weight, transpose,
-            nxgrid, nygrid, inittau, celldata, niter, dist);
+            nxgrid, nygrid, inittau, celldata, niter, dist, interrupt);
     if (ok && clusterid)
         ok = somassign(nrows, ncolumns, data, mask, weight, transpose,
-            nxgrid, nygrid, celldata, dist, clusterid);
+            nxgrid, nygrid, celldata, dist, clusterid, interrupt);
     if (lcelldata == 0) {
         for (i = 0; i < nxgrid && celldata[i]; i++) {
             for (j = 0; j < nygrid; j++)
