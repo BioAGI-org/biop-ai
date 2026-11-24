@@ -9,7 +9,7 @@
 
 import re
 
-line_floats_re = re.compile(r"-?\d+\.\d+")
+line_floats_re = re.compile(r"-?(?<!\d)\d+\.\d+")
 
 
 def parse_basics(lines, results):

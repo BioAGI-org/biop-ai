@@ -198,20 +198,21 @@ class ModTest(unittest.TestCase):
     def testResultsParsable(self):
         self.assertRaises(ValueError, baseml.read, self.results_file)
 
-    def testResultsLongDashLine(self):
-        """Read a results file with a long line of dashes quickly."""
-        # The number pattern once allowed any run of '-' before a number, so
-        # findall on a line of n dashes took time growing as n squared: 20,000
-        # dashes took about 18 s. Run in a child process, so that a regression
-        # fails, not hangs.
+    def testResultsLongRunLine(self):
+        """Read a results file with a long run of dashes or digits quickly."""
+        # The number pattern was once tried from every character of a run of
+        # '-' or of digits, and each try scanned the rest of the run, so the
+        # time grew as the square of the run length: 20,000 dashes took about
+        # 18 s, 20,000 digits about 5 s. Run in a child process, so that a
+        # regression fails, not hangs.
         code = r"""
-import os, tempfile
+import os, sys, tempfile
 from Bio.Phylo.PAML import baseml
 with tempfile.TemporaryDirectory() as tmp:
-    path = os.path.join(tmp, "dashes.out")
+    path = os.path.join(tmp, "run.out")
     with open(path, "w") as handle:
         handle.write("BASEML (in paml version 4.9, March 2015)\n")
-        handle.write("-" * 300000 + "\n")
+        handle.write(sys.argv[1] * 300000 + "\n")
     print(baseml.read(path)["version"])
 """
         env = os.environ.copy()
@@ -221,18 +222,20 @@ with tempfile.TemporaryDirectory() as tmp:
                 [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
             )
         )
-        try:
-            result = subprocess.run(
-                [sys.executable, "-c", code],
-                timeout=60,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            self.fail("baseml.read took over 60 s on a line of 300,000 dashes")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "4.9\n")
+        for char in "-1":
+            with self.subTest(char=char):
+                try:
+                    result = subprocess.run(
+                        [sys.executable, "-c", code, char],
+                        timeout=60,
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                    )
+                except subprocess.TimeoutExpired:
+                    self.fail(f"baseml.read took over 60 s on 300,000 {char!r}")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, "4.9\n")
 
     def testParseAllVersions(self):
         folder = support.DATA / "PAML" / "Results" / "baseml" / "versions"
