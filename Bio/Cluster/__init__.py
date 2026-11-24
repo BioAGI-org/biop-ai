@@ -793,6 +793,7 @@ class Record:
                 cols[line.index(word)] = word
             else:
                 self.expid.append(word)
+        expcols = [i for i in range(n) if i not in cols]
         self.geneid = []
         genename: list[str] = []
         gweight: list[float] = []
@@ -807,12 +808,10 @@ class Record:
                     "Line with %d columns found (expected %d)" % (len(line), n)
                 )
             if line[0] == "EWEIGHT":
-                i = max(cols) + 1
-                self.eweight = np.array(line[i:], float)
+                self.eweight = np.array([line[i] for i in expcols], float)
                 continue
             if line[0] == "EORDER":
-                i = max(cols) + 1
-                self.eorder = np.array(line[i:], float)
+                self.eorder = np.array([line[i] for i in expcols], float)
                 continue
             rowdata = []
             rowmask = []
