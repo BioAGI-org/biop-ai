@@ -12,6 +12,9 @@ from tempfile import NamedTemporaryFile
 import support
 
 from Bio import Align
+from Bio.Align.exonerate import AlignmentWriter
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 
 try:
     import numpy as np
@@ -8688,6 +8691,22 @@ class Exonerate_none(unittest.TestCase):
             pass
         with self.assertRaises(AttributeError):
             alignments._stream
+
+
+class Exonerate_cigar_errors(unittest.TestCase):
+    def test_unexpected_steps(self):
+        """The cigar writer names the step sizes it cannot write as 'M'."""
+        alignment = Align.Alignment(
+            [SeqRecord(Seq("AC"), id="t"), SeqRecord(Seq("A"), id="q")],
+            np.array([[0, 2], [0, 1]]),
+        )
+        alignment.operations = bytearray(b"M")
+        alignment.score = 1
+        writer = AlignmentWriter(io.StringIO(), fmt="cigar")
+        with self.assertRaisesRegex(
+            ValueError, "^Unexpected steps target 2, query 1 for operation 'M'$"
+        ):
+            writer.format_alignment(alignment)
 
 
 if __name__ == "__main__":

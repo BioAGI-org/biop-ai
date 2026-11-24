@@ -3429,6 +3429,12 @@ AlignmentCounts object with
             with self.assertRaises(StopIteration):
                 next(alignments)
 
+    def test_unexpected_line(self):
+        """A malformed file raises ValueError naming the bad line."""
+        for text, line in (("hello\n", "hello"), ("#" * 40 + "\nbad\n", "bad")):
+            with self.assertRaisesRegex(ValueError, f"^Unexpected line: {line}$"):
+                list(Align.parse(StringIO(text), "emboss"))
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)

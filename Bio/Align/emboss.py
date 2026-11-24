@@ -30,7 +30,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
         if not line:
             raise ValueError("Empty file.")
         if line.rstrip() != "########################################":
-            raise ValueError("Unexpected line: %s") % line
+            raise ValueError("Unexpected line: %s" % line)
 
         # assume srspair format (default) if not specified explicitly in
         # the output file
@@ -41,7 +41,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             if line.rstrip() == "########################################":
                 break
             if not line.startswith("# "):
-                raise ValueError("Unexpected line: %s") % line
+                raise ValueError("Unexpected line: %s" % line)
             if commandline is not None:
                 if line.startswith("#    "):
                     commandline += " " + line[1:].strip()
@@ -86,7 +86,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             elif line.strip() == "#":
                 continue
             elif not line.startswith("# "):
-                raise ValueError("Unexpected line: %s") % line
+                raise ValueError("Unexpected line: %s" % line)
             try:
                 key, value = line[2:].split(":", 1)
             except ValueError:
@@ -105,7 +105,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 # Should now expect the record identifiers...
                 for i, line in enumerate(stream):
                     if not line.startswith("# "):
-                        raise ValueError("Unexpected line: %s") % line
+                        raise ValueError("Unexpected line: %s" % line)
                     number, identifier = line[2:].split(":")
                     if int(number) != i + 1:
                         raise ValueError(
