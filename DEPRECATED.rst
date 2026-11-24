@@ -362,6 +362,17 @@ did. The private ``Bio.Cluster._cluster.somcluster`` likewise raises
 data. Code catching ``RuntimeError`` for these cases should catch
 ``ValueError`` instead.
 
+Bio.Cluster.treecluster with a single item
+------------------------------------------
+Changed in biop-ai 1.89 without a deprecation period.
+``Bio.Cluster.treecluster`` and ``Bio.Cluster.Record.treecluster`` now raise
+``ValueError("at least two items are needed for hierarchical clustering")``
+when there is only one item to cluster: one row of data, one column with
+``transpose=True``, or a 1x1 distance matrix. They used to raise a
+``MemoryError`` with an empty message. Code catching ``MemoryError`` for this
+case should catch ``ValueError`` instead, as it already did for empty data.
+``MemoryError`` now means only that memory ran out.
+
 Bio.Entrez
 ----------
 The ``egquery`` function wrapping the NCBI EGQuery (Entrez Global Query)

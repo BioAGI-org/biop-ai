@@ -2317,6 +2317,31 @@ class TestCluster(unittest.TestCase):
                     )
                     self.assertEqual(changed, method != "s")
 
+    def test_treecluster_one_item(self):
+        """Check treecluster rejects a single item with a ValueError.
+
+        One item gives a tree of no nodes. The C code returns NULL for it
+        without allocating, which was reported as an empty MemoryError.
+        """
+        if TestCluster.module != "Bio.Cluster":
+            self.skipTest("Pycluster raises MemoryError for one item")
+        from Bio.Cluster import treecluster
+
+        message = "at least two items are needed for hierarchical clustering"
+        for method in "smac":
+            with self.subTest(method=method, data="one row"):
+                with self.assertRaisesRegex(ValueError, message):
+                    treecluster(np.array([[1.0, 2.0, 3.0]]), method=method)
+            with self.subTest(method=method, data="one column, transposed"):
+                with self.assertRaisesRegex(ValueError, message):
+                    treecluster(
+                        np.array([[1.0], [2.0], [3.0]]), transpose=True, method=method
+                    )
+        for method in "sma":
+            with self.subTest(method=method, data="1x1 distance matrix"):
+                with self.assertRaisesRegex(ValueError, message):
+                    treecluster(None, distancematrix=np.zeros((1, 1)), method=method)
+
     def test_somcluster_arguments(self):
         # Test if incorrect arguments are caught by the C code
         if TestCluster.module == "Bio.Cluster":

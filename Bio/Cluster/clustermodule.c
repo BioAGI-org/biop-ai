@@ -1962,7 +1962,13 @@ py_treecluster(PyObject* self, PyObject* args, PyObject* keywords)
     }
 
     if (!nodes) {
-        PyErr_NoMemory();
+        /* treecluster returns NULL without allocating anything if there are
+         * fewer than two items; otherwise, NULL means it ran out of memory. */
+        if (nitems < 2)
+            PyErr_SetString(PyExc_ValueError,
+                "at least two items are needed for hierarchical clustering");
+        else
+            PyErr_NoMemory();
         goto exit;
     }
     /* Check again that the tree is empty, as another thread may have filled
