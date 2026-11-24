@@ -10,6 +10,7 @@ import os
 import os.path
 import tempfile
 import unittest
+from unittest import mock
 
 import support
 
@@ -148,6 +149,44 @@ class ModTest(unittest.TestCase):
         self.assertRaises(
             (EnvironmentError, IOError), self.cml.run, ctl_file="nonexistent"
         )
+
+    def testRunRestoresCwdOnError(self):
+        # run() changes to working_dir; it must change back if it raises.
+        cwd = os.getcwd()
+        self.addCleanup(os.chdir, cwd)
+        self.cml.alignment = self.align_file
+        self.cml.tree = self.tree_file
+        self.cml.out_file = self.out_file
+        self.cml.working_dir = self.working_dir
+        with self.assertRaises(FileNotFoundError):
+            self.cml.run(command="no_such_paml_binary")
+        self.assertEqual(os.getcwd(), cwd)
+        with self.assertRaises(FileNotFoundError):
+            self.cml.run(ctl_file="nonexistent")
+        self.assertEqual(os.getcwd(), cwd)
+
+    def testRunRestoresCwdOnInterruptAfterChdir(self):
+        # A KeyboardInterrupt just after the change to working_dir must not
+        # leave the process there.
+        cwd = os.getcwd()
+        self.addCleanup(os.chdir, cwd)
+        self.cml.alignment = self.align_file
+        self.cml.tree = self.tree_file
+        self.cml.out_file = self.out_file
+        self.cml.working_dir = self.working_dir
+        real_chdir = os.chdir
+        calls = []
+
+        def chdir_then_interrupt(path):
+            real_chdir(path)
+            calls.append(path)
+            if len(calls) == 1:
+                raise KeyboardInterrupt
+
+        with mock.patch("os.chdir", chdir_then_interrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.cml.run(command="no_such_paml_binary")
+        self.assertEqual(os.getcwd(), cwd)
 
     def testCtlFileValidOnRead(self):
         self.assertRaises(
