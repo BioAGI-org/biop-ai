@@ -660,6 +660,14 @@ class PositionSpecificScoringMatrix(GenericPositionMatrix):
         """
         from .thresholds import ScoreDistribution
 
+        for letter in self.alphabet:
+            if not all(map(math.isfinite, self[letter])):
+                raise ValueError(
+                    "Cannot compute the score distribution of a matrix with "
+                    "an infinite or NaN value; a log-odds matrix has -inf "
+                    "wherever a count is zero, which pseudocounts avoid, and "
+                    "+inf or NaN wherever a background frequency is zero"
+                )
         if background is None:
             background = dict.fromkeys(self.alphabet, 1.0)
         else:
