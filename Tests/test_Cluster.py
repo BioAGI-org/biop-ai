@@ -4596,7 +4596,6 @@ print("OK")
         self.run_child(
             """
 import os
-import shutil
 import tempfile
 import numpy as np
 from Bio.Cluster import _cluster, treecluster
