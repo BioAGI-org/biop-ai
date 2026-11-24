@@ -1321,7 +1321,7 @@ class Nexus:
     def _taxpartition(self, options):
         """Collect taxpartition from a NEXUS file (PRIVATE)."""
         taxpartition = {}
-        quotelevel = False
+        quotelevel = ""  # the quote character of an open quote
         opts = CharBuffer(options)
         name = self._name_n_vector(opts)
         if not name:
@@ -1341,8 +1341,10 @@ class Nexus:
                 if w is None:
                     break
             else:
-                if w == "'":
-                    quotelevel = not quotelevel
+                if w == quotelevel:
+                    quotelevel = ""
+                elif not quotelevel and w in "'\"":
+                    quotelevel = w
                 sub += w
         self.taxpartitions[name] = taxpartition
 
@@ -1367,7 +1369,7 @@ class Nexus:
     def _charpartition(self, options):
         """Collect character partition from NEXUS file (PRIVATE)."""
         charpartition = {}
-        quotelevel = False
+        quotelevel = ""  # the quote character of an open quote
         opts = CharBuffer(options)
         name = self._name_n_vector(opts)
         if not name:
@@ -1387,8 +1389,10 @@ class Nexus:
                 if w is None:
                     break
             else:
-                if w == "'":
-                    quotelevel = not quotelevel
+                if w == quotelevel:
+                    quotelevel = ""
+                elif not quotelevel and w in "'\"":
+                    quotelevel = w
                 sub += w
         self.charpartitions[name] = charpartition
 
