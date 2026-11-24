@@ -5,11 +5,15 @@
 
 """Tests for SearchIO hmmer2-text indexing."""
 
+import io
 import unittest
+from unittest import mock
 
 import support
 from search_tests_common import CheckIndex
 from search_tests_common import CheckRaw
+
+from Bio import SearchIO
 
 
 class Hmmer2TextRawCases(CheckRaw):
@@ -504,6 +508,36 @@ class Hmmer2TextIndexCases(CheckIndex):
         """Test hmmer2-text indexing, HMMER 2.2."""
         filename = support.DATA / "Hmmer" / "text_22_hmmsearch_001.out"
         self.check_index(filename, self.fmt)
+
+
+class MalformedCases(unittest.TestCase):
+    """A malformed query raises ValueError when the file is indexed."""
+
+    def test_malformed_query(self):
+        """Test indexing a bad Query line, and a '//' or end with no Query."""
+        cases = (
+            (
+                b"hmmpfam - search\nHMMER 2.3.2 (Oct 2003)\nQuery foo\n//\n",
+                "Expected a 'Query sequence:', 'Query HMM:' or 'Query:' line",
+            ),
+            (
+                b"hmmpfam - search\nHMMER 2.3.2 (Oct 2003)\n//\n",
+                "Found a '//' line before any 'Query' line",
+            ),
+            (
+                b"hmmsearch - search\nHMMER 2.3.2 (Oct 2003)\n",
+                "File ended before a 'Query HMM:' line",
+            ),
+        )
+        for data, message in cases:
+            with self.subTest(data=data):
+                with mock.patch(
+                    "Bio.SearchIO._index._open_for_random_access",
+                    return_value=io.BytesIO(data),
+                ):
+                    with self.assertRaises(ValueError) as cm:
+                        SearchIO.index("test.out", "hmmer2-text")
+                self.assertEqual(str(cm.exception), message)
 
 
 if __name__ == "__main__":

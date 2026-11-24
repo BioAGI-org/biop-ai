@@ -347,6 +347,7 @@ class Hmmer2TextIndexer(_BaseHmmerTextIndexer):
         handle.seek(0)
         start_offset = handle.tell()
         regex_id = re.compile(rb"Query\s*(?:sequence|HMM)?:\s*(.*)")
+        qresult_key = None
 
         # determine flag for hmmsearch
         is_hmmsearch = False
@@ -359,16 +360,24 @@ class Hmmer2TextIndexer(_BaseHmmerTextIndexer):
 
             if line.startswith(self.qresult_start):
                 regx = re.search(regex_id, line)
+                if not regx:
+                    raise ValueError(
+                        "Expected a 'Query sequence:', 'Query HMM:' or 'Query:' line"
+                    )
                 qresult_key = regx.group(1).strip()
                 # qresult start offset is the offset of this line
                 # (starts with the start mark)
                 start_offset = end_offset - len(line)
             elif line.startswith(self.qresult_end):
+                if qresult_key is None:
+                    raise ValueError("Found a '//' line before any 'Query' line")
                 yield qresult_key.decode(), start_offset, 0
                 start_offset = end_offset
             elif not line:
                 # HACK: since hmmsearch can only have one query result
                 if is_hmmsearch:
+                    if qresult_key is None:
+                        raise ValueError("File ended before a 'Query HMM:' line")
                     yield qresult_key.decode(), start_offset, 0
                 break
 
