@@ -7860,6 +7860,45 @@ class GenBankTests(unittest.TestCase):
             "join(3462..3615,3698..3978,4077..4307,4408..4797,4876..5028,5141..5332)",
         )
 
+    def test_bad_loc_wrap_many_lines(self):
+        """A location wrapped over many lines parses quickly."""
+        # The parser used to recount the parentheses in the whole location
+        # for each added line. That took 2.4 seconds for 20,000 lines, four
+        # times as long for each doubling, so 300,000 lines took about nine
+        # minutes. The new code takes well under a second.
+        code = """\
+import sys, warnings
+from Bio.GenBank.Scanner import GenBankScanner
+lines = ["join(1..10"] + [",%d..%d" % (i, i + 5) for i in range(20, 3_000_020, 10)]
+lines.append(")")
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    key, location, qualifiers = GenBankScanner().parse_feature("CDS", lines)
+if location != "".join(lines):
+    sys.exit("wrong location: %r..." % location[:60])
+# The same location wrapped after its commas, the usual layout
+lines = ["join(1..10,"] + ["%d..%d," % (i, i + 5) for i in range(20, 3_000_010, 10)]
+lines.append("3000010..3000015)")
+key, location, qualifiers = GenBankScanner().parse_feature("CDS", lines)
+if location != "".join(lines):
+    sys.exit("wrong trailing-comma location: %r..." % location[:60])
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_negative_location(self):
         """Negative feature locations."""
         path = support.DATA / "GenBank" / "negative_location.gb"
