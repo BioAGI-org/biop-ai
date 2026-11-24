@@ -3226,6 +3226,50 @@ class TruncatedCases(unittest.TestCase):
                     + repr(version_line),
                 )
 
+    def test_blank_target_library(self):
+        """Test a target library line with only spaces after its label."""
+        # In output002.m10 (FASTA 34) line 11 is " vs  NC_002695.faa library";
+        # in output001.m10 (FASTA 35) line 9 is "Library: ...".
+        for filename, n, blank in (
+            ("output002.m10", 10, " vs \n"),
+            ("output002.m10", 10, " vs  \n"),
+            ("output001.m10", 8, "Library: \n"),
+        ):
+            with open(get_file(filename)) as handle:
+                lines = handle.readlines()
+            text = "".join(lines[:n] + [blank] + lines[n + 1 :])
+            with self.subTest(filename=filename, line=blank):
+                with self.assertRaisesRegex(
+                    ValueError, "^Expected the target library line after"
+                ):
+                    list(parse(StringIO(text), FMT))
+
+    def test_cut_near_first_query_line(self):
+        """Test a file that ends just before or after its first query line."""
+        # Line 10 of output002.m10 (FASTA 34) is the first query line,
+        # "  1>>>gi|10955263|ref|NP_052604.1| ... - 107 aa", and line 11 is
+        # its target library line " vs  NC_002695.faa library". In
+        # output001.m10 (FASTA 35), they are lines 8 and 9, "Library: ...".
+        no_query = (
+            "File ended before the first query line '>>>ID DESCRIPTION - LENGTH aa'"
+        )
+        no_target = (
+            "Expected the target library line after the query line"
+            " of query 'gi|10955263|ref|NP_052604.1|', found:\n''"
+        )
+        for filename, n, message in (
+            ("output002.m10", 7, no_query),
+            ("output002.m10", 8, no_query),
+            ("output002.m10", 9, no_query),
+            ("output001.m10", 7, no_query),
+            ("output002.m10", 10, no_target),
+            ("output001.m10", 8, no_target),
+        ):
+            with self.subTest(filename=filename, lines=n):
+                with self.assertRaises(ValueError) as cm:
+                    list(parse(truncated(filename, n), FMT))
+                self.assertEqual(str(cm.exception), message)
+
     def test_cut_before_first_hit(self):
         """Test a query whose alignments end before the first '>>' hit."""
         # In output001.m10, line 24 is ">>>gi|10955263|ref|NP_052604.1|, ...",
