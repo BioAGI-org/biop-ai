@@ -473,6 +473,24 @@ class SeqInterfaceTest(unittest.TestCase):
         self.assertRaises(IndexError, test_seq.__getitem__, -881)
         self.assertRaises(TypeError, test_seq.__getitem__, None)
 
+    def test_record_methods_before_seq_is_read(self):
+        """Check len() etc. on a fresh record, before its .seq is read."""
+        # DBSeqRecord loads its sequence only when .seq is first read.
+        checks = [
+            (len, 880),
+            (lambda r: "AAA" in r, True),
+            (lambda r: bytes(r)[:1], b"A"),
+            (lambda r: next(iter(r)), "A"),
+            (lambda r: r.count("A"), self.item.seq.count("A")),
+            (lambda r: len(SeqRecord(Seq("ACGT")) + r), 884),
+        ]
+        for func, expected in checks:
+            record = self.db.lookup(accession="X62281")
+            self.assertEqual(func(record), expected)
+        # The GenBank writer calls len(record):
+        handle = StringIO()
+        self.assertEqual(SeqIO.write(self.db.values(), handle, "genbank"), 6)
+
     def test_convert(self):
         """Check can turn a Seq object from BioSQL into a Seq or MutableSeq."""
         test_seq = self.item.seq

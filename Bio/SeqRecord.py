@@ -733,9 +733,9 @@ class SeqRecord:
         You may agree that using zip(rec.seq, ...) is more explicit than using
         zip(rec, ...) as shown above.
         """
-        if self._seq is None:
+        if self.seq is None:
             raise ValueError("Seq in SeqRecord is None, can't iterate over it")
-        return iter(self._seq)
+        return iter(self.seq)
 
     def __contains__(self, char: str) -> bool:
         """Implement the 'in' keyword, searches the sequence.
@@ -764,15 +764,15 @@ class SeqRecord:
 
         See also the Seq object's __contains__ method.
         """
-        if self._seq is None:
+        if self.seq is None:
             raise ValueError("Seq in SeqRecord is None, can't convert to bytes")
-        return char in self._seq
+        return char in self.seq
 
     def __bytes__(self) -> bytes:
         """Return the sequence in bytes."""
-        if self._seq is None:
+        if self.seq is None:
             raise ValueError("Seq in SeqRecord is None, can't convert to bytes")
-        return bytes(self._seq)
+        return bytes(self.seq)
 
     def __str__(self) -> str:
         """Return a human readable summary of the record and its annotation (string).
@@ -949,7 +949,7 @@ class SeqRecord:
         >>> len(record.seq)
         309
         """
-        return len(self._seq) if self._seq is not None else 0
+        return len(self.seq) if self.seq is not None else 0
 
     def __lt__(self, other: Any) -> NoReturn:
         """Define the less-than operand (not implemented)."""
@@ -1063,14 +1063,14 @@ class SeqRecord:
         >>> new.dbxrefs = plasmid.dbxrefs[:]
         """
 
-        if self._seq is None:
+        if self.seq is None:
             raise ValueError("Left operand seq=None, can't add")
 
         if not isinstance(other, SeqRecord):
             # Assume it is a string or a Seq.
             # Note can't transfer any per-letter-annotations
             return type(self)(
-                self._seq + other,
+                self.seq + other,
                 id=self.id,
                 name=self.name,
                 description=self.description,
@@ -1079,12 +1079,12 @@ class SeqRecord:
                 dbxrefs=self.dbxrefs[:],
             )
 
-        if other._seq is None:
+        if other.seq is None:
             raise ValueError("Right SeqRecord has seq=None, can't add")
 
         # Adding two SeqRecord objects... must merge annotation
         answer = self._from_validated(
-            self._seq + other._seq, features=self.features[:], dbxrefs=self.dbxrefs[:]
+            self.seq + other.seq, features=self.features[:], dbxrefs=self.dbxrefs[:]
         )
         # Will take all the features and all the db cross refs,
         length = len(self)
@@ -1177,7 +1177,7 @@ class SeqRecord:
         Optional arguments start and end are interpreted as in slice notation.
         This method behaves as the count method of Python strings.
         """
-        if self._seq is None:
+        if self.seq is None:
             raise ValueError(
                 "seq is SeqRecord is None, assign it a sequence before applying count"
             )
