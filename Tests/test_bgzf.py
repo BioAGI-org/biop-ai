@@ -22,6 +22,7 @@ from random import shuffle
 import support
 
 from Bio import bgzf
+from Bio import SeqIO
 
 
 def bgzf_block(data):
@@ -623,6 +624,28 @@ class BgzfTests(unittest.TestCase):
                 load(handle)
             # Nothing past the 25 bytes the block declares was read
             self.assertLessEqual(handle.tell(), 25)
+
+    def test_truncated_block(self):
+        """A block cut short anywhere after its magic is a ValueError."""
+        data = bgzf_block(b"ACGT" * 10)
+        # Cuts land in the fixed header, the BC subfield, the deflate data,
+        # the CRC and the data length.
+        for cut in range(len(bgzf._bgzf_magic), len(data)):
+            for load in (
+                lambda h: bgzf.BgzfReader(fileobj=h),
+                lambda h: list(bgzf.BgzfBlocks(h)),
+            ):
+                with self.subTest(cut=cut):
+                    with self.assertRaisesRegex(ValueError, "^Truncated BGZF block"):
+                        load(io.BytesIO(data[:cut]))
+
+    def test_index_truncated_first_block(self):
+        """SeqIO.index reports a cut first block, not a plain gzip file."""
+        data = bgzf_block(b">a\nACGT\n")
+        with open(self.temp_file, "wb") as handle:
+            handle.write(data[:-1])
+        with self.assertRaisesRegex(ValueError, "^Truncated BGZF block"):
+            SeqIO.index(self.temp_file, "fasta")
 
     def test_block_data_larger_than_65536(self):
         """A block that decompresses to more than 65536 bytes is a ValueError.

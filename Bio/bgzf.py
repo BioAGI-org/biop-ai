@@ -433,6 +433,20 @@ def BgzfBlocks(handle):
         data_start += data_len
 
 
+class _TruncatedBlockError(ValueError):
+    """A BGZF block that ends early: a damaged file, not plain gzip (PRIVATE)."""
+
+
+def _read_exact(handle, size):
+    """Read exactly size bytes from handle, else raise ValueError (PRIVATE)."""
+    data = handle.read(size)
+    if len(data) != size:
+        raise _TruncatedBlockError(
+            f"Truncated BGZF block: expected {size} bytes, got {len(data)}"
+        )
+    return data
+
+
 def _load_bgzf_block(handle, text_mode=False):
     """Load the next BGZF block of compressed data (PRIVATE).
 
@@ -450,15 +464,15 @@ def _load_bgzf_block(handle, text_mode=False):
             % (_bgzf_magic, magic, handle.tell())
         )
     gzip_mod_time, gzip_extra_flags, gzip_os, extra_len = struct.unpack(
-        "<LBBH", handle.read(8)
+        "<LBBH", _read_exact(handle, 8)
     )
 
     block_size = None
     x_len = 0
     while x_len < extra_len:
-        subfield_id = handle.read(2)
-        subfield_len = struct.unpack("<H", handle.read(2))[0]  # uint16_t
-        subfield_data = handle.read(subfield_len)
+        subfield_id = _read_exact(handle, 2)
+        subfield_len = struct.unpack("<H", _read_exact(handle, 2))[0]  # uint16_t
+        subfield_data = _read_exact(handle, subfield_len)
         x_len += subfield_len + 4
         if subfield_id == _bytes_BC:
             if subfield_len != 2:
@@ -482,14 +496,14 @@ def _load_bgzf_block(handle, text_mode=False):
     # A block holds at most 65536 bytes of data, but deflate can expand about
     # 1000 times, so inflate no more than one byte past that. Once that limit
     # is hit, d.flush() would inflate the rest of the input without one.
-    data = d.decompress(handle.read(deflate_size), 65537)
+    data = d.decompress(_read_exact(handle, deflate_size), 65537)
     if len(data) > 65536:
         raise ValueError(
             f"Block of {block_size} bytes decompresses to more than 65536 bytes"
         )
     data += d.flush()
-    expected_crc = handle.read(4)
-    expected_size = struct.unpack("<I", handle.read(4))[0]
+    expected_crc = _read_exact(handle, 4)
+    expected_size = struct.unpack("<I", _read_exact(handle, 4))[0]
     if expected_size != len(data):
         raise RuntimeError("Decompressed to %i, not %i" % (len(data), expected_size))
     # Should cope with a mix of Python platforms...
