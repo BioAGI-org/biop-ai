@@ -125,7 +125,9 @@ class Peaklist:
         Returns
         -------
         resdict : dict
-            Mappings of index nucleus to data line.
+            Mappings of index nucleus to data line, plus the keys "minres"
+            and "maxres" giving the lowest and highest residue number (None
+            if the file has no data lines).
 
         Examples
         --------
@@ -138,25 +140,13 @@ class Peaklist:
         ['8  10.hn   7.663   0.021   0.010   ++   0.000   10.n   118.341   0.324   0.010   +E   0.000   10.n   118.476   0.324   0.010   +E   0.000  0.49840 0.49840 0']
 
         """
-        maxres = -1
-        minres = -1
-
         # Cast the data lines into the xpentry class
         self.dict = {}
         for line in self.data:
             ind = XpkEntry(line, self.datalabels).fields[index + ".L"]
             key = ind.split(".")[0]
 
-            res = int(key)
-
-            if maxres == -1:
-                maxres = res
-            if minres == -1:
-                minres = res
-
-            maxres = max([maxres, res])
-            minres = min([minres, res])
-            res = str(res)
+            res = str(int(key))
 
             try:
                 # Append additional data to list under same key
@@ -165,8 +155,9 @@ class Peaklist:
                 # This is a new residue, start a new list
                 self.dict[res] = [line]  # Use [] for list type
 
-        self.dict["maxres"] = maxres
-        self.dict["minres"] = minres
+        residues = [int(res) for res in self.dict]
+        self.dict["maxres"] = max(residues, default=None)
+        self.dict["minres"] = min(residues, default=None)
 
         return self.dict
 
@@ -269,13 +260,12 @@ def data_table(fn_list, datalabel, keyatom):
 
     dict_list, label_line_list = _read_dicts(fn_list, keyatom)
 
-    # Find global max and min residue numbers
-    minr = dict_list[0]["minres"]
-    maxr = dict_list[0]["maxres"]
-
-    for dictionary in dict_list:
-        maxr = max(maxr, dictionary["maxres"])
-        minr = min(minr, dictionary["minres"])
+    # Find global max and min residue numbers, skipping files with no peaks
+    dicts = [dictionary for dictionary in dict_list if dictionary["minres"] is not None]
+    if not dicts:
+        return outlist
+    minr = min(dictionary["minres"] for dictionary in dicts)
+    maxr = max(dictionary["maxres"] for dictionary in dicts)
 
     if maxr - minr + 1 > _MAX_TABLE_ROWS:
         raise ValueError(
