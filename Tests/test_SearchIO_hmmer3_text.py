@@ -769,6 +769,20 @@ class HmmscanCases(unittest.TestCase):
         self.assertRaises(StopIteration, next, qresults)
         self.assertEqual(1, counter)
 
+    def test_30_hmmscan_001_truncated_hit_table(self):
+        """Parsing hmmscan 3.0 (text_30_hmmscan_001) cut off in a hit table."""
+        # Line 46 is the only hit row of the second query. A file that ends
+        # there used to give that query with no hits, and no error.
+        with open(get_file("text_30_hmmscan_001.out")) as handle:
+            lines = handle.readlines()
+        self.assertIn("Globin   Globin", lines[45])
+        for end in (43, 45, 46, 48):
+            with self.subTest(end=end):
+                qresults = parse(StringIO("".join(lines[:end])), FMT)
+                self.assertEqual("random_s00", next(qresults).id)
+                with self.assertRaisesRegex(ValueError, "ended in the hit table"):
+                    next(qresults)
+
     def test_30_hmmscan_002_padded_query_line(self):
         """Parsing hmmscan 3.0 (text_30_hmmscan_002) after a padded Query line."""
         # The parser skips a "Query:" line without [L=N]. The old id regex

@@ -192,7 +192,10 @@ class Hmmer3TextParser:
         hit_attr_list = []
         while True:
             if not self.line:
-                return []
+                raise ValueError(
+                    f"File ended in the hit table of query {qid!r}, before"
+                    " the 'Domain annotation' or 'No hits detected' line"
+                )
             elif self.line.startswith("  ------ inclusion"):
                 is_included = False
                 self.line = read_forward(self.handle)
