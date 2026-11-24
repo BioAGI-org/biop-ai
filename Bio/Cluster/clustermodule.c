@@ -1918,7 +1918,7 @@ py_treecluster(PyObject* self, PyObject* args, PyObject* keywords)
         ndata = transpose ? nrows : ncols;
         nitems = transpose ? ncols : nrows;
         if (weight.shape[0] != ndata) {
-            PyErr_Format(PyExc_RuntimeError,
+            PyErr_Format(PyExc_ValueError,
                          "weight has incorrect size %zd (expected %d)",
                          weight.shape[0], ndata);
             goto exit;
@@ -2114,13 +2114,13 @@ py_somcluster(PyObject* self, PyObject* args, PyObject* keywords)
     }
     ndata = transpose ? nrows : ncols;
     if (weight.shape[0] != ndata) {
-        PyErr_Format(PyExc_RuntimeError,
+        PyErr_Format(PyExc_ValueError,
                      "weight has incorrect size %zd (expected %d)",
                      weight.shape[0], ndata);
         goto exit;
     }
     if (celldata.nz != ndata) {
-        PyErr_Format(PyExc_RuntimeError,
+        PyErr_Format(PyExc_ValueError,
                     "the celldata array size is not consistent with the data "
                     "(last dimension is %d; expected %d)", celldata.nz, ndata);
         goto exit;
@@ -2273,7 +2273,7 @@ py_clusterdistance(PyObject* self, PyObject* args, PyObject* keywords)
         goto exit;
     }
     if (weight.shape[0] != ndata) {
-        PyErr_Format(PyExc_RuntimeError,
+        PyErr_Format(PyExc_ValueError,
                      "weight has incorrect size %zd (expected %d)",
                      weight.shape[0], ndata);
         goto exit;
