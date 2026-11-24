@@ -257,21 +257,16 @@ def _read_v4(f):
 
     # This is unfortunately undocumented, but it turns out that real data has
     # the record.AlgorithmParameters repeated in the data section, until an
-    # EOF, i.e. b"\x04".
-    char = b"\x00"
-    safetyValve = 10**4
-    for i in range(safetyValve):
+    # EOF, i.e. b"\x04". Give up at the end of the file or after 10,000 bytes.
+    for _ in range(10**4):
         char = f.read(1)
-        # For debugging
-        # print([i for i in char], end="")
-        if char == b"\x04":
+        if char in (b"\x04", b""):
             break
-        if i == safetyValve:
-            raise ParserError(
-                "Parse Error. The parser expects a short, "
-                "undocumented binary blob terminating with "
-                "ASCII EOF, x04"
-            )
+    if char != b"\x04":
+        raise ParserError(
+            "CEL version 4 file has no b'\\x04' ending the short, "
+            "undocumented binary blob after the header"
+        )
 
     # After that there are precisely 15 bytes padded. Again, undocumented.
     padding = f.read(15)
