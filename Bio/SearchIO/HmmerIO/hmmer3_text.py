@@ -35,8 +35,12 @@ _QRE_ID_LEN = re.compile(_QRE_ID_LEN_PTN)
 # regex for hsp validation
 _HRE_VALIDATE = re.compile(r"score:\s(-?\d+\.?\d+)\sbits.*value:\s(.*)")
 # regexes for parsing hsp alignment blocks
-_HRE_ANNOT_LINE = re.compile(r"^(\s+)(.+)\s(\w+)")
-_HRE_ID_LINE = re.compile(r"^(\s+\S+\s+[0-9-]+ )(.+?)(\s+[0-9-]+)")
+# Group 2 starts with \S in the annotation regex and is \S+ in the id regex
+# (an aligned sequence has no whitespace), so that it cannot match the same
+# run of whitespace as the \s+ next to it. Otherwise a long run of spaces
+# takes time quadratic in its length to match or reject.
+_HRE_ANNOT_LINE = re.compile(r"^(\s+)(\S.*)\s(\w+)")
+_HRE_ID_LINE = re.compile(r"^(\s+\S+\s+[0-9-]+ )(\S+)(\s+[0-9-]+)")
 
 
 class Hmmer3TextParser:

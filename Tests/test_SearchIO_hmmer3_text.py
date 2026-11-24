@@ -809,6 +809,54 @@ for qresult in parse(sys.stdin, {FMT!r}):
         self.assertEqual(["random_s00"], [qresult.id for qresult in qresults])
         self.assertEqual(32, qresults[0].seq_len)
 
+    def test_30_hmmscan_003_long_blank_aln_lines(self):
+        """Parsing hmmscan 3.0 (text_30_hmmscan_003) with long runs of spaces."""
+        # The old annotation and id line regexes took time quadratic in a run
+        # of spaces: minutes for these two lines. So the file is parsed in a
+        # child process, where the timeout fails the test.
+        with open(get_file("text_30_hmmscan_003.out")) as handle:
+            text = handle.read()
+        header = "  == domain 1"
+        self.assertIn(header, text)
+        head, tail = text.split(header, 1)
+        header += tail[: tail.index("\n") + 1]
+        tail = tail[tail.index("\n") + 1 :]
+        spaces = " " * 200_000
+        text = head + header + spaces + "\n" + "  x 1 a" + spaces + "\n" + tail
+        code = f"""\
+import sys
+from Bio.SearchIO import parse
+for qresult in parse(sys.stdin, {FMT!r}):
+    for hit in qresult:
+        for hsp in hit:
+            print(hsp.hit.seq, hsp.query.seq)
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                input=text,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("parsing the file took over 60 seconds")
+        expected = "".join(
+            f"{hsp.hit.seq} {hsp.query.seq}\n"
+            for qresult in parse(get_file("text_30_hmmscan_003.out"), FMT)
+            for hit in qresult
+            for hsp in hit
+        )
+        self.assertEqual(expected, result.stdout, result.stderr)
+
     def test_30_hmmscan_003(self):
         """Parsing hmmscan 3.0 (text_30_hmmscan_003)."""
         txt_file = get_file("text_30_hmmscan_003.out")
