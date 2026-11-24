@@ -8,6 +8,7 @@ import functools
 import gc
 import io
 import os
+import shutil
 import subprocess
 import sys
 import sysconfig
@@ -1365,6 +1366,32 @@ class TestCluster(unittest.TestCase):
         self.assertEqual(tree[2].left, -2)
         self.assertEqual(tree[2].right, 3)
         self.assertAlmostEqual(tree[2].distance, 0.9)
+
+    def test_tree_length_matches_lenfunc(self):
+        # len(tree) is the C function PyTree_length, installed as a lenfunc,
+        # which returns Py_ssize_t.  Declared to return int, it gave the right
+        # answer on x86-64 and arm64, so only the compiler can see the
+        # mismatch, as a -Wcast-function-type warning.
+        source = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            os.pardir,
+            "Bio",
+            "Cluster",
+            "clustermodule.c",
+        )
+        compiler = shutil.which("gcc") or shutil.which("clang")
+        if compiler is None or not os.path.exists(source):
+            self.skipTest("needs gcc or clang and the Bio.Cluster C source")
+        include = sysconfig.get_paths()["include"]
+        result = subprocess.run(
+            [compiler, "-fsyntax-only", "-Wcast-function-type", "-I", include, source],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = [line for line in result.stderr.splitlines() if "PyTree_length" in line]
+        self.assertEqual(lines, [])
 
     def test_treecluster(self):
         if TestCluster.module == "Bio.Cluster":
@@ -4352,6 +4379,7 @@ print("OK")
         self.run_child(
             """
 import os
+import shutil
 import tempfile
 import numpy as np
 from Bio.Cluster import _cluster, treecluster
