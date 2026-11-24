@@ -2296,6 +2296,33 @@ class AceReadSortsTags(unittest.TestCase):
         # about 180,000 looks here. Filing the 599 tags by name takes 898.
         self.assertLess(looks, 10 * 2 * nreads)
 
+    def test_footer_tags_duplicate_read_names(self):
+        """Check footer tags go to one read only when read names repeat."""
+        # Three reads share the name r, so the footer tags naming r used
+        # to be copied to each of them: reads x tags list entries.
+        lines = ["AS 1 4", "", "CO c 1 4 0 U", "A", "", "BQ", "1"]
+        for name in ["r", "r", "r", "z"]:
+            lines += ["", f"RD {name} 1 0 0", "A", "", "QA 1 1 1 1"]
+        lines += ["", "RT{"] + ["r x p 1 1 000000:000000"] * 2 + ["}"]
+        lines += ["", "WR{"] + ["r x p 000000:000000"] * 2 + ["}", ""]
+        record = Ace.read(StringIO("\n".join(lines)))
+        reads = record.contigs[0].reads
+        self.assertEqual([len(r.rt or []) for r in reads], [2, 0, 0, 0])
+        self.assertEqual([len(r.wr or []) for r in reads], [2, 0, 0, 0])
+
+    def test_footer_tags_duplicate_contig_names(self):
+        """Check footer CT tags go to one contig only when contig names repeat."""
+        # The parser attaches the footer CT tags to the last contig, d;
+        # the two contigs named c used to get a copy each.
+        lines = ["AS 3 3"]
+        for i, name in enumerate(["c", "c", "d"]):
+            lines += ["", f"CO {name} 1 1 0 U", "A", "", "BQ", "1"]
+            lines += ["", f"RD r{i} 1 0 0", "A", "", "QA 1 1 1 1"]
+        lines += ["", "CT{", "c repeat phrap 1 1 040217:110357", "}"]
+        lines += ["", "CT{", "c repeat phrap 1 1 040217:110357", "}", ""]
+        record = Ace.read(StringIO("\n".join(lines)))
+        self.assertEqual([len(c.ct or []) for c in record.contigs], [2, 0, 0])
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)

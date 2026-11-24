@@ -562,21 +562,24 @@ class ACEFileRecord:
                     take_misplaced(r.rt, r.rd.name, rt_by_name)
                 if r.wr:
                     take_misplaced(r.wr, r.rd.name, wr_by_name)
-        # now sort them into their proper place
+        # now sort them into their proper place. Names are meant to be
+        # unique; if one repeats, its tags go to the first contig or read
+        # with it only, so N reads sharing a name do not get N copies of
+        # its tag list (N x M entries for M tags).
         for c in self.contigs:
             if c.name in ct_by_name:
                 if c.ct is None:
                     c.ct = []
-                c.ct.extend(ct_by_name[c.name])
+                c.ct.extend(ct_by_name.pop(c.name))
             for r in c.reads:
                 if r.rd.name in rt_by_name:
                     if r.rt is None:
                         r.rt = []
-                    r.rt.extend(rt_by_name[r.rd.name])
+                    r.rt.extend(rt_by_name.pop(r.rd.name))
                 if r.rd.name in wr_by_name:
                     if r.wr is None:
                         r.wr = []
-                    r.wr.extend(wr_by_name[r.rd.name])
+                    r.wr.extend(wr_by_name.pop(r.rd.name))
 
 
 def read(handle):
