@@ -339,10 +339,21 @@ def _read_pfm_four_rows(handle):
     record = Record()
 
     name_pattern = re.compile(r"^>\s*(.+)\s*")
+    # A row starts with a number, so a line such as "Gene ..." or "end" is
+    # not taken for a row.
+    # The dot is required inside the optional fraction, so that a run of
+    # digits can be matched only one way; otherwise rejecting a long
+    # malformed count takes time quadratic in its length.
+    number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
     row_pattern_with_nucleotide_letter = re.compile(
-        r"\s*([ACGTacgt])\s*[\[|]*\s*([0-9.\-eE\s]+)\s*\]*\s*"
+        rf"([ACGTacgt])[\s\[|]*({number}.*)"
     )
-    row_pattern_without_nucleotide_letter = re.compile(r"\s*([0-9.\-eE\s]+)\s*")
+    row_pattern_without_nucleotide_letter = re.compile(rf"({number}.*)")
+    # The counts are complete numbers, each ended by a space, a "]", a "#"
+    # or the end of the line. Text after them is ignored, unless it starts
+    # like a number, as a malformed count such as "2e" or "2e0oops" does.
+    counts_pattern = re.compile(rf"(?:{number}(?=[\s\]#]|$)\s*)*")
+    number_start_pattern = re.compile(r"[-+.\deE]")
 
     motif_name = None
     nucleotide_counts = {}
@@ -365,43 +376,38 @@ def _read_pfm_four_rows(handle):
 
         if name_match:
             motif_name = name_match.group(1)
-        elif row_match_with_nucleotide_letter:
+            continue
+        if row_match_with_nucleotide_letter:
             (nucleotide, counts_str) = row_match_with_nucleotide_letter.group(1, 2)
-            current_nucleotide_counts = counts_str.split()
-            nucleotide_counts[nucleotide.upper()] = [
-                float(current_nucleotide_count)
-                for current_nucleotide_count in current_nucleotide_counts
-            ]
-            row_count += 1
-            if row_count == 4:
-                motif = motifs.Motif(alphabet="GATC", counts=nucleotide_counts)
-
-                motif.name = motif_name if motif_name else ""
-
-                record.append(motif)
-
-                motif_name = None
-                nucleotide_counts = {}
-                row_count = 0
+            nucleotide = nucleotide.upper()
         elif row_match_without_nucleotide_letter:
-            current_nucleotide_counts = row_match_without_nucleotide_letter.group(
-                1
-            ).split()
-            nucleotide_counts[nucleotides[row_count]] = [
-                float(current_nucleotide_count)
-                for current_nucleotide_count in current_nucleotide_counts
-            ]
-            row_count += 1
-            if row_count == 4:
-                motif = motifs.Motif(alphabet="GATC", counts=nucleotide_counts)
+            nucleotide = nucleotides[row_count]
+            counts_str = row_match_without_nucleotide_letter.group(1)
+        else:
+            continue
+        if nucleotide in nucleotide_counts:
+            raise ValueError(f"Second row for {nucleotide} in one motif: {line!r}")
+        counts_match = counts_pattern.match(counts_str)
+        if number_start_pattern.match(counts_str, counts_match.end()):
+            raise ValueError(f"Malformed count in row: {line!r}")
+        nucleotide_counts[nucleotide] = [
+            float(current_nucleotide_count)
+            for current_nucleotide_count in counts_match.group().split()
+        ]
+        row_count += 1
+        if row_count == 4:
+            motif = motifs.Motif(alphabet="GATC", counts=nucleotide_counts)
 
-                motif.name = motif_name if motif_name else ""
+            motif.name = motif_name if motif_name else ""
 
-                record.append(motif)
+            record.append(motif)
 
-                motif_name = None
-                nucleotide_counts = {}
-                row_count = 0
+            motif_name = None
+            nucleotide_counts = {}
+            row_count = 0
+
+    if row_count:
+        raise ValueError(f"Last motif has only {row_count} of its 4 rows")
 
     return record
 

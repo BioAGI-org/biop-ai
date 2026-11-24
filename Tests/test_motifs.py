@@ -2932,6 +2932,87 @@ class TestJASPAR(unittest.TestCase):
         )
         self.assertEqual(motif[:-2].consensus, "CAACAAA")
 
+    def test_pfm_four_rows_lines_without_numbers(self):
+        """Lines with no numbers are not counted as rows (issue #422)."""
+        rows = "A 1 2\nC 3 4\nG 5 6\nT 7 8\n"
+        for text in ("Gene FBgn0000210\n" + rows, "A   x\n" + rows, rows + "end\n"):
+            record = motifs.parse(StringIO(text), "pfm-four-rows")
+            self.assertEqual(len(record), 1, text)
+            self.assertEqual(record[0].counts["T"], [7.0, 8.0])
+        record = motifs.parse(StringIO("A x\nC x\nG x\nT x\n"), "pfm-four-rows")
+        self.assertEqual(len(record), 0)
+        for text in ("A 1 2\nA 3 4\nC 1 2\nG 1 2\n", rows + "1 2\n"):
+            with self.assertRaises(ValueError):
+                motifs.parse(StringIO(text), "pfm-four-rows")
+
+    def test_pfm_four_rows_malformed_count(self):
+        """A malformed count raises ValueError naming its row (issue #422)."""
+        rows = "C 3 4\nG 5 6\nT 7 8\n"
+        for row in (
+            "A 1 2e",
+            "A 1 e 2",
+            "A [ 1 2e ]",
+            "A | 1 2e",
+            "1 2e",
+            "A 2e",
+            "A 1 2e0oops",
+            "A [ 1 2foo ]",
+            "1 2e0oops",
+        ):
+            with self.subTest(row=row):
+                with self.assertRaisesRegex(ValueError, "Malformed count in row"):
+                    motifs.parse(StringIO(row + "\n" + rows), "pfm-four-rows")
+        # Words after the counts were ignored before, and still are.
+        for row in (
+            "A 1 2",
+            "A [ 1 2 ]",
+            "A  [1 2]",
+            "A | 1 2",
+            "1 2",
+            "A 1 2e0",
+            "A 1 2 x",
+            "A [1 2] x",
+            "A 1 2# comment",
+        ):
+            with self.subTest(row=row):
+                record = motifs.parse(StringIO(row + "\n" + rows), "pfm-four-rows")
+                self.assertEqual(record[0].counts["A"], [1.0, 2.0])
+
+    def test_pfm_four_rows_long_malformed_count(self):
+        """Test that a long malformed count is rejected in linear time."""
+        # A count pattern that could split one run of digits between two
+        # quantifiers took time quadratic in its length before it failed:
+        # about 6 minutes for this row. Time it in a child process so the
+        # timeout fails the test on such a pattern.
+        code = """\
+from io import StringIO
+from Bio import motifs
+row = "1 " + "1" * 100_000 + "x"
+rows = "".join(f"{letter} {row}\\n" for letter in "ACGT")
+try:
+    motifs.parse(StringIO(rows), "pfm-four-rows")
+except ValueError as error:
+    print(str(error)[:30])
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout, "Malformed count in row: 'A 1 1\n", result.stderr
+        )
+
     def test_sites_parsing(self):
         """Test if Bio.motifs can parse JASPAR-style sites files."""
         with open(support.DATA / "motifs" / "Arnt.sites") as stream:
