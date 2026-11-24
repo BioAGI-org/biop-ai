@@ -5,9 +5,15 @@
 
 """Tests for Chi2 module."""
 
+import os
+import subprocess
+import sys
 import unittest
+from math import erfc
+from math import sqrt
 from unittest import mock
 
+import Bio
 from Bio.Phylo.PAML import chi2
 
 
@@ -74,13 +80,69 @@ class TestContinuedFraction(unittest.TestCase):
 
     def test_overflow(self):
         """An overflow in the continued fraction raises ValueError."""
+        self.abs_calls = 0
         with self.assertRaises(ValueError) as cm:
-            self.cdf_chi2(2e200, 2e200)
+            chi2._incomplete_gamma(1e200, 1e200)
         self.assertEqual(
             str(cm.exception),
             "The continued fraction for the incomplete gamma ratio "
             "overflowed at x=1e+200, alpha=1e+200",
         )
+
+
+class TestHugeDegreesOfFreedom(unittest.TestCase):
+    """cdf_chi2 is accurate, and ends, for huge degrees of freedom."""
+
+    def test_huge_df(self):
+        # At df = stat the p-value is 0.5 less about 0.19 / sqrt(df), and at
+        # two standard deviations above df it is the normal tail, 0.0227501.
+        # Before the fix these gave 0.50137, 1.8e-08 and 1.237.
+        self.assertAlmostEqual(chi2.cdf_chi2(1e12, 1e12), 0.5, places=6)
+        self.assertAlmostEqual(chi2.cdf_chi2(1e16, 1e16), 0.5, places=7)
+        stat = 1e15 + 2 * (2e15) ** 0.5
+        self.assertAlmostEqual(chi2.cdf_chi2(1e15, stat), 0.0227501, places=7)
+        # Above df = 2**53 the series and the continued fraction never ended,
+        # so run these in a child process that is stopped after 60 seconds.
+        code = (
+            "from Bio.Phylo.PAML.chi2 import cdf_chi2\n"
+            "print(cdf_chi2(1e20, 1e20), cdf_chi2(1e20, 1e20 * (1 - 1e-15)))\n"
+        )
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("cdf_chi2 with df = 1e20 did not end within 60 seconds")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        values = result.stdout.split()
+        self.assertEqual(len(values), 2, result.stdout)
+        for value in values:
+            self.assertAlmostEqual(float(value), 0.5, places=5)
+
+    def test_offset_near_mean(self):
+        # At df = 1e30 an offset of one standard deviation is a relative
+        # change of 1.4e-15 in stat, which forming stat / df first rounds
+        # away; the p-value then was 0.17308. At this df the normal limit,
+        # 0.1598282, is exact to many more places than checked here.
+        df = 1e30
+        stat = 1.0000000000000014e30
+        expected = 0.5 * erfc((stat - df) / sqrt(2 * df) / sqrt(2))
+        self.assertAlmostEqual(chi2.cdf_chi2(df, stat), expected, places=7)
+        # The ends of the range still work.
+        self.assertEqual(chi2.cdf_chi2(df, 0.0), 1.0)
+        self.assertEqual(chi2.cdf_chi2(df, 1e-300), 1.0)
+        self.assertEqual(chi2.cdf_chi2(df, float("inf")), 0.0)
 
 
 if __name__ == "__main__":
