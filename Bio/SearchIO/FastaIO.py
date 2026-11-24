@@ -383,6 +383,11 @@ class FastaM10Parser:
                     line = self.handle.readline()
 
                 elif qres_state == state_QRES_END:
+                    if qresult is None:
+                        raise ValueError(
+                            "File ended before the first query line"
+                            " '>>>ID DESCRIPTION - LENGTH aa'"
+                        )
                     yield _set_qresult_hits(qresult, hit_rows)
                     break
 
@@ -403,7 +408,13 @@ class FastaM10Parser:
                     qresult.seq_len = int(seq_len)
                     # get target from the next line
                     line = self.handle.readline()
-                    qresult.target = [x for x in line.split(" ") if x][1].strip()
+                    fields = [x for x in line.split(" ") if x]
+                    if len(fields) < 2 or not fields[1].strip():
+                        raise ValueError(
+                            "Expected the target library line after the query line"
+                            f" of query {query_id!r}, found:\n{line!r}"
+                        )
+                    qresult.target = fields[1].strip()
                     if desc is not None:
                         qresult.description = desc
                     # set values from preamble
