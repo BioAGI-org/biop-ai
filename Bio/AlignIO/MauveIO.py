@@ -256,7 +256,7 @@ class MauveIterator(AlignmentIterator):
                 if not m:
                     m = XMFA_HEADER_REGEX.match(line)
                     if not m:
-                        raise ValueError("Malformed header line: %s", line)
+                        raise ValueError("Malformed header line: %s" % line)
 
                 parsed_id = m.group("id")
                 parsed_data = {}

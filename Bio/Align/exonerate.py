@@ -206,7 +206,8 @@ class AlignmentWriter(interfaces.AlignmentWriter):
                             )
                     else:
                         raise ValueError(
-                            "Unexpected steps target %d, query %s for operation 'M'"
+                            "Unexpected steps target %d, query %d for operation 'M'"
+                            % (target_step, query_step)
                         )
                 elif operation == "5":  # 5' splice site
                     if query_step == 0:

@@ -113,6 +113,12 @@ class TestMauveIO(unittest.TestCase):
                 self.assertEqual(r1.id, r2.id)
                 self.assertEqual(r1.seq, r2.seq)
 
+    def test_malformed_header(self):
+        """A malformed header line is named in the error message."""
+        handle = StringIO("#FormatVersion Mauve1\n> nonsense\nACGT\n=\n")
+        with self.assertRaisesRegex(ValueError, "^Malformed header line: > nonsense$"):
+            list(MauveIterator(handle))
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
