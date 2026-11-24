@@ -5,7 +5,11 @@
 """Test the Blast XML parser."""
 
 import io
+import os
+import socket
+import subprocess
 import sys
+import threading
 import unittest
 import urllib.request
 import warnings
@@ -14,6 +18,7 @@ from unittest import mock
 import numpy as np
 import support
 
+import Bio
 from Bio import Blast
 from Bio import BiopythonDeprecationWarning
 from Bio import StreamModeError
@@ -15397,6 +15402,102 @@ class TestBlastMalformedInput(unittest.TestCase):
                     [url_base, url_base],
                 )
                 self.assertIs(urllib.request._opener, previous)
+
+    def run_qblast_with_timeout(self, serve):
+        """Run qblast with timeout=0.5 in a child process against serve.
+
+        serve(server) answers on a listening socket in a thread of this
+        process. qblast runs in a child process, so a qblast that ignores its
+        timeout is killed after 60 seconds instead of hanging the test run.
+        Return the name of the exception qblast raised.
+        """
+        server = socket.create_server(("127.0.0.1", 0))
+        # Bound every wait in the server thread, so the thread always ends.
+        server.settimeout(60)
+        url_base = "http://127.0.0.1:%d/Blast.cgi" % server.getsockname()[1]
+        code = f"""\
+from unittest import mock
+from Bio import Blast
+with mock.patch.object(Blast.time, "sleep"):
+    try:
+        Blast.qblast("blastn", "nt", "ACGT", url_base={url_base!r}, timeout=0.5)
+    except Exception as exception:
+        print(type(exception).__name__)
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        # Talk to the local server directly, even if a proxy is configured
+        for name in ("no_proxy", "NO_PROXY"):
+            env[name] = "127.0.0.1"
+        thread = threading.Thread(target=serve, args=(server,), daemon=True)
+        thread.start()
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("qblast was still waiting for the server after 60 seconds")
+        finally:
+            server.close()
+            thread.join(15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.strip()
+
+    @staticmethod
+    def read_until_hangup(connection):
+        """Read a request until the client hangs up, for at most 10 seconds.
+
+        A qblast that ignores its timeout is then disconnected after 10
+        seconds, so the test fails instead of waiting for the child's 60.
+        """
+        connection.settimeout(10)
+        try:
+            while connection.recv(65536):
+                pass
+        except TimeoutError:
+            pass
+        connection.close()
+
+    def test_qblast_timeout(self):
+        """A server that stops answering must not block qblast forever."""
+        connections = []
+
+        def serve(server):
+            # Answer the submit request with a reference page, then accept
+            # the poll request and never reply to it.
+            connection, address = server.accept()
+            connections.append(connection)
+            connection.sendall(b"HTTP/1.0 200 OK\r\n\r\nRID = ABC123\nRTOE = 11\n")
+            connection.shutdown(socket.SHUT_WR)
+            self.read_until_hangup(connection)
+            connection, address = server.accept()
+            connections.append(connection)
+            self.read_until_hangup(connection)
+
+        self.assertEqual(self.run_qblast_with_timeout(serve), "TimeoutError")
+        self.assertEqual(len(connections), 2)
+
+    def test_qblast_timeout_on_submit(self):
+        """A server that never answers the submit request must not block qblast."""
+        connections = []
+
+        def serve(server):
+            # Accept the submit request and never reply to it.
+            connection, address = server.accept()
+            connections.append(connection)
+            self.read_until_hangup(connection)
+
+        self.assertEqual(self.run_qblast_with_timeout(serve), "TimeoutError")
+        self.assertEqual(len(connections), 1)
 
 
 if __name__ == "__main__":
