@@ -163,6 +163,10 @@ def dssp_dict_from_pdb_file(in_file, DSSP="dssp", dssp_version="3.9.9"):
         print(dssp_dict['A',(' ', 1, ' ')])
 
     """
+    # A relative name starting with "-" would be read as an option by DSSP.
+    in_file = os.fsdecode(in_file)
+    if in_file.startswith("-"):
+        in_file = os.path.join(os.curdir, in_file)
     # Using universal newlines is important on Python 3, this
     # gives text handles rather than bytes handles.
     # Newer version of DSSP executable is named 'mkdssp',

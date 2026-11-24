@@ -15,10 +15,12 @@
 
 """Unit tests for the Bio.PDB.DSSP submodule."""
 
+import os
 import re
 import subprocess
 import unittest
 import warnings
+from unittest import mock
 
 try:
     import numpy as np  # noqa: F401
@@ -36,6 +38,7 @@ from Bio.PDB import DSSP
 from Bio.PDB import make_dssp_dict
 from Bio.PDB import MMCIFParser
 from Bio.PDB import PDBParser
+from Bio.PDB.DSSP import dssp_dict_from_pdb_file
 from Bio.PDB.DSSP import ss_to_index
 
 VERSION_2_2_0 = (2, 2, 0)
@@ -155,6 +158,21 @@ class DSSP_test(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "must be PDB, mmCIF or DSSP, not XYZ"):
             DSSP(structure[0], support.DATA / "PDB" / "2BEG.xyz")
+
+    def test_input_file_starting_with_dash(self):
+        """A file name starting with '-' is not passed to DSSP as an option."""
+        output = (support.DATA / "PDB" / "2BEG.dssp").read_text()
+        for dssp_version, options in (
+            ("3.9.9", []),
+            ("4.4.0", ["--output-format=dssp"]),
+        ):
+            with mock.patch("subprocess.Popen") as popen:
+                popen.return_value.communicate.return_value = (output, "")
+                dssp_dict_from_pdb_file("-x.pdb", "fakedssp", dssp_version)
+            self.assertEqual(
+                popen.call_args.args[0],
+                ["fakedssp", *options, os.path.join(os.curdir, "-x.pdb")],
+            )
 
     def test_ss_to_index_unknown_symbol(self):
         """An unknown secondary structure symbol raises ValueError."""
