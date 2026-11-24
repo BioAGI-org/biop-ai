@@ -908,13 +908,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     parent = node.parent
                     if parent is None:
                         return
-                    for index, child in enumerate(parent.children):
-                        if id(node) == id(child):
-                            break
-                    else:
-                        raise RuntimeError("Failed to find child node")
                     try:
-                        node = parent.children[index + 1]
+                        node = parent.children[node.index + 1]
                     except IndexError:
                         node = parent
                     else:
@@ -998,13 +993,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 parent = node.parent
                 if parent is None:
                     return
-                for index, child in enumerate(parent.children):
-                    if id(node) == id(child):
-                        break
-                else:
-                    raise RuntimeError("Failed to find child node")
                 try:
-                    node = parent.children[index + 1]
+                    node = parent.children[node.index + 1]
                 except IndexError:
                     node = parent
                 else:
@@ -1890,6 +1880,7 @@ class _RTreeFormatter:
             "NonLeaf",
             [
                 "parent",
+                "index",
                 "children",
                 "startChromIx",
                 "startBase",
@@ -1903,6 +1894,7 @@ class _RTreeFormatter:
             "Leaf",
             [
                 "parent",
+                "index",
                 "startChromIx",
                 "startBase",
                 "endChromIx",
@@ -1934,7 +1926,7 @@ class _RTreeFormatter:
         formatter_nonleaf = self.formatter_nonleaf
         formatter_leaf = self.formatter_leaf
 
-        root = NonLeaf(None, [], startChromIx, startBase, endChromIx, endBase, None)
+        root = NonLeaf(None, 0, [], startChromIx, startBase, endChromIx, endBase, None)
         node = root
         itemsCounted = 0
         # Offsets of the nodes reached so far, starting with the root. In a
@@ -1973,6 +1965,7 @@ class _RTreeFormatter:
                     ) = formatter_leaf.unpack(data)
                     child = Leaf(
                         node,
+                        i,
                         startChromIx,
                         startBase,
                         endChromIx,
@@ -1991,13 +1984,8 @@ class _RTreeFormatter:
                                 f"(as stated in its header), found {itemsCounted}"
                             )
                         return node
-                    for index, child in enumerate(parent.children):
-                        if id(node) == id(child):
-                            break
-                    else:
-                        raise RuntimeError("Failed to find child node")
                     try:
-                        node = parent.children[index + 1]
+                        node = parent.children[node.index + 1]
                     except IndexError:
                         node = parent
                     else:
@@ -2020,6 +2008,7 @@ class _RTreeFormatter:
                     ) = formatter_nonleaf.unpack(data)
                     child = NonLeaf(
                         node,
+                        i,
                         [],
                         startChromIx,
                         startBase,
