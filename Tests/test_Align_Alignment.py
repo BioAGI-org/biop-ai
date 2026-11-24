@@ -9,6 +9,7 @@ import inspect
 import os
 import platform
 import re
+import struct
 import subprocess
 import sys
 import sysconfig
@@ -89,6 +90,33 @@ class TestPrintedAlignmentParser(unittest.TestCase):
             parser.feed(b"ACGT--")
         self.assertEqual(parser.feed(b"A-GT-"), (5, b"AGT"))
         self.assertEqual(parser.shape, (2, 5))
+
+    @unittest.skipUnless(
+        platform.python_implementation() == "CPython", "needs tracemalloc"
+    )
+    def test_feed_row_pointer_memory(self):
+        """Each line costs one row pointer, not two.
+
+        A one-base line keeps one position in its row plus one pointer to
+        that row. feed used to size the pointer array with the row capacity
+        (2) as an extra factor, so it held three pointers per line.
+        """
+        import tracemalloc
+
+        pointer = struct.calcsize("P")
+        n = 1000
+        if tracemalloc.is_tracing():
+            self.skipTest("tracemalloc was already tracing")
+        parser = _aligncore.PrintedAlignmentParser()
+        tracemalloc.start()
+        try:
+            before = tracemalloc.get_traced_memory()[0]
+            for _ in range(n):
+                parser.feed(b"A")
+            used = tracemalloc.get_traced_memory()[0] - before
+        finally:
+            tracemalloc.stop()
+        self.assertLess(used / n, 2.5 * pointer)
 
     def test_zero_length_lines(self):
         """A zero-length line stores no positions, so none may be read back.
