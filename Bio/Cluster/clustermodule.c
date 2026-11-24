@@ -1411,11 +1411,11 @@ static PyTypeObject PyTreeType = {
  * Python API, and allocates in the raw memory domain (see cluster.c). It
  * touches only buffers whose exports the function holds until the call
  * returns, and memory the function allocated itself. The index arrays it
- * reads are private copies (clustercentroids, clusterdistance) or arrays
- * the Python layer in __init__.py has just created (kcluster, kmedoids).
- * Another thread may still write the caller's data, mask, weight or
- * distance values meanwhile. The results are then unspecified, but the
- * library never uses those values as indices or sizes.
+ * reads are private copies made by copy_indices (clustercentroids,
+ * clusterdistance, kcluster, kmedoids). Another thread may still write the
+ * caller's data, mask, weight or distance values meanwhile. The results
+ * are then unspecified, but the library never uses those values as
+ * indices or sizes.
  *
  * Tree.sort and Tree.cut keep the GIL: they run in the tree's critical
  * section, which releasing the GIL would suspend. */
@@ -1502,6 +1502,7 @@ py_kcluster(PyObject* self, PyObject* args, PyObject* keywords)
     char method = 'a';
     char dist = 'e';
     Py_buffer clusterid = {0};
+    int* ids = NULL;
     double error;
     int ifound = 0;
     PyObject* rng_seed_obj;
@@ -1571,8 +1572,12 @@ py_kcluster(PyObject* self, PyObject* args, PyObject* keywords)
         PyErr_SetString(PyExc_RuntimeError, "expected a non-negative integer");
         goto exit;
     }
-    else if (npass == 0) {
-        int n = check_clusterid(clusterid.buf, clusterid.shape[0], nitems);
+    /* Check and cluster a copy of clusterid that no other thread can change
+     * in between; the kernel uses it as its working array. */
+    ids = copy_indices(&clusterid);
+    if (!ids) goto exit;
+    if (npass == 0) {
+        int n = check_clusterid(ids, clusterid.shape[0], nitems);
         if (n == 0) goto exit;
         if (n != nclusters) {
             PyErr_SetString(PyExc_ValueError,
@@ -1597,16 +1602,18 @@ py_kcluster(PyObject* self, PyObject* args, PyObject* keywords)
              npass,
              method,
              dist,
-             clusterid.buf,
+             ids,
              &error,
              &ifound,
              rng_seed);
     Py_END_ALLOW_THREADS
+    if (ifound > 0) memcpy(clusterid.buf, ids, clusterid.len);
 exit:
     data_converter(NULL, &data);
     mask_converter(NULL, &mask);
     vector_converter(NULL, &weight);
     index_converter(NULL, &clusterid);
+    PyMem_Free(ids);
     if (ifound == -1) return PyErr_NoMemory();
     if (ifound) return Py_BuildValue("di", error, ifound);
     return NULL;
@@ -1676,6 +1683,7 @@ py_kmedoids(PyObject* self, PyObject* args, PyObject* keywords)
     int nclusters = 2;
     Distancematrix distances = {0};
     Py_buffer clusterid = {0};
+    int* ids = NULL;
     int npass = 1;
     double error;
     int ifound = -2;
@@ -1701,9 +1709,12 @@ py_kmedoids(PyObject* self, PyObject* args, PyObject* keywords)
         PyErr_SetString(PyExc_RuntimeError, "expected a non-negative integer");
         goto exit;
     }
-    else if (npass == 0) {
-        int n = check_clusterid(clusterid.buf, clusterid.shape[0],
-                                distances.n);
+    /* Check and cluster a copy of clusterid that no other thread can change
+     * in between; the kernel uses it as its working array. */
+    ids = copy_indices(&clusterid);
+    if (!ids) goto exit;
+    if (npass == 0) {
+        int n = check_clusterid(ids, clusterid.shape[0], distances.n);
         if (n == 0) goto exit;
         if (n != nclusters) {
             PyErr_SetString(PyExc_RuntimeError,
@@ -1733,15 +1744,17 @@ py_kmedoids(PyObject* self, PyObject* args, PyObject* keywords)
              distances.n,
              distances.values,
              npass,
-             clusterid.buf,
+             ids,
              &error,
              &ifound,
              rng_seed);
     Py_END_ALLOW_THREADS
+    if (ifound > 0) memcpy(clusterid.buf, ids, clusterid.len);
 
 exit:
     distancematrix_converter(NULL, &distances);
     index_converter(NULL, &clusterid);
+    PyMem_Free(ids);
     switch (ifound) {
         case -2:
             return NULL;

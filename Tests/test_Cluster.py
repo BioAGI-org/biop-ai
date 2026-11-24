@@ -3850,6 +3850,56 @@ print("OK")
 """
 
 
+# Child process for TestClusterThreads.test_changing_clusterid_while_clustering.
+# kcluster and kmedoids in the private _cluster module cluster in the
+# caller's clusterid array, while another thread keeps overwriting it with
+# cluster numbers far out of range. The kernels run without the GIL, so
+# this races on builds with the GIL too.
+CHANGING_CLUSTERID = """\
+from threading import Event, Thread
+
+import numpy as np
+
+from Bio.Cluster import _cluster, distancematrix
+
+data = np.random.default_rng(0).normal(size=(400, 10))
+mask = np.ones(data.shape, dtype=np.intc)
+weight = np.ones(10)
+distance = distancematrix(data)
+valid = np.arange(400, dtype=np.intc) % 5
+clusterid = valid.copy()
+done = Event()
+
+
+def overwrite():
+    while not done.is_set():
+        clusterid[:] = 2**30
+        clusterid[:] = -(2**30)
+
+
+writer = Thread(target=overwrite)
+writer.start()
+try:
+    for npass in (0, 1, 2):
+        for _ in range(20):
+            for call in (
+                lambda: _cluster.kcluster(
+                    data, 5, mask, weight, 0, npass, "a", "e", clusterid, 0
+                ),
+                lambda: _cluster.kmedoids(distance, 5, npass, clusterid, 0),
+            ):
+                clusterid[:] = valid
+                try:
+                    call()
+                except (RuntimeError, ValueError):
+                    pass  # the array was invalid when checked; that is fine
+finally:
+    done.set()
+    writer.join()
+print("OK")
+"""
+
+
 class TestClusterThreads(unittest.TestCase):
     """Tests of Bio.Cluster called from several threads at once."""
 
@@ -3995,6 +4045,15 @@ class TestClusterThreads(unittest.TestCase):
         used from a private copy, so they cannot go out of bounds.
         """
         self.run_child(CHANGING_INDEX_ARRAYS)
+
+    def test_changing_clusterid_while_clustering(self):
+        """Check another thread changing clusterid cannot crash kcluster.
+
+        kcluster and kmedoids check and cluster a private copy of
+        clusterid, and copy the result back, so the values they use as
+        indices cannot go out of bounds, for any npass.
+        """
+        self.run_child(CHANGING_CLUSTERID)
 
 
 class TestClusterCrashes(unittest.TestCase):
