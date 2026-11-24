@@ -95,7 +95,13 @@ Point_init(Point *self, PyObject *args, PyObject *kwds)
 static PyObject*
 Point_repr(Point* self)
 {
-    return PyUnicode_FromFormat("%ld: %g", self->index, self->radius);
+    PyObject* result;
+    char* radius = PyOS_double_to_string(self->radius, 'r', 0,
+                                         Py_DTSF_ADD_DOT_0, NULL);
+    if (!radius) return NULL;
+    result = PyUnicode_FromFormat("%zd: %s", self->index, radius);
+    PyMem_Free(radius);
+    return result;
 }
 
 static char Point_index__doc__[] =
@@ -165,8 +171,14 @@ Neighbor_init(Neighbor *self, PyObject *args, PyObject *kwds)
 static PyObject*
 Neighbor_repr(Neighbor* self)
 {
-    return PyUnicode_FromFormat("(%ld, %ld): %g",
-                                self->index1, self->index2, self->radius);
+    PyObject* result;
+    char* radius = PyOS_double_to_string(self->radius, 'r', 0,
+                                         Py_DTSF_ADD_DOT_0, NULL);
+    if (!radius) return NULL;
+    result = PyUnicode_FromFormat("(%zd, %zd): %s",
+                                  self->index1, self->index2, radius);
+    PyMem_Free(radius);
+    return result;
 }
 
 static char Neighbor_index1__doc__[] =
