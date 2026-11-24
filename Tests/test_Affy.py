@@ -431,14 +431,14 @@ class AffyTest(unittest.TestCase):
                 tracemalloc.stop()
         self.assertLess(peak, 2**20)
 
-    @unittest.skipIf(tracemalloc is None, "tracemalloc is not available")
     def testAffy3CellsInOrderMemory(self):
         # Turning the stored cell lines into arrays deduplicated them with
         # np.unique and fancy indexing, about 41 bytes per cell, even in the
         # usual file where each cell is listed once and in order. Those lines
-        # now become the arrays without a copy.
-        if tracemalloc.is_tracing():
-            self.skipTest("tracemalloc is already tracing")
+        # now become the arrays without a copy. The arrays are checked on
+        # every runtime; the memory is measured only where tracemalloc exists
+        # (not on PyPy) and is not already tracing.
+        measure = tracemalloc is not None and not tracemalloc.is_tracing()
         with open(self.affy3) as f:
             data = f.read()
         n = 200
@@ -451,6 +451,9 @@ class AffyTest(unittest.TestCase):
         read_cells = CelFile._read_v3_cells
 
         def traced_read_cells(record, cells):
+            if not measure:
+                read_cells(record, cells)
+                return
             tracemalloc.start()
             try:
                 read_cells(record, cells)
@@ -473,8 +476,9 @@ class AffyTest(unittest.TestCase):
                 self.assertEqual(record.intensities.dtype, float)
                 self.assertEqual(record.stdevs.dtype, float)
                 self.assertEqual(record.npix.dtype, int)
-        # In order: less than one array of n * n floats
-        self.assertLess(peaks[0], 8 * n * n)
+        if measure:
+            # In order: less than one array of n * n floats
+            self.assertLess(peaks[0], 8 * n * n)
 
     def readV4Example(self, **changes):
         """Return the version 4 example file with some of its sizes changed.
