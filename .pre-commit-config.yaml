@@ -32,7 +32,7 @@ repos:
     -   id: ruff-check
         name: ruff S101 (parser packages)
         args: [--select=S101]
-        files: ^Bio/(Align|AlignIO|Blast|SearchIO|SeqIO)/
+        files: ^Bio/(Align|AlignIO|Blast|GenBank|SearchIO|SeqIO)/
         exclude: ^Bio/(Align/(substitution_matrices/|analysis\.py)|Blast/NCBI(XML|WWW)\.py)
 -   repo: https://github.com/psf/black-pre-commit-mirror
     rev: 24.10.0

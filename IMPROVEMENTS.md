@@ -239,16 +239,15 @@ for the structural fix.
 > #159 `Bio.SeqIO`, #160 `Bio.AlignIO`, and #165 the rest of `Bio`,
 > including `Bio/GenBank/Scanner.py:479`. A second `ruff-check` hook,
 > `ruff S101 (parser packages)`, now fails any new `assert` in
-> `Bio/{Align,AlignIO,Blast,SearchIO,SeqIO}/`. It skips
+> `Bio/{Align,AlignIO,Blast,GenBank,SearchIO,SeqIO}/`. It skips
 > `Bio/Align/substitution_matrices/`, `Bio/Align/analysis.py` and the
-> deprecated `Bio/Blast/NCBI{XML,WWW}.py`. The 132 kept asserts there carry
-> `# noqa: S101`.
+> deprecated `Bio/Blast/NCBI{XML,WWW}.py`. The 147 kept asserts there carry
+> `# noqa: S101`, 15 of them in `Bio/GenBank/` (#377).
 >
 > Open:
 >
-> - **GenBank is not guarded yet.** Extending the hook's `files` to
->   `Bio/GenBank/` needs `# noqa: S101` on its 15 kept asserts (#165 lists
->   them); the rest of `Bio/` could follow.
+> - **The rest of `Bio/` is not guarded.** The hook could be extended
+>   beyond the parser packages.
 > - **One kept assert is not an invariant.** #156 kept
 >   `assert gap_len > 0` in `Bio/SearchIO/InfernalIO/infernal_text.py` on
 >   purpose. Infernal may print `*[ 0]*` on the hit line, which is valid.
@@ -2866,10 +2865,10 @@ on 2026-10-13 as a segfault or an abort; the other two were read.
   editing `Bio/Cluster/cluster.h`, `_arraycore.h` or
   `Bio/_freethreading.h` does not rebuild the extensions that include
   them. (PR #173)
-- The ruff S101 hook's file pattern leaves out `Bio/GenBank/`, which needs
-  `noqa` on its 15 kept asserts first. And if RUF100 is ever turned on in
-  the main ruff hook, which runs with `--fix`, it would strip all 132
-  `noqa: S101` comments; merge the two hooks' rules then. (PR #180)
+- If RUF100 is ever turned on in the main ruff hook, which runs with
+  `--fix`, it would strip all 147 `noqa: S101` comments; merge the two
+  hooks' rules then. (PR #180; `Bio/GenBank/` added to the S101 hook in
+  #377.)
 - `Bio/__init__.py:128-140`: every editable install warns "importing from
   inside the source tree", because it looks for a `biopython.egg-link`
   that PEP 660 installs do not create. (PR #193) *(Fixed upstream by
