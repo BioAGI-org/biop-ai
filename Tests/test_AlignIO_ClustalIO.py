@@ -251,6 +251,24 @@ class TestClustalIO(unittest.TestCase):
         """Checking empty file."""
         self.assertEqual(0, len(list(ClustalIterator(StringIO("")))))
 
+    def test_header_only(self):
+        """A header line with no alignment after it gives no alignments."""
+
+        class Handle(StringIO):
+            # Fail instead of hanging if the parser keeps reading at end of file
+            calls = 0
+
+            def readline(self):
+                self.calls += 1
+                if self.calls > 10:
+                    raise RuntimeError("still reading after end of file")
+                return super().readline()
+
+        header = "CLUSTAL W (1.83) multiple sequence alignment\n"
+        for data in (header, header + "\n\n", header + "\n \n\t\n"):
+            with self.subTest(data=data):
+                self.assertEqual([], list(ClustalIterator(Handle(data))))
+
     def test_blank_first_line(self):
         """A blank or whitespace-only first line is not a CLUSTAL header."""
         for data in ("\n" + aln_example1, "   \n" + aln_example1, " \t \n"):
