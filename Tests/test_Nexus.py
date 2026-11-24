@@ -2071,6 +2071,41 @@ class TestNcharBound(unittest.TestCase):
         self.assertEqual(nexus.charlabels, {0: "a", 3: "d"})
         self.assertEqual(str(nexus.matrix["t2"]), "ACGA")
 
+    @unittest.skipIf(platform.python_implementation() == "PyPy", "no tracemalloc")
+    def test_repeated_range_and_name(self):
+        """A range or set name repeated in a charset is stored only once."""
+        # the repeats were all expanded into one list before duplicates were
+        # removed, so memory grew with repeats times nchar: about 16 MB and
+        # 4 MB for these 5 KB and 2 KB inputs (a 36 KB file needed 766 MiB)
+        import tracemalloc
+
+        head = (
+            "#NEXUS\nbegin data;\ndimensions ntax=1 nchar=1000;\n"
+            f"format datatype=dna;\nmatrix\nt1 {'A' * 1000}\n;\nend;\n"
+            "begin sets;\n"
+        )
+        for sets, charsets in (
+            ("charset c = " + "1-1000 " * 500 + ";\n", {"c": list(range(1000))}),
+            (
+                "charset c = 1-1000;\ncharset d = " + "c " * 500 + ";\n",
+                {"c": list(range(1000)), "d": list(range(1000))},
+            ),
+        ):
+            with self.subTest(sets=sets[:20]):
+                was_tracing = tracemalloc.is_tracing()
+                if not was_tracing:
+                    tracemalloc.start()
+                try:
+                    tracemalloc.reset_peak()
+                    before = tracemalloc.get_traced_memory()[0]
+                    nexus = Nexus.Nexus(head + sets + "end;\n")
+                    peak = tracemalloc.get_traced_memory()[1] - before
+                finally:
+                    if not was_tracing:
+                        tracemalloc.stop()
+                self.assertEqual(nexus.charsets, charsets)
+                self.assertLess(peak, 1_000_000)
+
 
 def parse_in_child(testcase, code, *args):
     """Run code in a child Python that imports this checkout's Bio.

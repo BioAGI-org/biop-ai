@@ -1311,12 +1311,12 @@ class Nexus:
     def _taxset(self, options):
         """Create unique taxset (PRIVATE)."""
         name, taxa = self._get_indices(options, set_type=TAXSET)
-        self.taxsets[name] = _make_unique(taxa)
+        self.taxsets[name] = sorted(taxa)
 
     def _charset(self, options):
         """Create unique character set (PRIVATE)."""
         name, sites = self._get_indices(options, set_type=CHARSET)
-        self.charsets[name] = _make_unique(sites)
+        self.charsets[name] = sorted(sites)
 
     def _taxpartition(self, options):
         """Collect taxpartition from a NEXUS file (PRIVATE)."""
@@ -1336,7 +1336,7 @@ class Nexus:
                 subname, subindices = self._get_indices(
                     sub, set_type=TAXSET, separator=":"
                 )
-                taxpartition[subname] = _make_unique(subindices)
+                taxpartition[subname] = sorted(subindices)
                 sub = ""
                 if w is None:
                     break
@@ -1382,7 +1382,7 @@ class Nexus:
                 subname, subindices = self._get_indices(
                     sub, set_type=CHARSET, separator=":"
                 )
-                charpartition[subname] = _make_unique(subindices)
+                charpartition[subname] = sorted(subindices)
                 sub = ""
                 if w is None:
                     break
@@ -1396,7 +1396,7 @@ class Nexus:
         r"""Parse the taxset/charset specification (PRIVATE).
 
         e.g. '1 2   3 - 5 dog cat   10 - 20 \\ 3'
-        --> [0,1,2,3,4,'dog','cat',9,12,15,18]
+        --> {0,1,2,3,4,'dog','cat',9,12,15,18}
         """
         opts = CharBuffer(options)
         name = self._name_n_vector(opts, separator=separator)
@@ -1430,10 +1430,13 @@ class Nexus:
     def _parse_list(self, options_buffer, set_type):
         r"""Parse a NEXUS list (PRIVATE).
 
-        e.g. [1, 2, 4-8\\2, dog, cat] --> [1,2,4,6,8,17,21],
+        e.g. [1, 2, 4-8\\2, dog, cat] --> {1,2,4,6,8,17,21},
         (assuming dog is taxon no. 17 and cat is taxon no. 21).
+
+        The result is a set, so that a range or a set name repeated in the
+        list is not stored again for each repeat.
         """
-        plain_list = []
+        items = set()
         if options_buffer.peek_nonwhitespace():
             try:
                 # capture all possible exceptions and treat them as formatting
@@ -1459,7 +1462,7 @@ class Nexus:
                                 step = int(
                                     options_buffer.next_word()
                                 )  # get backslash and step
-                            plain_list.extend(range(start, end + 1, step))
+                            items.update(range(start, end + 1, step))
                         else:
                             if isinstance(start, list) or isinstance(end, list):
                                 raise NexusError(
@@ -1469,19 +1472,19 @@ class Nexus:
                             start = self.taxlabels.index(start)
                             end = self.taxlabels.index(end)
                             taxrange = self.taxlabels[start : end + 1]
-                            plain_list.extend(taxrange)
+                            items.update(taxrange)
                     else:
                         if isinstance(start, list):
                             # start was the name of charset or taxset
-                            plain_list.extend(start)
+                            items.update(start)
                         else:
                             # start was an ordinary identifier
-                            plain_list.append(start)
+                            items.add(start)
             except NexusError:
                 raise
             except Exception:  # FIXME - this seems unwise
                 return None
-        return plain_list
+        return items
 
     def _resolve(self, identifier, set_type=None):
         """Translate identifier in list into character/taxon index (PRIVATE).
