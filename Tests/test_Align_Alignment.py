@@ -4080,6 +4080,40 @@ else:
         self.assertEqual(counts.identities, 1)
 
 
+class TestAlignmentCountsNumpySequences(unittest.TestCase):
+    """Count sequences given as numpy arrays of letter indices."""
+
+    def test_unsupported_arrays(self):
+        """Check an array the C code cannot read raises, not counts nothing."""
+
+        def unaligned(array):
+            # An int32 copy of array starting one byte into a buffer.
+            buffer = np.zeros(array.nbytes + 1, dtype=np.uint8)
+            copy = buffer[1:].view(np.int32)
+            copy[:] = array
+            self.assertFalse(copy.flags.aligned)
+            self.assertTrue(copy.flags.c_contiguous)
+            return copy
+
+        target = np.array([0, 1, 2, 3], dtype=np.int32)
+        query = np.array([0, 1, 2, 0], dtype=np.int32)
+        coordinates = np.array([[0, 4], [0, 4]], dtype=np.intp)
+        counts = Align.Alignment([target, query], coordinates).counts()
+        self.assertEqual(counts.identities, 3)
+        self.assertEqual(counts.mismatches, 1)
+        for name, convert in (
+            ("int64", lambda array: array.astype(np.int64)),
+            ("strided", lambda array: np.repeat(array, 2)[::2]),
+            ("unaligned", unaligned),
+        ):
+            with self.subTest(array=name):
+                alignment = Align.Alignment(
+                    [convert(target), convert(query)], coordinates
+                )
+                with self.assertRaises(ValueError):
+                    alignment.counts()
+
+
 class LazyData(SequenceDataAbstractBaseClass):
     """Sequence data read on demand, as by the lazy SeqIO parsers."""
 

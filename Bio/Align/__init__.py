@@ -4053,8 +4053,20 @@ class Alignment:
             elif isinstance(data, SequenceDataAbstractBaseClass):
                 sequences[i] = data
             elif isinstance(data, np.ndarray):
-                # data is a numpy array of int32
-                # (to be checked in the C code)
+                # The C code reads the buffer of a one-dimensional, contiguous,
+                # aligned array of int32 (or of int8 or uint8); it would compare
+                # no letters at all in any other array, such as int64, a
+                # strided view or an unaligned int32 array, so refuse those.
+                if not (
+                    data.ndim == 1
+                    and data.dtype in (np.int32, np.int8, np.uint8)
+                    and data.flags.c_contiguous
+                    and data.flags.aligned
+                ):
+                    raise ValueError(
+                        "a numpy array sequence must be one-dimensional, "
+                        "C-contiguous, aligned and of dtype int32, int8 or uint8"
+                    )
                 sequences[i] = data
             elif data is None:
                 sequences[i] = data
