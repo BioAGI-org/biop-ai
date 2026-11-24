@@ -1121,8 +1121,10 @@ KDTree_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
     DataPoint* data_point_list;
     double value;
     Node* root;
+    static char *kwlist[] = {"coordinates", "bucket_size", NULL};
 
-    if (!PyArg_ParseTuple(args, "O|i:KDTree_new" , &obj, &bucket_size))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|i:KDTree", kwlist,
+                                     &obj, &bucket_size))
         return NULL;
 
     if (bucket_size <= 0) {
