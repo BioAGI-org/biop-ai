@@ -248,6 +248,10 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
         annotations = {}
         score = None
         printed_alignment_parser = _aligncore.PrintedAlignmentParser(b";")
+        # The record of the last 's' line, which 'i' and 'q' lines annotate.
+        # An 'e' line ends it, as the lines after an 'e' line do not follow
+        # an 's' line.
+        target = None
         j = -1
         sequences = []
         while True:
@@ -300,11 +304,12 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
                 seq = Seq({start: sequence}, length=srcSize)
                 record = SeqRecord(seq, id=src, name="", description="")
                 records.append(record)
+                target = record
                 j = i + n
                 i = j + 1
                 strands.append(strand)
             elif prefix == b"i":
-                m = re.match(b"^[^;]*", buffer[i:])
+                m = re.match(b"^[^;\0]*", buffer[i:])
                 j = i + m.span()[1]
                 line = buffer[i:j].tobytes()
                 words = line.split(None, 5)
@@ -313,9 +318,14 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
                         f"Expected 6 fields in 'i' line, found {len(words)}:\n"
                         f"{line.decode()}"
                     )
-                if words[1].decode() != src:  # from the previous "s" line
+                if target is None:
                     raise ValueError(
-                        f"Expected 'i' line for {src} (the preceding 's' line), "
+                        f"Found 'i' line that does not follow an 's' line:\n"
+                        f"{line.decode()}"
+                    )
+                if words[1].decode() != target.id:
+                    raise ValueError(
+                        f"Expected 'i' line for {target.id} (the preceding 's' line), "
                         f"found {words[1].decode()}:\n{line.decode()}"
                     )
                 leftStatus = words[2].decode()
@@ -329,12 +339,12 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
                             f"{', '.join(AlignmentIterator.status_characters)} "
                             f"in 'i' line, found '{status}':\n{line.decode()}"
                         )
-                record.annotations["leftStatus"] = leftStatus
-                record.annotations["leftCount"] = leftCount
-                record.annotations["rightStatus"] = rightStatus
-                record.annotations["rightCount"] = rightCount
+                target.annotations["leftStatus"] = leftStatus
+                target.annotations["leftCount"] = leftCount
+                target.annotations["rightStatus"] = rightStatus
+                target.annotations["rightCount"] = rightCount
             elif prefix == b"e":
-                m = re.match(b"^[^;]*", buffer[i:])
+                m = re.match(b"^[^;\0]*", buffer[i:])
                 j = i + m.span()[1]
                 line = buffer[i:j].tobytes()
                 words = line.split(None, 6)
@@ -357,6 +367,7 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
                     )
                 sequence = Seq(None, length=srcSize)
                 record = SeqRecord(sequence, id=src, name="", description="")
+                target = None
                 end = start + size
                 if strand == b"+":
                     segment = (start, end)
@@ -369,7 +380,7 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
                     annotations["empty"] = annotation
                 annotation.append(empty)
             elif prefix == b"q":
-                m = re.match(b"^[^;]*", buffer[i:])
+                m = re.match(b"^[^;\0]*", buffer[i:])
                 j = i + m.span()[1]
                 line = buffer[i:j].tobytes()
                 words = line.split(None, 2)
@@ -378,17 +389,24 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
                         f"Expected 3 fields in 'q' line, found {len(words)}:\n"
                         f"{line.decode()}"
                     )
-                if words[1].decode() != src:  # from the previous "s" line
+                if target is None:
                     raise ValueError(
-                        f"Expected 'q' line for {src} (the preceding 's' line), "
+                        f"Found 'q' line that does not follow an 's' line:\n"
+                        f"{line.decode()}"
+                    )
+                if words[1].decode() != target.id:
+                    raise ValueError(
+                        f"Expected 'q' line for {target.id} (the preceding 's' line), "
                         f"found {words[1].decode()}:\n{line.decode()}"
                     )
                 value = words[2].replace(b"-", b"")
-                record.annotations["quality"] = value.decode()
+                target.annotations["quality"] = value.decode()
             elif prefix == b"\00":
                 # reached the end of the alignment
                 break
             else:
+                m = re.match(b"^[^;\0]*", buffer[i:])
+                line = buffer[i : i + m.end()].tobytes().decode(errors="replace")
                 raise ValueError(f"Error parsing alignment - unexpected line:\n{line}")
         shape = printed_alignment_parser.shape
         coordinates = np.empty(shape, np.intp)
