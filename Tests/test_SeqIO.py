@@ -17,6 +17,7 @@ from io import StringIO
 from shutil import rmtree
 from tempfile import mkdtemp
 from tempfile import NamedTemporaryFile
+from unittest import mock
 
 import support
 
@@ -30,6 +31,7 @@ from Bio.AlignIO import PhylipIO
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
 from Bio.Seq import Seq
 from Bio.Seq import UndefinedSequenceError
+from Bio.SeqIO.Interfaces import SequenceIterator
 from Bio.SeqIO.Interfaces import SequenceWriter
 from Bio.SeqRecord import SeqRecord
 
@@ -6141,6 +6143,80 @@ class BadArguments(unittest.TestCase):
                 "nonsense",
             )
         self.assertIn("Unexpected molecule type", str(cm.exception))
+
+    def test_parse_bad_header_closes_file(self):
+        """A file opened from a path is closed if the parser rejects it."""
+        path = os.path.join(self.temp_dir, "bad.dat")
+        with open(path, "w") as handle:
+            handle.write("not a valid file at all\n")
+        opened = []
+
+        def spy_open(*args, **kwargs):
+            stream = open(*args, **kwargs)
+            opened.append(stream)
+            return stream
+
+        for fmt in ("fasta", "twobit", "sff"):
+            with self.subTest(fmt=fmt):
+                opened.clear()
+                with mock.patch("Bio.SeqIO.Interfaces.open", spy_open, create=True):
+                    with self.assertRaises(ValueError):
+                        with SeqIO.parse(path, fmt) as records:
+                            list(records)
+                self.assertEqual(len(opened), 1)
+                self.assertTrue(opened[0].closed)
+        # A handle the caller opened is the caller's to close.
+        with open(path) as handle:
+            with self.assertRaises(ValueError):
+                SeqIO.parse(handle, "fasta")
+            self.assertFalse(handle.closed)
+
+    def test_parse_bad_header_closes_file_despite_exit_override(self):
+        """The stream is closed even if a subclass __exit__ needs parser state."""
+        path = os.path.join(self.temp_dir, "bad.dat")
+        with open(path, "w") as handle:
+            handle.write("not a valid file at all\n")
+        streams = []
+
+        class Parser(SequenceIterator):
+            modes = "t"
+
+            def __init__(self, source):
+                super().__init__(source)
+                streams.append(self.stream)
+                raise ValueError("bad header")  # before self.state is set
+
+            def __exit__(self, *args):
+                del self.state
+                return super().__exit__(*args)
+
+            def __next__(self):
+                raise StopIteration
+
+        with self.assertRaisesRegex(ValueError, "^bad header$"):
+            Parser(path)
+        self.assertEqual(len(streams), 1)
+        self.assertTrue(streams[0].closed)
+
+    def test_parse_error_before_source_is_set(self):
+        """A subclass that never sets self.source still raises its own error."""
+        path = os.path.join(self.temp_dir, "bad.dat")
+        with open(path, "w") as handle:
+            handle.write("not a valid file at all\n")
+
+        class Parser(SequenceIterator):
+            modes = "t"
+
+            def __init__(self, source):
+                self.stream = open(source)  # without super().__init__
+                self.stream.close()
+                raise ValueError("bad header")
+
+            def __next__(self):
+                raise StopIteration
+
+        with self.assertRaisesRegex(ValueError, "^bad header$"):
+            Parser(path)
 
 
 class LazyFormatRegistries(unittest.TestCase):

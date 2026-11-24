@@ -12,6 +12,7 @@ use this module.  It provides base classes to try and simplify things.
 
 from abc import ABC
 from abc import abstractmethod
+from functools import wraps
 from io import StringIO
 from os import PathLike
 from typing import AnyStr
@@ -54,6 +55,28 @@ class SequenceIterator(ABC, Generic[AnyStr]):
     """
 
     record_start_marker: bytes | None = None
+
+    def __init_subclass__(cls, **kwargs):
+        """Close a file opened from a path if the subclass __init__ fails."""
+        super().__init_subclass__(**kwargs)
+        init = cls.__dict__.get("__init__")
+        if init is None:
+            return
+
+        # A parser that rejects the file header in its __init__ never returns
+        # the iterator, so __exit__ cannot run and the caller has no handle to
+        # close.  Close it here instead (only if we opened it from a path).
+        # Call the base class __exit__, as an override may need parser state
+        # which this half-built object does not have.
+        @wraps(init)
+        def __init__(self, *args, **kwargs):
+            try:
+                init(self, *args, **kwargs)
+            except BaseException:
+                SequenceIterator.__exit__(self, None, None, None)
+                raise
+
+        cls.__init__ = __init__  # type: ignore[method-assign]
 
     @classmethod
     def parse_id_from_header(cls, line: bytes) -> str:
@@ -180,8 +203,9 @@ class SequenceIterator(ABC, Generic[AnyStr]):
             stream = self.stream
         except AttributeError:
             return
-        if self.stream is not self.source:
-            self.stream.close()
+        # A subclass that failed before setting source may not have one
+        if hasattr(self, "source") and stream is not self.source:
+            stream.close()
         del self.stream
         return False
 
