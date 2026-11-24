@@ -91,6 +91,11 @@
 
 #define MAX_PATHS 20
 
+// findPath checks for signals after about this much work, a few
+// milliseconds: one unit per candidate AFP looked at, start or gap, plus
+// one per similarityI call.
+#define CHECK_SIGNALS_WORK (1 << 20)
+
 // Typical XYZ point and array of points
 typedef struct {
     double x;
@@ -104,6 +109,11 @@ typedef struct {
     int pB;
 } afp, *path;
 
+// calcDM, calcS and findPath run without the GIL, so they call no Python
+// API (findPath only briefly takes the GIL back to check for signals). They
+// report running out of memory by returning NULL or -1, and PyCealign raises
+// MemoryError once it holds the GIL again.
+
 // Calculate distance matrix
 static double **
 calcDM(pcePoint coords, int len)
@@ -111,7 +121,6 @@ calcDM(pcePoint coords, int len)
     double **dm = (double **)PyMem_RawMalloc(sizeof(double *) * len);
 
     if (!dm) {
-        PyErr_NoMemory();
         return NULL;
     }
     for (int i = 0; i < len; i++) {
@@ -122,7 +131,6 @@ calcDM(pcePoint coords, int len)
                 PyMem_RawFree(dm[i]);
             }
             PyMem_RawFree(dm);
-            PyErr_NoMemory();
             return NULL;
         }
     }
@@ -210,7 +218,6 @@ calcS(
     double **S = (double **)PyMem_RawMalloc(sizeof(double *) * rowCount);
 
     if (!S) {
-        PyErr_NoMemory();
         return NULL;
     }
     for (int i = 0; i < rowCount; i++) {
@@ -221,7 +228,6 @@ calcS(
                 PyMem_RawFree(S[i]);
             }
             PyMem_RawFree(S);
-            PyErr_NoMemory();
             return NULL;
         }
     }
@@ -552,8 +558,27 @@ error:
     return NULL;
 }
 
-// Find the best N alignment paths
-static PyObject *
+// Add done to *work. Once that reaches CHECK_SIGNALS_WORK, take the GIL
+// back briefly, so that Ctrl-C can stop a long search, and reset *work.
+// Return -1 if a signal handler raised, with its exception set, else 0.
+static int
+checkSignals(size_t *work, const size_t done, PyThreadState **save)
+{
+    *work += done;
+    if (*work < CHECK_SIGNALS_WORK)
+        return 0;
+    *work = 0;
+    PyEval_RestoreThread(*save);
+    const int status = PyErr_CheckSignals();
+    *save = PyEval_SaveThread();
+    return status;
+}
+
+// Find the best N alignment paths. On success, return the number of paths
+// stored in pathBuffer, lenBuffer and zScoreBuffer; the caller frees the
+// paths. On failure, free them and return -1: either memory ran out, or a
+// signal handler raised, in which case its exception is set.
+static int
 findPath(
     double **S,
     double **dA,
@@ -561,7 +586,11 @@ findPath(
     const int lenA,
     const int lenB,
     const int fragmentSize,
-    const int gapMax)
+    const int gapMax,
+    path pathBuffer[MAX_PATHS],
+    int lenBuffer[MAX_PATHS],
+    double zScoreBuffer[MAX_PATHS],
+    PyThreadState **save)
 {
     const double D0 = -3.0;
     const double D1 = -4.0;
@@ -571,9 +600,10 @@ findPath(
 
     // For storing the best N paths
     int bufferSize = 0;
-    int lenBuffer[MAX_PATHS];
     double similarityBuffer[MAX_PATHS];
-    path pathBuffer[MAX_PATHS];
+
+    // Work done since signals were last checked
+    size_t work = 0;
 
     for (int i = 0; i < MAX_PATHS; i++) {
         // Initialize the paths
@@ -591,6 +621,8 @@ findPath(
             break;
 
         for (int iB = 0; iB <= lenB - fragmentSize; iB++) {
+            if (checkSignals(&work, 1, save) < 0)
+                goto error;
             if (S[iA][iB] <= D0)
                 continue;
             if (bufferSize > 0 &&
@@ -600,12 +632,8 @@ findPath(
             // Initialize current path
             path curPath = (path)PyMem_RawMalloc(sizeof(afp) * smaller);
 
-            if (!curPath) {
-                for (int i = 0; i < bufferSize; i++) {
-                    PyMem_RawFree(pathBuffer[i]);
-                }
-                return PyErr_NoMemory();
-            }
+            if (!curPath)
+                goto error;
 
             int curPathLength = 1;
             double curPathSimilarity = S[iA][iB];
@@ -627,6 +655,11 @@ findPath(
                 // Check all possible gaps from here
                 //
                 for (int g = 0; g < (gapMax * 2) + 1; g++) {
+                    if (checkSignals(&work, 1, save) < 0) {
+                        PyMem_RawFree(curPath);
+                        goto error;
+                    }
+
                     int jA = curPath[curPathLength - 1].pA + fragmentSize;
                     int jB = curPath[curPathLength - 1].pB + fragmentSize;
 
@@ -661,6 +694,7 @@ findPath(
                     }
 
                     curSimilarity /= curPathLength;
+                    work += curPathLength;
 
                     // store GAPPED best
                     if (curSimilarity > D1 &&
@@ -738,8 +772,6 @@ findPath(
         } // ROF -- end for iB
     }     // ROF -- end for iA
 
-    double zScoreBuffer[MAX_PATHS];
-
     for (int i = 0; i < bufferSize; i++) {
         const int pathLength = lenBuffer[i];
         const double pathSimilarity = similarityBuffer[i];
@@ -753,38 +785,13 @@ findPath(
         zScoreBuffer[i] = calcZScore(fragmentSize, pathLength, pathSimilarity, gapCount);
     }
 
-    // To make it simpler to use this code and more portable, we are decoupling
-    // the path finding (the actual CEAlign innovation) from the RMSD
-    // calculation.
-    //
-    // As such, we return the N best paths to Python-land. Since the paths are
-    // encoded as structs, it's simpler to return the each path as a list of
-    // lists with the corresponding atom indices. e.g. [path1, path2, path3,
-    // ..., pathN], where pathN is defined as,
-    // [[Ai, Aj, Ak, ...], [Bi, Bj, Bk, ...], where An and Bn are equivalent
-    // coordinates for structures A and B.
+    return bufferSize;
 
-    // List to store all paths
-    PyObject *result = PyList_New(bufferSize);
-
-    if (result) {
-        for (int o = 0; o < bufferSize; o++) {
-            PyObject *alignment = buildAlignment(
-                pathBuffer[o], lenBuffer[o], zScoreBuffer[o], fragmentSize);
-
-            if (!alignment) {
-                Py_CLEAR(result);
-                break;
-            }
-            PyList_SET_ITEM(result, o, alignment);
-        }
-    }
-
+error:
     for (int i = 0; i < bufferSize; i++) {
         PyMem_RawFree(pathBuffer[i]);
     }
-
-    return result;
+    return -1;
 }
 
 // Main Function
@@ -870,28 +877,73 @@ PyCealign(PyObject *Py_UNUSED(self), PyObject *args)
         return NULL;
     }
 
-    /* Each step below can fail on an out-of-memory condition, in which
-       case it has set an exception and everything allocated before it
+    /* The search below reads only the C buffers, so it runs without the
+       GIL, letting other threads run. Each step can fail on an
+       out-of-memory condition, after which everything allocated before it
        still has to be released. */
     double **dA = NULL, **dB = NULL, **S = NULL;
+    path pathBuffer[MAX_PATHS];
+    int lenBuffer[MAX_PATHS];
+    double zScoreBuffer[MAX_PATHS];
+    int bufferSize = -1;
 
     result = NULL;
 
+    PyThreadState *save = PyEval_SaveThread();
+
     /* calculate the distance matrix for each protein */
     dA = calcDM(coordsA, lenA);
-    if (!dA)
-        goto cleanup;
-    dB = calcDM(coordsB, lenB);
-    if (!dB)
-        goto cleanup;
+    if (dA)
+        dB = calcDM(coordsB, lenB);
 
     /* calculate the CE Similarity matrix */
-    S = calcS(dA, dB, lenA, lenB, fragmentSize);
-    if (!S)
-        goto cleanup;
+    if (dB)
+        S = calcS(dA, dB, lenA, lenB, fragmentSize);
 
     // Calculate Top N Paths
-    result = findPath(S, dA, dB, lenA, lenB, fragmentSize, gapMax);
+    if (S)
+        bufferSize = findPath(S, dA, dB, lenA, lenB, fragmentSize, gapMax,
+                              pathBuffer, lenBuffer, zScoreBuffer, &save);
+
+    PyEval_RestoreThread(save);
+
+    if (bufferSize < 0) {
+        /* A signal handler that raised has set its exception already. */
+        if (!PyErr_Occurred())
+            PyErr_NoMemory();
+        goto cleanup;
+    }
+
+    // To make it simpler to use this code and more portable, we are decoupling
+    // the path finding (the actual CEAlign innovation) from the RMSD
+    // calculation.
+    //
+    // As such, we return the N best paths to Python-land. Since the paths are
+    // encoded as structs, it's simpler to return the each path as a list of
+    // lists with the corresponding atom indices. e.g. [path1, path2, path3,
+    // ..., pathN], where pathN is defined as,
+    // [[Ai, Aj, Ak, ...], [Bi, Bj, Bk, ...], where An and Bn are equivalent
+    // coordinates for structures A and B.
+
+    // List to store all paths
+    result = PyList_New(bufferSize);
+
+    if (result) {
+        for (int o = 0; o < bufferSize; o++) {
+            PyObject *alignment = buildAlignment(
+                pathBuffer[o], lenBuffer[o], zScoreBuffer[o], fragmentSize);
+
+            if (!alignment) {
+                Py_CLEAR(result);
+                break;
+            }
+            PyList_SET_ITEM(result, o, alignment);
+        }
+    }
+
+    for (int i = 0; i < bufferSize; i++) {
+        PyMem_RawFree(pathBuffer[i]);
+    }
 
 cleanup:
     /* release memory */

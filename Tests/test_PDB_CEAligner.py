@@ -7,8 +7,11 @@
 """Unit tests for the Bio.PDB.CEAligner module."""
 
 import gc
+import os
 import pickle
 import platform
+import signal
+import subprocess
 import sys
 import sysconfig
 import unittest
@@ -351,6 +354,110 @@ class RunCEAlignThreadTests(unittest.TestCase):
         with ThreadPoolExecutor(max_workers=4) as executor:
             for result in executor.map(work, range(8)):
                 self.assertEqual(result, expected)
+
+
+# The start of each child process run by RunCEAlignGILTests.
+GIL_CHILD = """\
+import math
+from Bio.PDB.ccealign import run_cealign
+
+def helix(n):
+    return [
+        [2.3 * math.cos(i * 1.75), 2.3 * math.sin(i * 1.75), 1.5 * i]
+        for i in range(n)
+    ]
+
+"""
+
+
+@unittest.skipUnless(
+    platform.python_implementation() == "CPython",
+    "PyPy runs Python signal handlers only once a C call has returned",
+)
+class RunCEAlignGILTests(unittest.TestCase):
+    """run_cealign lets other threads and signal handlers run.
+
+    Each test runs its long run_cealign call in a child process, so that a
+    hang, or a timer signal arriving late, cannot affect the test run.
+    """
+
+    def run_child(self, code):
+        env = os.environ.copy()
+        if sysconfig.get_config_var("Py_GIL_DISABLED"):
+            # Hold the GIL as a default build does, so that a call keeping
+            # it blocks the other threads here too.
+            env["PYTHON_GIL"] = "1"
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", GIL_CHILD + code],
+                capture_output=True,
+                env=env,
+                text=True,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("run_cealign took more than 60 seconds")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stdout.strip()
+
+    def test_other_threads_run(self):
+        code = """\
+import threading, time
+
+coords = helix(400)  # about half a second aligned on itself
+beats = []
+stop = threading.Event()
+
+def heartbeat():
+    while not stop.wait(0.005):
+        beats.append(time.perf_counter())
+
+thread = threading.Thread(target=heartbeat)
+thread.start()
+try:
+    start = time.perf_counter()
+    run_cealign(coords, coords, 8, 30)
+    end = time.perf_counter()
+finally:
+    stop.set()
+    thread.join()
+print(len([b for b in beats if start < b < end]))
+"""
+        # Holding the GIL, the call let the thread run once at most.
+        self.assertGreater(int(self.run_child(code)), 2)
+
+    @unittest.skipUnless(hasattr(signal, "setitimer"), "requires interval timers")
+    def test_interrupt(self):
+        code = """\
+import signal
+
+calls = 0
+
+def handler(signum, frame):
+    global calls
+    calls += 1
+    if calls == 3:
+        raise KeyboardInterrupt
+
+signal.signal(signal.SIGALRM, handler)
+signal.setitimer(signal.ITIMER_REAL, 0.001, 0.001)
+try:
+    run_cealign(coords, coords, 8, gap_max)
+except KeyboardInterrupt:
+    print("interrupted")
+else:
+    print("returned")
+signal.setitimer(signal.ITIMER_REAL, 0)
+"""
+        # Each takes about a second: a 400-point helix aligned on itself,
+        # with many start points, and 8 points with a huge maximum gap,
+        # with one start point and a long search for the next fragment.
+        for n, gap_max in ((400, 30), (8, 300_000_000)):
+            with self.subTest(n=n, gap_max=gap_max):
+                setup = f"coords = helix({n})\ngap_max = {gap_max}\n"
+                # Without signal checks the ticks during the call ran the
+                # handler only once, after the call returned.
+                self.assertEqual(self.run_child(setup + code), "interrupted")
 
 
 if __name__ == "__main__":
