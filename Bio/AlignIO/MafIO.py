@@ -760,6 +760,9 @@ class MafIndex:
                     # This is length in terms of actual letters in the reference
                     total_rec_length += ungapped_length
 
+                    # gapped sequence of the target seqname
+                    target_seq = str(seqrec.seq)
+
                     # blank out these positions for every seqname
                     for seqrec in multiseq:
                         for pos in range(rec_start, rec_end + 1):
@@ -773,25 +776,28 @@ class MafIndex:
                     f"Did not find {self._target_seqname} in alignment bundle"
                 )
 
-            # the true, chromosome/contig/etc position in the target seqname
-            real_pos = rec_start
+            # Each position in the target seqname takes the alignment columns
+            # from just after the previous letter of the target seqname (or
+            # from the first column) up to and including its own letter, so a
+            # position just after a series of "-" in the reference
+            # "accumulates" the letters found in other sequences in front of
+            # the "-"s. The last position (rec_end) also takes any columns
+            # after it. Find where each position's columns end, then take one
+            # slice per row and position: adding letters one column at a time
+            # is quadratic in the length of a gap run.
+            cuts = [0]
+            for gapped_pos, letter in enumerate(target_seq):
+                if letter != "-" and len(cuts) < ungapped_length:
+                    cuts.append(gapped_pos + 1)
+            cuts.append(rec_length)
 
-            # loop over the alignment to fill split_by_position
-            for gapped_pos in range(rec_length):
-                for seqrec in multiseq:
-                    # keep track of this position's value for the target seqname
-                    if seqrec.id == self._target_seqname:
-                        track_val = seqrec.seq[gapped_pos]
-
-                    # Here, a real_pos that corresponds to just after a series of "-"
-                    # in the reference will "accumulate" the letters found in other sequences
-                    # in front of the "-"s
-                    split_by_position[seqrec.id][real_pos] += seqrec.seq[gapped_pos]
-
-                # increment the real_pos counter only when non-gaps are found in
-                # the target_seqname, and we haven't reached the end of the record
-                if track_val != "-" and real_pos < rec_end:
-                    real_pos += 1
+            for seqrec in multiseq:
+                seq = str(seqrec.seq)
+                seq_split = split_by_position[seqrec.id]
+                for real_pos, cut_start, cut_end in zip(
+                    range(rec_start, rec_start + len(cuts) - 1), cuts, cuts[1:]
+                ):
+                    seq_split[real_pos] += seq[cut_start:cut_end]
 
         # make sure the number of bp entries equals the sum of the record lengths
         if len(split_by_position[self._target_seqname]) != total_rec_length:

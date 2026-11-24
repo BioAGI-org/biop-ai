@@ -14,6 +14,7 @@ except ImportError:
 import gc
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -22,6 +23,7 @@ import warnings
 import support
 from seq_tests_common import SeqRecordTestBaseClass
 
+import Bio
 from Bio import SeqIO
 from Bio.AlignIO.MafIO import MafIndex
 from Bio.Seq import Seq
@@ -795,6 +797,108 @@ if sqlite3:
             ).replace("-", "")
 
             self.assertEqual(mm9_seq, cnksr3)
+
+    class TestSpliceLongReferenceGap(unittest.TestCase):
+        """Test in silico splicing across a long gap run in the reference."""
+
+        def setUp(self):
+            self.tmpdir = tempfile.mkdtemp()
+
+        def tearDown(self):
+            shutil.rmtree(self.tmpdir)
+
+        def test_get_spliced_long_reference_gap(self):
+            # The letters aligned to a run of "-" in the reference all go to
+            # one reference position. They were added one at a time with str
+            # +=, which copied the string each time: a gap run of 1,500,000
+            # took minutes. Taking them as one slice of each row is fast.
+            gap = 1_500_000
+            maf = os.path.join(self.tmpdir, "gap.maf")
+            with open(maf, "w") as handle:
+                handle.write("##maf version=1\n\na score=0\n")
+                handle.write(f"s ref.chr1 0 2 + 100 A{'-' * gap}C\n")
+                handle.write(f"s sp1.chr1 0 {gap + 2} + 2000000 A{'G' * gap}C\n\n")
+            code = """\
+import sys
+from Bio.AlignIO.MafIO import MafIndex
+maf = sys.argv[1]
+idx = MafIndex(maf + ".idx", maf, "ref.chr1")
+for record in idx.get_spliced([0], [2], strand=1):
+    print(record.id, len(record), record.seq.count("-"), record.seq.count("G"))
+idx.close()
+"""
+            env = os.environ.copy()
+            env["PYTHONPATH"] = os.pathsep.join(
+                filter(
+                    None,
+                    [
+                        os.path.dirname(os.path.dirname(Bio.__file__)),
+                        env.get("PYTHONPATH"),
+                    ],
+                )
+            )
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-c", code, maf],
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    timeout=60,
+                )
+            except subprocess.TimeoutExpired:
+                self.fail("get_spliced across a long reference gap took over 60 s")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                sorted(result.stdout.splitlines()),
+                [
+                    f"ref.chr1 {gap + 2} {gap} 0",
+                    f"sp1.chr1 {gap + 2} 0 {gap}",
+                ],
+                result.stderr,
+            )
+
+        def test_get_spliced_ungapped_memory(self):
+            # get_spliced needs one dictionary entry per row and reference
+            # position. Collecting each position's letters in a list as well
+            # more than doubled its peak memory on an ungapped block.
+            try:
+                import tracemalloc
+            except ImportError:
+                self.skipTest("no tracemalloc")
+            if tracemalloc.is_tracing():
+                self.skipTest("tracemalloc is already tracing")
+            rows, cols = 10, 10_000
+            maf = os.path.join(self.tmpdir, "ungapped.maf")
+            with open(maf, "w") as handle:
+                handle.write("##maf version=1\n\na score=0\n")
+                handle.write(f"s ref.chr1 0 {cols} + {cols} {'A' * cols}\n")
+                for row in range(1, rows):
+                    handle.write(f"s sp{row}.chr1 0 {cols} + {cols} {'C' * cols}\n")
+                handle.write("\n")
+            idx = MafIndex(os.path.join(self.tmpdir, "ungapped.idx"), maf, "ref.chr1")
+            try:
+                # the memory that a dictionary entry per row and position needs
+                tracemalloc.start()
+                try:
+                    entries = [dict.fromkeys(range(cols), "") for row in range(rows)]
+                    baseline = tracemalloc.get_traced_memory()[1]
+                    del entries
+                finally:
+                    tracemalloc.stop()
+                if baseline == 0:
+                    self.skipTest("tracemalloc reports no memory")
+                tracemalloc.start()
+                try:
+                    alignment = idx.get_spliced([0], [cols])
+                    peak = tracemalloc.get_traced_memory()[1]
+                finally:
+                    tracemalloc.stop()
+            finally:
+                idx.close()
+            self.assertEqual(len(alignment), rows)
+            self.assertEqual(alignment.get_alignment_length(), cols)
+            # about 1.1 times the baseline; a list per position made it 2.3-2.6
+            self.assertLess(peak / baseline, 1.6)
 
     class TestSpliceBadMAF(unittest.TestCase):
         """Test in silico splicing on an incorrectly-formatted MAF."""
