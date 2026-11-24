@@ -909,6 +909,11 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 n = len(data)
                 while i < n:
                     j = i + size
+                    if j > n:
+                        raise ValueError(
+                            f"The data block at offset {node.dataOffset} ends "
+                            "with a truncated item"
+                        )
                     chromId, chromStart, chromEnd = formatter.unpack(data[i:j])
                     i = data.index(0, j) + 1
                     rest = data[j:i]
@@ -945,6 +950,13 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             except AttributeError:
                 data = self._read_block(stream, node)
                 if self.itemsPerSlot == 1:
+                    # The item is its 12-byte header and its rest field, which
+                    # ends with a NUL byte, so it is at least 13 bytes long.
+                    if len(data) <= size:
+                        raise ValueError(
+                            f"The data block at offset {node.dataOffset} ends "
+                            "with a truncated item"
+                        )
                     child_chromIx, child_chromStart, child_chromEnd = formatter.unpack(
                         data[:size]
                     )
@@ -966,6 +978,11 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     n = len(data)
                     while i < n:
                         j = i + size
+                        if j > n:
+                            raise ValueError(
+                                f"The data block at offset {node.dataOffset} "
+                                "ends with a truncated item"
+                            )
                         child_chromIx, child_chromStart, child_chromEnd = (
                             formatter.unpack(data[i:j])
                         )

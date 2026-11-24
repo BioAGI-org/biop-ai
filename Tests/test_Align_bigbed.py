@@ -8470,6 +8470,36 @@ class TestAlign_malformed_data_block(unittest.TestCase):
         self.check(block[:-1], None, self.incomplete)
         self.check(b"", None, self.incomplete)
 
+    def test_truncated_item(self):
+        # The block ends with 5 of the 12 bytes of the chromosome number,
+        # start and end of its second item. This used to raise struct.error.
+        stream, offset = self.make_stream(zlib.compress(self.items[:18]))
+        message = f"The data block at offset {offset} ends with a truncated item"
+        with Align.parse(stream, "bigbed") as alignments:
+            with self.assertRaises(ValueError) as cm:
+                list(alignments)
+            self.assertEqual(str(cm.exception), message)
+            with self.assertRaises(ValueError) as cm:
+                list(alignments.search("chr22"))
+            self.assertEqual(str(cm.exception), message)
+        # With one item per slot, a search reads only the first item of each
+        # block; here the block holds 5 of the 12 bytes of that item, then
+        # all 12 bytes but not the NUL byte that ends it. The last byte of
+        # its end (5000) is 0, which was read as that NUL byte, so the
+        # 12-byte block used to give a bed3 alignment.
+        for length in (5, 12):
+            with self.subTest(length=length):
+                block = zlib.compress(self.items[:length])
+                stream, offset = self.make_stream(block)
+                message = (
+                    f"The data block at offset {offset} ends with a truncated item"
+                )
+                with Align.parse(stream, "bigbed") as alignments:
+                    alignments.itemsPerSlot = 1
+                    with self.assertRaises(ValueError) as cm:
+                        list(alignments.search("chr22"))
+                    self.assertEqual(str(cm.exception), message)
+
     def test_invalid(self):
         # These used to raise zlib.error. The last four bytes of the
         # compressed data are the Adler-32 checksum of the block.
