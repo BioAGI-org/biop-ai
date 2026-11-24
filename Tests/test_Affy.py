@@ -378,6 +378,37 @@ class AffyTest(unittest.TestCase):
                 ):
                     CelFile.read(io.StringIO(bad))
 
+    def testAffy3MarkedCellOutside(self):
+        # The cells listed in the MASKS, OUTLIERS and MODIFIED sections were
+        # used as numpy indices unchecked: X=5 raised a bare IndexError, and
+        # X=-1 silently marked a cell counted from the end of the row.
+        with open(self.affy3) as f:
+            data = f.read()
+        for section, line in [
+            ("MASKS", "4 2\n"),
+            ("OUTLIERS", "1 3\n"),
+            ("MODIFIED", "3 2 21775.0\n"),
+        ]:
+            self.assertEqual(data.count(line), 1)
+            for x in ("5", "-1"):
+                bad = data.replace(line, x + line[1:])
+                with self.subTest(section=section, x=x):
+                    with self.assertRaisesRegex(
+                        CelFile.ParserError,
+                        f"^CEL version 3 file has cell X={x} Y={line[2]} "
+                        "outside its 5 columns and 5 rows$",
+                    ):
+                        CelFile.read(io.StringIO(bad))
+            for y in ("5", "-1"):
+                bad = data.replace(line, line[:2] + y + line[3:])
+                with self.subTest(section=section, y=y):
+                    with self.assertRaisesRegex(
+                        CelFile.ParserError,
+                        f"^CEL version 3 file has cell X={line[0]} Y={y} "
+                        "outside its 5 columns and 5 rows$",
+                    ):
+                        CelFile.read(io.StringIO(bad))
+
     @unittest.skipIf(tracemalloc is None, "tracemalloc is not available")
     def testAffy3SizeBeyondCellsMemory(self):
         # The 3 kB example file declaring 2000 by 2000 cells made the old
