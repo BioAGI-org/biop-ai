@@ -183,8 +183,9 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
                 children = node.children
             except AttributeError:
                 break
-            else:
-                node = children[0]
+            if not children:
+                raise ValueError("The R tree index has no data blocks")
+            node = children[0]
         filepos = stream.tell()
         # Read the whole block, as iterating and searching do: reading on
         # until an 's' line turned up never ended if the block had none.

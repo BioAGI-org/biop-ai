@@ -8208,6 +8208,31 @@ class TestAlign_malformed_data_index(unittest.TestCase):
         self.check([[]], 0, self.no_children)
         self.check([[1], []], 1, self.no_children)
 
+    def test_empty_leaf(self):
+        # A leaf with no items may only be the root of a tree with no data
+        # blocks. Both of these used to raise IndexError.
+        for nodes in ([None], [[1], None]):
+            stream, offsets = self.make_stream(nodes)
+            data = bytearray(stream.getvalue())
+            # Set the item count in the index header (48 bytes before the
+            # root), and the count of the leaf (byte 2 of the node), to 0.
+            struct.pack_into("<Q", data, offsets[0] - 48 + 8, 0)
+            struct.pack_into("<H", data, offsets[-1] + 2, 0)
+            stream = SeekGuard(bytes(data))
+            with self.subTest(nodes=nodes):
+                if len(nodes) == 1:
+                    with Align.parse(stream, "bigbed") as alignments:
+                        self.assertEqual(len(list(alignments)), 0)
+                        self.assertEqual(len(list(alignments.search("chr22"))), 0)
+                else:
+                    with self.assertRaises(ValueError) as cm:
+                        Align.parse(stream, "bigbed")
+                    self.assertEqual(
+                        str(cm.exception),
+                        f"The leaf node at offset {offsets[1]} in the R tree "
+                        "index has no items",
+                    )
+
     def test_overlapping_nodes(self):
         # A root naming 100 leaves that start 4 bytes apart, so that they
         # overlap, each holding 100 data blocks. The leaves lie within 3.6 kB

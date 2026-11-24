@@ -924,6 +924,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     else:
                         break
             else:
+                if not children:  # the root of an empty tree
+                    return
                 node = children[0]
 
     def _search_index(self, stream, chromIx, start, end):
@@ -1961,6 +1963,12 @@ class _RTreeFormatter:
                     f"they are larger than the file ({file_size} bytes)"
                 )
             if isLeaf:
+                # Only the root of an empty tree may be an empty leaf.
+                if count == 0 and node.parent is not None:
+                    raise ValueError(
+                        f"The leaf node at offset {offset} in the R tree index "
+                        "has no items"
+                    )
                 children = node.children
                 for i in range(count):
                     data = stream.read(formatter_leaf.size)

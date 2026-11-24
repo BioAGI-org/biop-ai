@@ -13048,6 +13048,21 @@ class TestAlign_malformed_first_block(unittest.TestCase):
             f"The compressed data block at offset {offset} is incomplete",
         )
 
+    def test_no_data_blocks(self):
+        # The root of the R tree index is a leaf with no items, so there is
+        # no first data block. This used to raise IndexError.
+        with open(support.DATA / "MAF" / "ucsc_test.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        # The offset of the R tree index is at byte 24 of the file header.
+        # Set the item count in the index header (byte 8), and the count of
+        # the root leaf (byte 2 of the node after the 48-byte header), to 0.
+        (index_offset,) = struct.unpack_from("<Q", data, 24)
+        struct.pack_into("<Q", data, index_offset + 8, 0)
+        struct.pack_into("<H", data, index_offset + 48 + 2, 0)
+        with self.assertRaises(ValueError) as cm:
+            Align.parse(EndOfFileGuard(bytes(data)), "bigmaf")
+        self.assertEqual(str(cm.exception), "The R tree index has no data blocks")
+
     def test_bigbed_file(self):
         # A bigBed file that is not a bigMaf file. Its one data block, at
         # offset 685, holds two bed3 items, with no fields after chromEnd.
