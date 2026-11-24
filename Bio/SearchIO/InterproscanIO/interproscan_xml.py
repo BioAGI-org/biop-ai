@@ -9,8 +9,8 @@
 # for more info: https://github.com/ebi-pf-team/interproscan/wiki/OutputFormats
 
 import re
-from xml.etree import ElementTree
 
+from Bio import _xml
 from Bio.SearchIO._model import Hit
 from Bio.SearchIO._model import HSP
 from Bio.SearchIO._model import HSPFragment
@@ -38,7 +38,7 @@ class InterproscanXmlParser:
 
     def __init__(self, handle):
         """Initialize the class."""
-        self.xml_iter = iter(ElementTree.iterparse(handle, events=("start", "end")))
+        self.xml_iter = iter(_xml.iterparse(handle, events=("start", "end")))
         self._meta = self._parse_header()
 
     def __iter__(self):

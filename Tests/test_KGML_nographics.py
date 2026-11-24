@@ -127,6 +127,16 @@ class KGMLPathwayTest(unittest.TestCase):
                     p.element_counts,
                 )
 
+    def test_entity_declaration(self):
+        """Check an XML entity declaration raises ValueError."""
+        data = """\
+<?xml version="1.0"?>
+<!DOCTYPE pathway [<!ENTITY a "aaaaaaaaaa">]>
+<pathway name="path:ko00010" org="ko" number="00010" title="&a;&a;&a;"/>
+"""
+        with self.assertRaisesRegex(ValueError, "^XML entity declarations are not"):
+            read(data)
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)

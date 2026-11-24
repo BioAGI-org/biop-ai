@@ -11,10 +11,10 @@
 import re
 import warnings
 from itertools import chain
-from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 from xml.sax.saxutils import XMLGenerator
 
+from Bio import _xml
 from Bio import BiopythonParserWarning
 from Bio.SearchIO._index import SearchIndexer
 from Bio.SearchIO._model import Hit
@@ -234,7 +234,7 @@ class BlastXmlParser:
 
     def __init__(self, handle, use_raw_query_ids=False, use_raw_hit_ids=False):
         """Initialize the class."""
-        self.xml_iter = iter(ElementTree.iterparse(handle, events=("start", "end")))
+        self.xml_iter = iter(_xml.iterparse(handle, events=("start", "end")))
         self._use_raw_query_ids = use_raw_query_ids
         self._use_raw_hit_ids = use_raw_hit_ids
         self._meta, self._fallback = self._parse_preamble()

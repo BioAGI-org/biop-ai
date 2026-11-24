@@ -20,6 +20,7 @@ import warnings
 from xml.etree import ElementTree
 from xml.parsers.expat import errors
 
+from Bio import _xml
 from Bio import SeqFeature
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -62,9 +63,7 @@ class UniprotIterator(SequenceIterator):
             raise ValueError("The alphabet argument is no longer supported")
         super().__init__(source, fmt="UniProt XML")
         self.return_raw_comments = return_raw_comments
-        self._data = ElementTree.iterparse(
-            self.stream, events=("start", "start-ns", "end")
-        )
+        self._data = _xml.iterparse(self.stream, events=("start", "start-ns", "end"))
 
     def __next__(self):
         """Return the next SeqRecord from the UniProt XML stream."""

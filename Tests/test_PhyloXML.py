@@ -131,6 +131,40 @@ class ParseTests(unittest.TestCase):
     )
     test_shape_dollo = _test_shape_factory(EX_DOLLO, (((2, (2, 2)), (2, (2, 2))),))
 
+    def test_entity_declaration(self):
+        """Check an XML entity declaration raises ValueError."""
+        data = b"""\
+<?xml version="1.0"?>
+<!DOCTYPE phyloxml [<!ENTITY a "aaaaaaaaaa">]>
+<phyloxml xmlns="http://www.phyloxml.org">
+<phylogeny rooted="true"><clade><name>&a;&a;&a;</name></clade></phylogeny>
+</phyloxml>
+"""
+        with self.assertRaisesRegex(ValueError, "^XML entity declarations are not"):
+            PhyloXMLIO.read(BytesIO(data))
+
+    def test_handle_with_path(self):
+        """Check a handle that also has a path is read, not reopened."""
+
+        class HandleWithPath(BytesIO):
+            def __fspath__(self):
+                return os.path.join(tempfile.gettempdir(), "no", "such", "file")
+
+        data = b"""\
+<?xml version="1.0"?>
+<phyloxml xmlns="http://www.phyloxml.org">
+<phylogeny rooted="true"><clade><name>A</name></clade></phylogeny>
+</phyloxml>
+"""
+        tree = PhyloXMLIO.read(HandleWithPath(data)).phylogenies[0]
+        self.assertEqual(tree.root.name, "A")
+
+    def test_not_a_path_or_handle(self):
+        """Check a source that is neither a path nor a handle raises TypeError."""
+        # As from ElementTree.iterparse, not an AttributeError about read()
+        with self.assertRaises(TypeError):
+            PhyloXMLIO.read(None)
+
 
 class TreeTests(unittest.TestCase):
     """Tests for instantiation and attributes of each complex type."""

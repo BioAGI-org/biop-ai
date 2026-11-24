@@ -5,6 +5,7 @@
 """Tests for SearchIO InterproscanIO parsers."""
 
 import unittest
+from io import BytesIO
 
 import support
 
@@ -77,6 +78,16 @@ class InterproscanXmlCases(unittest.TestCase):
         hsp = hit.hsps[0]
         self.assertEqual(11, hsp.query_start)
         self.assertEqual(141, hsp.query_end)
+
+    def test_entity_declaration(self):
+        """Check an XML entity declaration raises ValueError."""
+        data = b"""\
+<?xml version="1.0"?>
+<!DOCTYPE protein-matches [<!ENTITY a "aaaaaaaaaa">]>
+<protein-matches interproscan-version="&a;&a;&a;"></protein-matches>
+"""
+        with self.assertRaisesRegex(ValueError, "^XML entity declarations are not"):
+            list(parse(BytesIO(data), FMT))
 
 
 if __name__ == "__main__":

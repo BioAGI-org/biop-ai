@@ -17,6 +17,7 @@ from io import StringIO
 from xml.dom import minidom
 from xml.etree import ElementTree
 
+from Bio import _xml
 from Bio.Phylo import NeXML
 
 from ._cdao_owl import cdao_elements
@@ -118,7 +119,7 @@ class Parser:
 
     def parse(self, values_are_confidence=False, rooted=False):
         """Parse the text stream this object was initialized with."""
-        nexml_doc = ElementTree.iterparse(self.handle, events=("end",))
+        nexml_doc = _xml.iterparse(self.handle, events=("end",))
 
         for event, node in nexml_doc:
             if node.tag == qUri("nex:tree"):
