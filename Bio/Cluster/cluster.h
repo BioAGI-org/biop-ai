@@ -27,6 +27,7 @@
  *
  */
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifndef min
@@ -38,12 +39,25 @@
 
 #define CLUSTERVERSION "1.59"
 
+/* An optional way to stop the long-running routines (distancematrix,
+ * kcluster, kmedoids, treecluster and somcluster) before they finish.
+ * They call check(context, work) every so often, where work is roughly the
+ * number of operations (such as terms of a distance) done since the
+ * previous call. If check returns nonzero, the routine frees its memory
+ * and returns as it does when it runs out of memory. Pass NULL to run
+ * without checks. */
+typedef struct {
+    int (*check)(void* context, size_t work);
+    void* context;
+} ClusterInterrupt;
+
 /* Chapter 2 */
 double clusterdistance(int nrows, int ncolumns, double** data, int** mask,
   double weight[], int n1, int n2, int index1[], int index2[], char dist,
   char method, int transpose);
-void distancematrix(int ngenes, int ndata, double** data, int** mask,
-  double* weight, char dist, int transpose, double** distances);
+int distancematrix(int ngenes, int ndata, double** data, int** mask,
+  double* weight, char dist, int transpose, double** distances,
+  ClusterInterrupt* interrupt);
 
 /* Chapter 3 */
 int getclustercentroids(int nclusters, int nrows, int ncolumns,
@@ -53,9 +67,11 @@ void getclustermedoids(int nclusters, int nelements, double** distance,
   int clusterid[], int centroids[], double errors[]);
 void kcluster(int nclusters, int ngenes, int ndata, double** data,
   int** mask, double weight[], int transpose, int npass, char method, char dist,
-  int clusterid[], double* error, int* ifound, uint64_t rng_seed);
+  int clusterid[], double* error, int* ifound, uint64_t rng_seed,
+  ClusterInterrupt* interrupt);
 void kmedoids(int nclusters, int nelements, double** distance,
-  int npass, int clusterid[], double* error, int* ifound, uint64_t rng_seed);
+  int npass, int clusterid[], double* error, int* ifound, uint64_t rng_seed,
+  ClusterInterrupt* interrupt);
 
 /* Chapter 4 */
 typedef struct {int left; int right; double distance;} Node;
@@ -70,7 +86,8 @@ typedef struct {int left; int right; double distance;} Node;
  */
 
 Node* treecluster(int nrows, int ncolumns, double** data, int** mask,
-  double weight[], int transpose, char dist, char method, double** distmatrix);
+  double weight[], int transpose, char dist, char method, double** distmatrix,
+  ClusterInterrupt* interrupt);
 int sorttree(const int nnodes, Node* tree, const double order[], int indices[]);
 int cuttree(int nelements, const Node* tree, int nclusters, int clusterid[]);
 
@@ -78,7 +95,7 @@ int cuttree(int nelements, const Node* tree, int nclusters, int clusterid[]);
 int somcluster(int nrows, int ncolumns, double** data, int** mask,
   const double weight[], int transpose, int nxnodes, int nynodes,
   double inittau, int niter, char dist, double*** celldata,
-  int clusterid[][2], uint64_t rng_seed);
+  int clusterid[][2], uint64_t rng_seed, ClusterInterrupt* interrupt);
 
 /* Chapter 6 */
 int pca(int m, int n, double** u, double** v, double* w);
