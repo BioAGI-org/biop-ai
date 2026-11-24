@@ -537,6 +537,26 @@ class AffyTest(unittest.TestCase):
                 ):
                     CelFile.read(io.BytesIO(bad), version=4)
 
+    def testAffy4NoBlobTerminator(self):
+        # After the header, a version 4 file has an undocumented blob ending
+        # in b"\x04". The parser gave up looking for it after 10,000 bytes,
+        # but its check never ran: with no b"\x04" it read the cells from the
+        # wrong offset and returned wrong intensities without an error.
+        with open(self.affy4, "rb") as f:
+            data = f.read()
+        start = 24 + struct.unpack("<i", data[20:24])[0]
+        end = data.index(b"\x04", start) + 1
+        cases = {
+            "long blob": data[:start] + b"A" * 20000 + data[end:],
+            "end of file": data[: end - 1],
+        }
+        for name, bad in cases.items():
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(
+                    CelFile.ParserError, r"^CEL version 4 file has no b'\\x04'"
+                ):
+                    CelFile.read(io.BytesIO(bad), version=4)
+
     @unittest.skipIf(tracemalloc is None, "tracemalloc is not available")
     def testAffy4SizesBeyondEndOfFileMemory(self):
         # From a real file, as opposed to io.BytesIO, a single read(n) sets
