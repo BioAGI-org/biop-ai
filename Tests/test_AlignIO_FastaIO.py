@@ -919,6 +919,17 @@ class FastaM10MalformedTests(unittest.TestCase):
                     self.parse_mutated(old, ">\n")
                 self.assertIn(expected, str(cm.exception))
 
+    def test_marker_line_without_id(self):
+        """A '>>' match line or a '>>>' query start line must name a sequence."""
+        for text, expected in [
+            (">>\n", "Match line with no identifier: '>>\\n'"),
+            ("x >>>\n", "Query start line with no identifier: 'x >>>\\n'"),
+        ]:
+            with self.subTest(text=text):
+                with self.assertRaises(ValueError) as cm:
+                    list(FastaIO.FastaM10Iterator(StringIO(text)))
+                self.assertEqual(str(cm.exception), expected)
+
     def test_consensus_line_before_sequences(self):
         """A ; al_cons line can only follow the match sequence."""
         with self.assertRaises(ValueError) as cm:
