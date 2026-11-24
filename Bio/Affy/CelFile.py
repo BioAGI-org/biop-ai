@@ -329,6 +329,20 @@ def _read_v3_cells(record, cells):
     record.npix = np.asarray(npix, int)[last].reshape(shape)
 
 
+def _read_v3_cell(record, words):
+    # Return the row and column of the cell on a line of the INTENSITY, MASKS,
+    # OUTLIERS or MODIFIED section. The file gives the column (X) first.
+    # Check both, as numpy would count a negative index from the end.
+    y = int(words[0])
+    x = int(words[1])
+    if not (0 <= x < record.nrows and 0 <= y < record.ncols):
+        raise ParserError(
+            f"CEL version 3 file has cell X={y} Y={x} outside "
+            f"its {record.ncols} columns and {record.nrows} rows"
+        )
+    return x, y
+
+
 def _read_v3_shape(record, section):
     # MASKS, OUTLIERS and MODIFIED mark cells of the intensity array, whose
     # size has been checked against the cells in the file.
@@ -611,13 +625,7 @@ def _read_v3(handle):
                         )
                 else:
                     words = line.split()
-                    y = int(words[0])
-                    x = int(words[1])
-                    if not (0 <= x < record.nrows and 0 <= y < record.ncols):
-                        raise ParserError(
-                            f"CEL version 3 file has cell X={y} Y={x} outside "
-                            f"its {record.ncols} columns and {record.nrows} rows"
-                        )
+                    x, y = _read_v3_cell(record, words)
                     cells[0].append(x * record.ncols + y)
                     cells[1].append(float(words[2]))
                     cells[2].append(float(words[3]))
@@ -635,8 +643,7 @@ def _read_v3(handle):
                         )
                 else:
                     words = line.split()
-                    y = int(words[0])
-                    x = int(words[1])
+                    x, y = _read_v3_cell(record, words)
                     record.mask[x, y] = True
             elif section == "OUTLIERS":
                 if line.startswith("NumberCells="):
@@ -651,8 +658,7 @@ def _read_v3(handle):
                         )
                 else:
                     words = line.split()
-                    y = int(words[0])
-                    x = int(words[1])
+                    x, y = _read_v3_cell(record, words)
                     record.outliers[x, y] = True
             elif section == "MODIFIED":
                 if line.startswith("NumberCells="):
@@ -667,8 +673,7 @@ def _read_v3(handle):
                         )
                 else:
                     words = line.split()
-                    y = int(words[0])
-                    x = int(words[1])
+                    x, y = _read_v3_cell(record, words)
                     record.modified[x, y] = float(words[2])
     if section == "INTENSITY":
         _read_v3_cells(record, cells)
