@@ -119,6 +119,16 @@ class TestMauveIO(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "^Malformed header line: > nonsense$"):
             list(MauveIterator(handle))
 
+    def test_ids_not_shared_between_iterators(self):
+        """Each iterator orders records by its own file, not earlier ones."""
+        a = "> 1:1-4 + a.fa\nACGT\n> 2:1-4 + b.fa\nACGA\n=\n"
+        b = "> 2:1-4 + b.fa\nTTTT\n> 1:1-4 + a.fa\nGGGG\n=\n"
+        next(MauveIterator(StringIO(a)))
+        iterator = MauveIterator(StringIO(b))
+        alignment = next(iterator)
+        self.assertEqual([r.id for r in alignment], ["b.fa/0-4", "a.fa/0-4"])
+        self.assertEqual(iterator.ids, ["2", "1"])
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)

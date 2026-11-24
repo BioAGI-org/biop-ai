@@ -223,7 +223,10 @@ class MauveWriter(SequentialAlignmentWriter):
 class MauveIterator(AlignmentIterator):
     """Mauve xmfa alignment iterator."""
 
-    _ids: list[str] = []  # for caching IDs between __next__ calls
+    def __init__(self, handle, seq_count=None):
+        """Create a MauveIterator; the id cache belongs to this iterator."""
+        super().__init__(handle, seq_count)
+        self._ids: list[str] = []  # for caching IDs between __next__ calls
 
     def __next__(self):
         """Parse the next alignment from the handle."""

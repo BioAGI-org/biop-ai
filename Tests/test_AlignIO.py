@@ -115,6 +115,12 @@ class TestAlignIO_reading(unittest.TestCase):
         for a1, a2 in zip(alignments, alignments2):
             self.assertEqual(a1.get_alignment_length(), a2.get_alignment_length())
             self.assertEqual(len(a1), len(a2))
+            if fmt == "mauve":
+                # Mauve rows follow the order in which each sequence is first
+                # seen in the file, so writing the alignments in a different
+                # order can reorder the rows within an alignment.
+                a1 = sorted(a1, key=lambda r: r.id)
+                a2 = sorted(a2, key=lambda r: r.id)
             for r1, r2 in zip(a1, a2):
                 # Check the bare minimum (ID and sequence) as
                 # many formats can't store more than that.
