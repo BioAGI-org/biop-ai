@@ -12,6 +12,7 @@ import unittest
 import zlib
 from io import BytesIO
 from io import StringIO
+from unittest import mock
 
 import support
 
@@ -8369,6 +8370,19 @@ class TestAlign_malformed_data_block(unittest.TestCase):
         # a file of 274 kB used over 500 MB of memory on the first next().
         block = zlib.compress(bytes(13 * 100000))
         self.check(block, None, self.too_large)
+
+    def test_decompression_bomb_large_header(self):
+        # The header's uncompressBufSize comes from the file, so a crafted
+        # file could raise it to 4 GB. The reader now stops at 256 MB anyway.
+        self.assertEqual(bigbed._MAX_UNCOMPRESS_BUF_SIZE, 256 * 1024 * 1024)
+        # Lower that cap to 1 kB here, rather than decompress 256 MB. The
+        # block is the two items followed by NUL bytes, 1 kB + 1 bytes in
+        # all; it used to decompress fully and the items read as normal.
+        limit = 1024
+        block = zlib.compress(self.items + bytes(limit + 1 - len(self.items)))
+        stream, offset = self.make_stream(block, 0xFFFFFFFF)
+        with mock.patch.object(bigbed, "_MAX_UNCOMPRESS_BUF_SIZE", limit):
+            self.check_message(stream, self.too_large.format(offset, limit))
 
     def test_incomplete(self):
         # These used to raise zlib.error.
