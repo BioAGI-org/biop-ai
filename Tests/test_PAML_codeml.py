@@ -8,12 +8,15 @@
 import itertools
 import os
 import os.path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
 
 import support
 
+import Bio
 from Bio.Phylo.PAML import codeml
 from Bio.Phylo.PAML._paml import PamlError
 
@@ -251,6 +254,42 @@ class ModTest(unittest.TestCase):
 
     def testResultsParsable(self):
         self.assertRaises(ValueError, codeml.read, self.results_file)
+
+    def testResultsLongDashLine(self):
+        """Read a results file with a long line of dashes quickly."""
+        # The number pattern once allowed any run of '-' before a number, so
+        # findall on a line of n dashes took time growing as n squared: 20,000
+        # dashes took about 14 s. Run in a child process, so that a regression
+        # fails, not hangs.
+        code = r"""
+import os, tempfile
+from Bio.Phylo.PAML import codeml
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "dashes.out")
+    with open(path, "w") as handle:
+        handle.write("CODONML (in paml version 4.9, March 2015)\n")
+        handle.write("-" * 100000 + "\n")
+    print(codeml.read(path)["version"])
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("codeml.read took over 60 s on a line of 100,000 dashes")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "4.9\n")
 
     def testParseSEs(self):
         res_dir = os.path.join(self.results_dir, "codeml", "SE")
