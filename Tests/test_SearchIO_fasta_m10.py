@@ -3405,6 +3405,42 @@ print(next(parse(StringIO(text), "fasta-m10")).hsps[0].query_range)
         self.assertEqual((4, 103), hsp.query_range)
         self.assertEqual("SGSNT-RRRAISRPVRLTAEED---QEIRKRAAEC", hsp.query.seq[:35])
 
+    def test_long_alignment(self):
+        """Test an alignment of 10 million residues in 50-residue lines."""
+        # The parser used to add each line of the aligned query, hit and
+        # al_cons to a string held in a dict, which copies the whole string
+        # each time, so the time grew with the square of the length: 12 s for
+        # 2 million residues, 52 s for 4 million. It still parsed correctly,
+        # so time it in a child process: with 10 million the old code would
+        # take several minutes and the new one takes about a second, so the
+        # 60 second timeout fails the test on the old code.
+        filename = os.fspath(get_file("output001.m10"))
+        code = f"""\
+from io import StringIO
+from Bio.SearchIO import parse
+with open({filename!r}) as handle:
+    head = "".join(handle.readlines()[:39])
+n = 10_000_000
+coords = f"; sq_offset: 1\\n; sq_type: p\\n; al_start: 1\\n; al_stop: {{n}}\\n"
+coords += "; al_display_start: 1\\n"
+block = ("A" * 50 + "\\n") * (n // 50)
+text = (
+    head
+    + ">>hit1 desc\\n; sw_overlap: 1\\n"
+    + f">gi|10955263| ..\\n; sq_len: {{n}}\\n" + coords + block
+    + f">hit1 ..\\n; sq_len: {{n}}\\n" + coords + block
+    + "; al_cons:\\n" + block.replace("A", ":")
+    + ">>><<<\\n"
+)
+hsp = next(parse(StringIO(text), "fasta-m10")).hsps[0]
+print(len(hsp.query), len(hsp.hit), len(hsp.aln_annotation["similarity"]))
+print(hsp.query.seq == hsp.hit.seq == "A" * n)
+"""
+        result = run_python(code)
+        self.assertEqual(
+            result.stdout, "10000000 10000000 10000000\nTrue\n", result.stderr
+        )
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
