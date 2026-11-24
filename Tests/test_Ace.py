@@ -197,8 +197,10 @@ class AceTestOne(unittest.TestCase):
         self.assertEqual(record.contigs[1].bs[213].name, "BL060c2-LR0R.b.ab1")
         self.assertEqual(record.contigs[1].bs[213].padded_start, 3236)
         self.assertEqual(record.contigs[1].bs[213].padded_end, 3296)
-        self.assertEqual(len(record.contigs[1].ct), 1)
-        self.assertEqual(record.contigs[1].ct[0].name, "Contig2")
+        # The tag naming no contig stays where it was parsed.
+        self.assertEqual(
+            [t.name for t in record.contigs[1].ct], ["Contig2", "unrelated_Contig"]
+        )
         self.assertEqual(record.contigs[1].ct[0].tag_type, "repeat")
         self.assertEqual(record.contigs[1].ct[0].program, "phrap")
         self.assertEqual(record.contigs[1].ct[0].padded_start, 42)
@@ -2322,6 +2324,18 @@ class AceReadSortsTags(unittest.TestCase):
         lines += ["", "CT{", "c repeat phrap 1 1 040217:110357", "}", ""]
         record = Ace.read(StringIO("\n".join(lines)))
         self.assertEqual([len(c.ct or []) for c in record.contigs], [2, 0, 0])
+
+    def test_footer_tags_naming_nothing_kept(self):
+        """Check tags naming no read or contig survive the sort."""
+        lines = ["AS 1 1", "", "CO c0 1 1 0 U", "A", "", "BQ", "1"]
+        lines += ["", "RD r0 1 0 0", "A", "", "QA 1 1 1 1"]
+        lines += ["", "RT{", "r0 comment phrap 1 2 040217:110357", "}"]
+        lines += ["", "RT{", "nobody comment phrap 1 2 040217:110357", "}"]
+        lines += ["", "CT{", "noContig repeat phrap 1 2 040217:110357", "}", ""]
+        record = Ace.read(StringIO("\n".join(lines)))
+        contig = record.contigs[0]
+        self.assertEqual([t.name for t in contig.reads[0].rt], ["r0", "nobody"])
+        self.assertEqual([t.name for t in contig.ct], ["noContig"])
 
 
 if __name__ == "__main__":

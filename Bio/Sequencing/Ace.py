@@ -533,15 +533,19 @@ class ACEFileRecord:
     def sort(self):
         """Sorts wr, rt and ct tags into the appropriate contig / read instance, if possible."""
 
-        def take_misplaced(tags, owner, misplaced):
-            # Keep the tags naming owner, in place; file the rest by name.
+        def take_misplaced(tags, owner, names, misplaced):
+            # File by name the tags naming another contig or read in names;
+            # keep the rest in place, including tags naming nothing here.
             kept = []
             for tag in tags:
-                if tag.name != owner:
+                if tag.name != owner and tag.name in names:
                     misplaced[tag.name].append(tag)
                 else:
                     kept.append(tag)
             tags[:] = kept
+
+        contig_names = {c.name for c in self.contigs}
+        read_names = {r.rd.name for c in self.contigs for r in c.reads}
 
         # Misplaced tags by the name they carry, in file order. Looking
         # them up by name, rather than comparing every tag with every
@@ -556,12 +560,12 @@ class ACEFileRecord:
                     self.wa = []
                 self.wa.extend(c.wa)
             if c.ct:
-                take_misplaced(c.ct, c.name, ct_by_name)
+                take_misplaced(c.ct, c.name, contig_names, ct_by_name)
             for r in c.reads:
                 if r.rt:
-                    take_misplaced(r.rt, r.rd.name, rt_by_name)
+                    take_misplaced(r.rt, r.rd.name, read_names, rt_by_name)
                 if r.wr:
-                    take_misplaced(r.wr, r.rd.name, wr_by_name)
+                    take_misplaced(r.wr, r.rd.name, read_names, wr_by_name)
         # now sort them into their proper place. Names are meant to be
         # unique; if one repeats, its tags go to the first contig or read
         # with it only, so N reads sharing a name do not get N copies of
