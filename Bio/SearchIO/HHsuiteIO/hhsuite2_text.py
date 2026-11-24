@@ -76,7 +76,7 @@ class Hhsuite2TextParser:
                 self.line = read_forward(self.handle)
             count += 1
             if count >= max_read_until:
-                raise RuntimeError("Exceeded max_read_until in _read_until")
+                raise ValueError("Exceeded max_read_until in _read_until")
 
     def _parse_qresult(self):
         """Parse HHSUITE output file (PRIVATE)."""
@@ -98,7 +98,10 @@ class Hhsuite2TextParser:
             if regx:
                 self.query_id = regx.group(1)
             if self.line.startswith("Match_columns"):
-                self.seq_len = int(self.line.strip().split()[1])
+                fields = self.line.split()
+                if len(fields) < 2:
+                    raise ValueError(f"No value in Match_columns line '{self.line}'")
+                self.seq_len = int(fields[1])
             self.line = self.handle.readline().strip()
         return meta
 
@@ -107,9 +110,7 @@ class Hhsuite2TextParser:
         self.line = read_forward(self.handle)
         match = re.search(_RE_HIT_BLOCK_DESC, self.line)
         if not match:
-            raise RuntimeError(
-                f"Unexpected content in HIT_BLOCK_DESC line'{self.line}'"
-            )
+            raise ValueError(f"Unexpected content in HIT_BLOCK_DESC line'{self.line}'")
         hit_data = {
             "hit_id": match.group(1),
             "description": match.group(2).lstrip(" ;"),
@@ -207,6 +208,8 @@ class Hhsuite2TextParser:
 
         for output_index, block in enumerate(hit_blocks):
             hit_id = block["hit_id"]
+            if block["query_start"] is None or block["hit_start"] is None:
+                raise ValueError(f"No Q or T sequence rows for hit '{hit_id}'")
 
             frag = HSPFragment(hit_id, query_id)
             frag.molecule_type = "protein"

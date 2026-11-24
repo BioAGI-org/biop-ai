@@ -123,7 +123,7 @@ class HhsuiteCases(unittest.TestCase):
         txt_file = get_file("2uvo_hhblits_onlyheader.hhr")
         qresults = parse(txt_file, FMT)
 
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(ValueError):
             next(qresults)
 
     def test_2uvo_emptytable(self):
@@ -131,7 +131,7 @@ class HhsuiteCases(unittest.TestCase):
         txt_file = get_file("2uvo_hhblits_emptytable.hhr")
         qresults = parse(txt_file, FMT)
 
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(ValueError):
             next(qresults)
 
     def test_allx(self):
@@ -283,15 +283,29 @@ import sys
 from Bio.SearchIO import parse
 try:
     next(parse(sys.stdin, {FMT!r}))
-except RuntimeError:
-    print("RuntimeError")
+except ValueError:
+    print("ValueError")
 """
-        self.assertEqual("RuntimeError\n", self.run_in_child(code, text))
+        self.assertEqual("ValueError\n", self.run_in_child(code, text))
         qresults = parse(StringIO(text), FMT)
         with self.assertRaisesRegex(
-            RuntimeError, "^Unexpected content in HIT_BLOCK_DESC line'>>>"
+            ValueError, "^Unexpected content in HIT_BLOCK_DESC line'>>>"
         ):
             next(qresults)
+
+    def test_malformed_raises_value_error(self):
+        """Raise ValueError, not another exception, on malformed input."""
+        head = "Query q1\nMatch_columns 10\n\n No Hit\n  1 x\n\nNo 1  \n"
+        for text, message in (
+            (head + "garbage\n", "^Unexpected content in HIT_BLOCK_DESC"),
+            (head, "^Unexpected content in HIT_BLOCK_DESC"),
+            (head + ">h1 d\nProbab=99.0  Score=10.0\n\n", "^No Q or T sequence"),
+            ("Query q1\nMatch_columns\n\nNo 1  \n", "^No value in Match_columns"),
+            ("Query q1\n\n" + "x\n" * 5001, "^Exceeded max_read_until"),
+        ):
+            with self.subTest(text=text[:60]):
+                with self.assertRaisesRegex(ValueError, message):
+                    next(parse(StringIO(text), FMT))
 
     def test_4y9h_nossm(self):
         """Parsing 4y9h_hhsearch_server_NOssm.hhr file."""
