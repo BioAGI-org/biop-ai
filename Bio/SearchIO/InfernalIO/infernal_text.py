@@ -140,7 +140,14 @@ class InfernalTextParser(_BaseInfernalParser):
                     "target": self._meta.get("target"),
                 }
             else:
+                # Infernal outputs '[ok]' at the end of all results file,
+                # which means we can break the main loop when we see the line
+                if self.line.strip() == "[ok]":
+                    break
+                # skip a stray line between '//' and the next 'Query:', so
+                # the next block is not read under the previous query's id
                 self.line = read_forward(self.handle)
+                continue
 
             # get description and accession, if they exist
             qdesc = "<unknown description>"  # placeholder
@@ -176,11 +183,6 @@ class InfernalTextParser(_BaseInfernalParser):
                 setattr(qresult, attr, value)
             yield qresult
             self.line = read_forward(self.handle)
-
-            # Infernal outputs '[ok]' at the end of all results file,
-            # which means we can break the main loop when we see the line
-            if "[ok]" in self.line:
-                break
 
     def _parse_hit(self, qid, qdesc):
         """Parse an Infernal hit (PRIVATE)."""
