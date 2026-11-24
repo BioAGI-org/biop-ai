@@ -1951,11 +1951,23 @@ class _RTreeFormatter:
         # in time and memory quadratic in the size of the file.
         stream.seek(0, io.SEEK_END)
         file_size = remaining = stream.tell()
-        stream.seek(offset)
         while True:
+            # Check the offset before seeking to it: an offset past the end
+            # of the file can be too large for seek to accept.
+            if offset + formatter_node.size > file_size:
+                raise ValueError(
+                    f"The node at offset {offset} in the R tree index extends past "
+                    f"the end of the file ({file_size} bytes)"
+                )
+            stream.seek(offset)
             data = stream.read(formatter_node.size)
             isLeaf, count = formatter_node.unpack(data)
             entry = formatter_leaf if isLeaf else formatter_nonleaf
+            if offset + formatter_node.size + count * entry.size > file_size:
+                raise ValueError(
+                    f"The node at offset {offset} in the R tree index extends past "
+                    f"the end of the file ({file_size} bytes)"
+                )
             remaining -= formatter_node.size + count * entry.size
             if remaining < 0:
                 raise ValueError(
@@ -2043,7 +2055,6 @@ class _RTreeFormatter:
                     "is reached more than once"
                 )
             visited.add(offset)
-            stream.seek(offset)
 
     def rTreeFromChromRangeArray(self, blockSize, items, endFileOffset):
         itemCount = len(items)
@@ -2296,11 +2307,23 @@ class _BPlusTreeFormatter:
         # in time and memory quadratic in the size of the file.
         stream.seek(0, io.SEEK_END)
         file_size = remaining = stream.tell()
-        stream.seek(offset)
         while True:
+            # Check the offset before seeking to it: an offset past the end
+            # of the file can be too large for seek to accept.
+            if offset + formatter_node.size > file_size:
+                raise ValueError(
+                    f"The node at offset {offset} in the chromosome index extends past "
+                    f"the end of the file ({file_size} bytes)"
+                )
+            stream.seek(offset)
             data = stream.read(formatter_node.size)
             isLeaf, count = formatter_node.unpack(data)
             entry = formatter_leaf if isLeaf else formatter_nonleaf
+            if offset + formatter_node.size + count * entry.size > file_size:
+                raise ValueError(
+                    f"The node at offset {offset} in the chromosome index extends past "
+                    f"the end of the file ({file_size} bytes)"
+                )
             remaining -= formatter_node.size + count * entry.size
             if remaining < 0:
                 raise ValueError(
@@ -2338,18 +2361,17 @@ class _BPlusTreeFormatter:
                     return targets
                 children = node.children
                 try:
-                    pos = children.pop(0)
+                    offset = children.pop(0)
                 except IndexError:
                     node = node.parent
                 else:
                     break
-            if pos in visited:
+            if offset in visited:
                 raise ValueError(
-                    f"Chromosome index is not a tree: the node at offset {pos} "
+                    f"Chromosome index is not a tree: the node at offset {offset} "
                     "is reached more than once"
                 )
-            visited.add(pos)
-            stream.seek(pos)
+            visited.add(offset)
 
     def write(self, items, blockSize, output):
         signature = _BPlusTreeFormatter.signature
