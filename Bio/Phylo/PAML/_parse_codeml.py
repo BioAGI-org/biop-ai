@@ -166,6 +166,7 @@ def parse_nssites(lines, results, multi_models, num_genes):
 def parse_model(lines, results):
     """Parse an individual NSsites model's results."""
     parameters = {}
+    param_list_flag = False
     SEs_flag = False
     dS_tree_flag = False
     dN_tree_flag = False
@@ -173,6 +174,7 @@ def parse_model(lines, results):
     num_params = None
     tree_re = re.compile(r"^\([\w #:',.()]*\);\s*$")
     branch_re = re.compile(r"\s+(\d+\.\.\d+)[\s+\d+\.\d+]+")
+    branch_labels_re = re.compile(r"\s*\d+\.\.\d+(?:\s+\d+\.\.\d+)*\s*$")
     model_params_re = re.compile(r"(?<!\S)([a-z]\d?)\s*=\s+(\d+\.\d+)")
     for line in lines:
         # Find all floating point numbers in this line
@@ -182,6 +184,13 @@ def parse_model(lines, results):
         branch_res = branch_re.match(line)
         # Check if additional model parameters are in the line
         model_params = model_params_re.findall(line)
+        # The parameter list is the first line after the lnL line other
+        # than the branch labels ("6..7     7..8 ..."). Only that line is
+        # a candidate, even if it does not have num_params numbers.
+        param_list_row = False
+        if param_list_flag and line.strip() and not branch_labels_re.match(line):
+            param_list_flag = False
+            param_list_row = len(line_floats) == num_params
         # Find lnL values.
         # Example match (lnL = -2021.348300):
         # "lnL(ntime: 19  np: 22):  -2021.348300      +0.000000"
@@ -190,13 +199,18 @@ def parse_model(lines, results):
             np_res = re.match(r"lnL\(ntime:\s+\d+\s+np:\s+(\d+)\)", line)
             if np_res is not None:
                 num_params = int(np_res.group(1))
+                # With np 0 the parameter list is an empty line, so there
+                # is no row to wait for.
+                param_list_flag = num_params > 0
         # Get parameter list. This can be useful for specifying starting
         # parameters in another run by copying the list of parameters
         # to a file called in.codeml. Since the parameters must be in
         # a fixed order and format, copying and pasting to the file is
         # best. For this reason, they are grabbed here just as a long
-        # string and not as individual numbers.
-        elif len(line_floats) == num_params and not SEs_flag:
+        # string and not as individual numbers. Only the line after the
+        # lnL line is the list; later lines (trees, "p:" and "w:" lines,
+        # branch table rows, SEs) can have num_params numbers too.
+        elif param_list_row:
             parameters["parameter list"] = line.strip()
         # Find SEs. The same format as parameters above is maintained
         # since there is a correspondence between the SE format and

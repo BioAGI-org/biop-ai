@@ -19,11 +19,12 @@ import support
 import Bio
 from Bio.Phylo.PAML import codeml
 from Bio.Phylo.PAML._paml import PamlError
+from Bio.Phylo.PAML._parse_codeml import parse_model
 
 # Some constants to assist with testing:
 # This is the number of parameters that should be parsed for each
 # NSsites site class model
-SITECLASS_PARAMS = {0: 6, 1: 4, 2: 4, 3: 4, 7: 5, 8: 8, 22: 4}
+SITECLASS_PARAMS = {0: 6, 1: 4, 2: 4, 3: 4, 7: 6, 8: 8, 22: 4}
 # This is the default number of site classes per NSsites site
 # class model
 SITECLASSES = {0: None, 1: 2, 2: 3, 3: 3, 7: 10, 8: 11, 22: 3}
@@ -343,6 +344,84 @@ with tempfile.TemporaryDirectory() as tmp:
                     self.assertEqual(
                         len(params["site classes"]), SITECLASSES[model_num], version_msg
                     )
+
+    def testParseParameterListOnlyAfterLnL(self):
+        """Take the parameter list only from the line after the lnL line.
+
+        Any later line with np numbers was once taken as the parameter list,
+        and then lost: a tree with branch lengths, the "p:" and "w:" site
+        class lines, or a row of the dN & dS branch table.
+        """
+        lines = """\
+lnL(ntime:  5  np:  8):   -1000.000000      +0.000000
+   0.10000  0.20000  0.30000  0.40000  0.50000  2.00000  0.80000  0.30000
+   6..1      0.100   200.0    100.0   0.3000  0.0200  0.0700   4.0   7.0
+   6..2      0.200   200.0    100.0   0.3000  0.0400  0.1400   8.0  14.0
+""".splitlines(
+            True
+        )
+        params = parse_model(lines, {})["parameters"]
+        self.assertEqual(
+            params["parameter list"],
+            "0.10000  0.20000  0.30000  0.40000  0.50000  2.00000  0.80000  0.30000",
+        )
+        self.assertEqual(list(params["branches"]), ["6..1", "6..2"])
+        # np 7: the M0 tree has 7 branch lengths
+        results = codeml.read(
+            os.path.join(self.results_dir, "codeml", "aa_model0", "aa_model0-4_7.out")
+        )
+        self.assertIn("Homo_sapie: 0.00000", results["NSsites"][0]["tree"])
+        # np 10: the Model 7 "p:" and "w:" lines have 10 numbers each
+        results = codeml.read(
+            os.path.join(
+                self.results_dir, "codeml", "all_NSsites", "all_NSsites-4_7.out"
+            )
+        )
+        self.assertEqual(
+            len(results["NSsites"][7]["parameters"]["site classes"]), SITECLASSES[7]
+        )
+
+    def testParseParameterListWithNan(self):
+        """A parameter list row that fails the count is not looked for later.
+
+        With a nan in the row it has fewer than np numbers. The SEs row was
+        then taken as the parameter list, and the tree as the SEs.
+        """
+        lines = """\
+lnL(ntime:  2  np:  3):   -100.000000      +0.000000
+   4..1     4..2
+  0.10000      nan  0.30000
+SEs for parameters:
+  0.01000  0.02000  0.03000
+
+(1: 0.10000, 2: 0.20000, 3: 0.30000);
+""".splitlines(
+            True
+        )
+        results = parse_model(lines, {})
+        params = results["parameters"]
+        self.assertNotIn("parameter list", params)
+        self.assertEqual(params["SEs"], "0.01000  0.02000  0.03000")
+        self.assertEqual(results["tree"], "(1: 0.10000, 2: 0.20000, 3: 0.30000);")
+
+    def testParseParameterListNoParameters(self):
+        """With np 0, no later line is taken as the parameter list.
+
+        codeml prints an empty line for an empty parameter list. That line
+        was skipped, and the next line with no numbers taken as the list.
+        """
+        lines = """\
+lnL(ntime:  0  np:  0):   -100.000000      +0.000000
+
+Note: Branch length is defined as number of nucleotide substitutions per codon.
+
+tree length =   0.00000
+""".splitlines(
+            True
+        )
+        results = parse_model(lines, {})
+        self.assertNotIn("parameter list", results.get("parameters", {}))
+        self.assertEqual(results["tree length"], 0.0)
 
     def testParseNSsite3(self):
         res_dir = os.path.join(self.results_dir, "codeml", "NSsite3")
