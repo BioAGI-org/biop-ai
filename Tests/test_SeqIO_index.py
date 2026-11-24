@@ -200,6 +200,11 @@ if sqlite3:
                 ["E3MFGYR02_no_manifest.sff", "greek.sff"],
             )
 
+        def test_old_files_empty(self):
+            """Load existing index with an empty list of files."""
+            with self.assertRaisesRegex(ValueError, "says 3 files, not 0"):
+                SeqIO.index_db("Roche/triple_sff.idx", [])
+
     class NewIndexTest(unittest.TestCase):
         """Check paths etc in newly built index."""
 
