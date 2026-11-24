@@ -61,6 +61,29 @@ class Primer3ParseTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "^No records found in handle$"):
                     Primer3.read(_EndOfFileGuard(text))
 
+    def test_line_before_header(self):
+        """A comment or primer line before the Primer3 header raises ValueError."""
+        # These used to raise AttributeError, as no Record existed yet.
+        for text in (
+            "# a comment\n# EPRIMER3 RESULTS FOR x\n",
+            "\n     PRODUCT SIZE: 100\n",
+            "     FORWARD PRIMER    10   20  59.9  50.0  ACGTACGTACGTACGTACGT\n",
+            "     REVERSE PRIMER    10   20  59.9  50.0  ACGTACGTACGTACGTACGT\n",
+            "     INTERNAL OLIGO    10   20  59.9  50.0  ACGTACGTACGTACGTACGT\n",
+        ):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(ValueError, "before a '# EPRIMER3'"):
+                    list(Primer3.parse(io.StringIO(text)))
+
+    def test_ignored_lines_before_header(self):
+        """Other lines before the header are still ignored."""
+        with open(self.test_files[0]) as handle:
+            text = handle.read()
+        banner = "primer3 run log\n#                      Start  Len   Tm     GC%   Sequence\n"
+        record = Primer3.read(io.StringIO(banner + text))
+        self.assertEqual(len(record.primers), 5)
+        self.assertEqual(list(Primer3.parse(io.StringIO("hello\n"))), [])
+
     def test_indepth_regular_parse(self):
         """Make sure we get the data from normal primer3 files okay."""
         regular_file = self.test_files[0]
