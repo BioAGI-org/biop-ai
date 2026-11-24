@@ -7,6 +7,7 @@
 
 """Tests for SearchIO InfernalIO infernal-text parser."""
 
+import io
 import itertools
 import unittest
 
@@ -506,6 +507,25 @@ class CmsearchCases(unittest.TestCase):
         # test if we've properly finished iteration
         self.assertRaises(StopIteration, next, qresults)
         self.assertEqual(1, count)
+
+    def test_cmsearch_local_end_zero_residues(self):
+        """Test parsing a local end that emits no residues, *[ 0]* in the hit line."""
+        # The local end state can emit zero residues. This used to fail an
+        # assert, so the file only parsed under python -O.
+        text = get_file("cmsearch_114_U2_Yeast_full.txt").read_text()
+        old = "GUGUAG*[ 1]*-GUU"
+        self.assertEqual(text.count(old), 1)
+        text = text.replace(old, "GUGUAG*[ 0]*-GUU")
+        qresult = next(parse(io.StringIO(text), FMT))
+        hsp = qresult["ENA|BK006947|BK006947.3"][0]
+        self.assertEqual(
+            [(frag.hit_start, frag.hit_end) for frag in hsp],
+            [(266059, 266097), (266097, 266207)],
+        )
+        self.assertEqual(
+            [(frag.query_start, frag.query_end) for frag in hsp],
+            [(1, 36), (84, 193)],
+        )
 
     def test_cmsearch_1q_mm_1h_shuffled(self):
         """Test parsing infernal-text, cmsearch, one queries, multiple non-consecutive hits, one hsp, multiple fragments (U2_Yeast_full_shuffled)"""
