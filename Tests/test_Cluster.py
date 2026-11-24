@@ -3024,6 +3024,40 @@ class TestCluster(unittest.TestCase):
             self.assertEqual(clusterid.tolist(), expected[0].tolist())
             self.assertEqual((error, nfound), expected[1:])
 
+    @unittest.skipUnless(sys.maxsize > 2**32, "needs a 2 GiB address space")
+    def test_kmedoids_one_dimensional_distances_large(self):
+        """Check a 1-D distance matrix for 23,171 items is accepted.
+
+        The size check computed 8 * m and n * n - n in C int, which overflows
+        from m = 2**28 distances, so the matrix was rejected with "distance
+        matrix has unexpected size." The 2 GiB array is an anonymous map that
+        is never written or read, so it takes no memory.
+        """
+        if TestCluster.module == "Bio.Cluster":
+            from Bio.Cluster import _cluster
+        elif TestCluster.module == "Pycluster":
+            from Pycluster import _cluster
+        import mmap
+
+        n = 23171
+        try:
+            buffer = mmap.mmap(-1, n * (n - 1) // 2 * 8)
+        except (OSError, MemoryError) as exception:
+            # An address-space limit (ulimit -v), or a Windows commit limit
+            self.skipTest(f"cannot map 2 GiB: {exception}")
+        distances = np.frombuffer(buffer, dtype="d")
+        try:
+            clusterid = np.zeros(n, np.intc)
+            # Ask for one cluster too many, so kmedoids stops after it has
+            # accepted the matrix and before it reads any distance.
+            message = "^more clusters requested than items to be clustered$"
+            with self.assertRaisesRegex(ValueError, message):
+                _cluster.kmedoids(distances, n + 1, 1, clusterid, 0)
+        finally:
+            del distances
+            gc.collect()
+            buffer.close()
+
     @unittest.skipUnless(
         sys.implementation.name == "cpython", "CPython frees an array at once"
     )
