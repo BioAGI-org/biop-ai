@@ -187,16 +187,23 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
                 raise ValueError("The R tree index has no data blocks")
             node = children[0]
         filepos = stream.tell()
-        # Read the whole block, as iterating and searching do: reading on
-        # until an 's' line turned up never ended if the block had none.
-        data = self._read_block(stream, node)
         # The first item of the block holds the first MAF block, after the
         # chromosome number, start and end, with semicolons in place of
-        # newlines, and ended by a NUL byte. Its first 's' line names the
-        # reference sequence, and must hold all 7 fields of an 's' line.
-        # Walk the lines by offset and split only an 's' line, so that a
-        # large item costs no more than one pass over it.
-        end = data.find(b"\0", size)
+        # newlines, and ended by a NUL byte. The block may be far larger, so
+        # read and decompress it 64 kB at a time, only up to that NUL byte,
+        # with the checks of reading the whole block: a block that is
+        # malformed before that byte raises the same ValueError.
+        data = bytearray()
+        end = -1
+        for piece in self._read_block_pieces(stream, node, 65536):
+            data += piece
+            end = data.find(b"\0", max(len(data) - len(piece), size))
+            if end >= 0:
+                break
+        # The first 's' line of the item names the reference sequence, and
+        # must hold all 7 fields of an 's' line. Walk the lines by offset
+        # and split only an 's' line, so that a large item costs no more
+        # than one pass over it.
         words = []
         start = size
         while 0 <= start <= end:

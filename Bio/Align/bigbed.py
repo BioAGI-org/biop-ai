@@ -849,10 +849,18 @@ class AlignmentIterator(interfaces.AlignmentIterator):
 
     def _read_block(self, stream, node):
         # Return the data block of a leaf of the R tree index, decompressed
-        # if the file is compressed. The writer sets uncompressBufSize in the
-        # file header to the size of the largest block once decompressed, so
-        # decompress no more than that: without a limit, a block of a few
-        # kilobytes could expand to gigabytes.
+        # if the file is compressed.
+        return b"".join(self._read_block_pieces(stream, node))
+
+    def _read_block_pieces(self, stream, node, piece_size=sys.maxsize):
+        # Yield the data block of a leaf of the R tree index, decompressed
+        # if the file is compressed, in pieces of at most piece_size bytes,
+        # reading at most piece_size bytes of the file at a time. A caller
+        # that needs only the start of the block can stop early. By default
+        # the block is yielded in one piece. The writer sets
+        # uncompressBufSize in the file header to the size of the largest
+        # block once decompressed, so decompress no more than that: without
+        # a limit, a block of a few kilobytes could expand to gigabytes.
         offset = node.dataOffset
         size = node.dataSize
         # The offset and size come from the index; a block past the end of
@@ -864,32 +872,55 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 f"past the end of the file ({file_size} bytes)"
             )
         stream.seek(offset)
-        data = stream.read(size)
-        if len(data) != size:
-            raise ValueError(
-                f"The data block at offset {offset} is incomplete: read "
-                f"{len(data)} of {size} bytes"
-            )
+        remaining = size
         if self._compressed:
             uncompressBufSize = self._uncompressBufSize
             decompressor = zlib.decompressobj()
+            total = 0  # bytes decompressed so far
+        data = b""
+        while True:
+            if not data and remaining:
+                length = min(remaining, piece_size)
+                data = stream.read(length)
+                remaining -= len(data)
+                if len(data) != length:
+                    raise ValueError(
+                        f"The data block at offset {offset} is incomplete: read "
+                        f"{size - remaining} of {size} bytes"
+                    )
+            if not self._compressed:
+                if not data:
+                    return
+                yield data
+                data = b""
+                continue
+            # Decompress at most one byte more than uncompressBufSize, to
+            # find out if the block is larger.
+            max_length = min(piece_size, uncompressBufSize + 1 - total)
             try:
-                data = decompressor.decompress(data, uncompressBufSize)
+                piece = decompressor.decompress(data, max_length)
             except zlib.error as exception:
                 raise ValueError(
                     f"The compressed data block at offset {offset} is invalid "
                     f"({exception})"
                 ) from None
-            if decompressor.unconsumed_tail:
+            data = decompressor.unconsumed_tail
+            total += len(piece)
+            if total > uncompressBufSize:
                 raise ValueError(
                     f"The data block at offset {offset} decompresses to more "
                     f"than uncompressBufSize ({uncompressBufSize}) bytes"
                 )
-            if not decompressor.eof:
+            if piece:
+                yield piece
+            # Stop at the end of the compressed data, as before; any bytes
+            # after it in the block are ignored.
+            if decompressor.eof:
+                return
+            if not piece and not data and not remaining:
                 raise ValueError(
                     f"The compressed data block at offset {offset} is incomplete"
                 )
-        return data
 
     def _iterate_index(self, stream):
         # Supplemental Table 12: Binary BED-data format

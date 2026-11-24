@@ -3,12 +3,14 @@
 # license.  Please see the LICENSE file that should have been included
 # as part of this package.
 """Tests for Align.bigmaf module."""
+import random
 import struct
 import tempfile
 import unittest
 import zlib
 from io import BytesIO
 from io import StringIO
+from unittest import mock
 
 import numpy as np
 import support
@@ -12923,6 +12925,39 @@ class EndOfFileGuard(BytesIO):
         return data
 
 
+class ReadCounter(BytesIO):
+    """A binary stream that counts the bytes read from it."""
+
+    def __init__(self, data):
+        """Hold the data, and count the bytes read."""
+        super().__init__(data)
+        self.bytes_read = 0
+
+    def read(self, size=-1):
+        data = super().read(size)
+        self.bytes_read += len(data)
+        return data
+
+
+class CountingDecompressor:
+    """A zlib decompressor that counts the bytes it returns."""
+
+    decompressobj = staticmethod(zlib.decompressobj)
+    bytes_out = 0  # by all instances
+
+    def __init__(self, *args, **kwargs):
+        """Make a zlib decompressor to pass calls on to."""
+        self.decompressor = self.decompressobj(*args, **kwargs)
+
+    def decompress(self, data, max_length=0):
+        data = self.decompressor.decompress(data, max_length)
+        CountingDecompressor.bytes_out += len(data)
+        return data
+
+    def __getattr__(self, name):
+        return getattr(self.decompressor, name)
+
+
 class TestAlign_malformed_first_block(unittest.TestCase):
     """First data blocks that do not name the reference sequence.
 
@@ -12935,12 +12970,13 @@ class TestAlign_malformed_first_block(unittest.TestCase):
         "reference sequence"
     )
 
-    def make_stream(self, block, compressed):
+    def make_stream(self, block, compressed, size=None):
         """Return ucsc_test.bb with its data block replaced, and the block offset.
 
         The new block is appended to the file, and the one leaf of the R tree
         index points to it instead. If compressed is False, uncompressBufSize
         in the file header is set to 0, which marks the file as uncompressed.
+        If size is given, the leaf gives it in place of the size of the block.
         """
         with open(support.DATA / "MAF" / "ucsc_test.bb", "rb") as stream:
             data = bytearray(stream.read())
@@ -12953,7 +12989,9 @@ class TestAlign_malformed_first_block(unittest.TestCase):
         # ucsc_test.bb the root is a leaf holding one data block, and the
         # offset and size of the block are the last 16 of its 4 + 32 bytes.
         offset = len(data)
-        struct.pack_into("<QQ", data, index_offset + 48 + 20, offset, len(block))
+        if size is None:
+            size = len(block)
+        struct.pack_into("<QQ", data, index_offset + 48 + 20, offset, size)
         data += block
         return EndOfFileGuard(bytes(data)), offset
 
@@ -12986,6 +13024,66 @@ class TestAlign_malformed_first_block(unittest.TestCase):
                     with Align.parse(stream, "bigmaf") as alignments:
                         self.assertEqual(alignments.reference, "mm10")
                         self.assertEqual(alignments.targets[0].id, "mm10.chr7")
+
+    def test_large_block(self):
+        # Only the first item of the block is read to find the 's' line, not
+        # the rest of the block. This used to read, and decompress, all of
+        # it. The second item is 2 MB of random bytes, which zlib cannot
+        # compress; uncompressBufSize at byte 52 of the header must fit it.
+        first = self.make_block(b"a score=0;s mm10.chr7 27578828 3 + 1 AAA", False)
+        second = struct.pack("<III", 0, 27578831, 27578834)
+        second += random.Random(0).randbytes(2_000_000).replace(b"\0", b"x")
+        block = first + second + b"\0"
+        for compressed in (True, False):
+            with self.subTest(compressed=compressed):
+                data = block
+                if compressed:
+                    data = zlib.compress(block)
+                stream, _ = self.make_stream(data, compressed)
+                data = bytearray(stream.getvalue())
+                if compressed:
+                    struct.pack_into("<I", data, 52, len(block))
+                stream = ReadCounter(bytes(data))
+                with Align.parse(stream, "bigmaf") as alignments:
+                    self.assertEqual(alignments.reference, "mm10")
+                    self.assertLess(stream.bytes_read, 200_000)
+
+    def test_large_compressible_block(self):
+        # The second item is 10 MB of one letter, which zlib compresses to
+        # 10 kB, so reading 64 kB of the file at a time used to decompress
+        # all of it anyway. Each step now decompresses at most 64 kB.
+        first = self.make_block(b"a score=0;s mm10.chr7 27578828 3 + 1 AAA", False)
+        second = struct.pack("<III", 0, 27578831, 27578834) + b"x" * 10_000_000
+        block = first + second + b"\0"
+        stream, _ = self.make_stream(zlib.compress(block), True)
+        data = bytearray(stream.getvalue())
+        # uncompressBufSize, at byte 52 of the header, must fit the block.
+        struct.pack_into("<I", data, 52, len(block))
+        stream = BytesIO(bytes(data))
+        CountingDecompressor.bytes_out = 0
+        with mock.patch.object(zlib, "decompressobj", CountingDecompressor):
+            with Align.parse(stream, "bigmaf") as alignments:
+                self.assertEqual(alignments.reference, "mm10")
+        self.assertGreater(CountingDecompressor.bytes_out, 0)
+        self.assertLess(CountingDecompressor.bytes_out, 200_000)
+
+    def test_block_past_end_of_file(self):
+        # The leaf gives the block one byte more than the file holds, though
+        # the first item is complete. Opening used to read that item and
+        # succeed, while iterating rejects the block.
+        mafBlock = b"a score=0;s mm10.chr7 27578828 3 + 1 AAA"
+        for compressed in (True, False):
+            with self.subTest(compressed=compressed):
+                block = self.make_block(mafBlock, compressed)
+                size = len(block) + 1
+                stream, offset = self.make_stream(block, compressed, size)
+                with self.assertRaises(ValueError) as cm:
+                    Align.parse(stream, "bigmaf")
+                self.assertEqual(
+                    str(cm.exception),
+                    f"The data block at offset {offset}, of {size} bytes, "
+                    f"extends past the end of the file ({offset + size - 1} bytes)",
+                )
 
     def test_no_s_line(self):
         # These used to read on and on at the end of the file.
@@ -13033,6 +13131,48 @@ class TestAlign_malformed_first_block(unittest.TestCase):
                 tracemalloc.stop()
             self.assertLess(peak, 4 * len(mafBlock))
         self.assertEqual(message, self.no_s_line.format(offset))
+
+    def test_no_end_of_item(self):
+        # The item has no NUL byte to end it, so the whole block is read in
+        # search of one. It is read once and held once: rereading it to
+        # raise the error, while holding the part read so far, would double
+        # the memory used. The memory is measured only where tracemalloc
+        # exists, not on PyPy.
+        block = struct.pack("<III", 0, 27578828, 27578831)
+        block += b"a score=0;" + b"x" * 4_000_000
+        stream, offset = self.make_stream(block, compressed=False)
+
+        def parse():
+            with self.assertRaises(ValueError) as cm:
+                Align.parse(stream, "bigmaf")
+            return str(cm.exception)
+
+        if tracemalloc is None:
+            message = parse()
+        else:
+            tracemalloc.start()
+            try:
+                message = parse()
+                _, peak = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+            self.assertLess(peak, 1.5 * len(block))
+        self.assertEqual(message, self.no_s_line.format(offset))
+
+    def test_data_after_compressed_item(self):
+        # The compressed data end without the NUL byte that ends the item,
+        # and are followed by 2 MB of other bytes in the block. Reading stops
+        # at the end of the compressed data, as reading the whole block does.
+        # It used to read on to the end of the block, and then read the whole
+        # block again.
+        block = zlib.compress(self.make_block(b"a score=0", False)[:-1])
+        block += bytes(2_000_000)
+        stream, offset = self.make_stream(block, True)
+        stream = ReadCounter(stream.getvalue())
+        with self.assertRaises(ValueError) as cm:
+            Align.parse(stream, "bigmaf")
+        self.assertEqual(str(cm.exception), self.no_s_line.format(offset))
+        self.assertLess(stream.bytes_read, 200_000)
 
     def test_empty_block(self):
         # The block ends the file, so reading it starts at the end of the file.
