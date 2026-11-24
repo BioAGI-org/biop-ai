@@ -8,11 +8,13 @@
 
 import os
 import tempfile
+import copy
 import unittest
 from io import BytesIO
 
 import support
 
+from Bio import BiopythonParserWarning
 from Bio import Phylo
 
 # Example NeXML files
@@ -65,6 +67,34 @@ class ParseTests(unittest.TestCase):
 """
         with self.assertRaisesRegex(ValueError, "^XML entity declarations are not"):
             list(Phylo.parse(BytesIO(data), "nexml"))
+
+    def test_meta_named_like_clade_attribute(self):
+        """Check a meta property cannot replace a Clade attribute."""
+        data = b"""\
+<?xml version="1.0"?>
+<nex:nexml xmlns:nex="http://www.nexml.org/2009" xmlns="http://www.nexml.org/2009">
+ <trees id="t" otus="o"><tree id="tr">
+  <node id="n1" root="true"/>
+  <node id="n2" otu="A">
+   <meta property="is_terminal">x</meta><meta property="clades">x</meta>
+   <meta property="root">x</meta><meta property="branch_length">x</meta>
+   <meta property="self">x</meta><meta property="__deepcopy__">x</meta>
+   <meta property="dc:creator">me</meta>
+  </node>
+  <node id="n3" otu="B"/>
+  <edge id="e1" source="n1" target="n2"/>
+  <edge id="e2" source="n1" target="n3"/>
+ </tree></trees>
+</nex:nexml>
+"""
+        with self.assertWarns(BiopythonParserWarning):
+            tree = Phylo.read(BytesIO(data), "nexml")
+        self.assertEqual(sorted(c.name for c in tree.get_terminals()), ["A", "B"])
+        self.assertEqual(tree.total_branch_length(), 3.0)
+        (clade,) = tree.find_clades("A")
+        self.assertEqual(getattr(clade, "dc:creator"), "me")
+        # A name such as __deepcopy__ would be called by copy.deepcopy
+        self.assertEqual(copy.deepcopy(tree).count_terminals(), 2)
 
 
 class WriterTests(unittest.TestCase):
