@@ -114,6 +114,10 @@ def _open_for_random_access(
         try:
             # If it is BGZF, we support that
             return bgzf.BgzfReader(mode="rb", fileobj=handle)
+        except bgzf._TruncatedBlockError:
+            # A damaged BGZF file, although the message says "BGZF"
+            handle.close()
+            raise
         except ValueError as e:
             handle.close()
             if "BGZF" not in str(e):
