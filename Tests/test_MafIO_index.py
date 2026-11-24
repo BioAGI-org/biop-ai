@@ -382,6 +382,16 @@ if sqlite3:
             search = self.idx.search((0, 1000, 2000), (250, 500, 2500))
             self.assertRaises(ValueError, next, search)
 
+        def test_int_subclass_str_not_in_sql(self):
+            """An int subclass's __str__ must not become part of the query."""
+
+            class Odd(int):
+                def __str__(self):
+                    return "0 AND 0) OR (1"
+
+            self.assertEqual(list(self.idx.search([1], [2])), [])
+            self.assertEqual(list(self.idx.search([Odd(1)], [2])), [])
+
         def test_correct_retrieval_1(self):
             """Correct retrieval of Cnksr3 in mouse."""
             search = self.idx.search((3014742, 3018161), (3015028, 3018644))
