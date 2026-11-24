@@ -7,6 +7,7 @@
 """Tests the basic functionality of the KEGG parsers."""
 
 import unittest
+from io import StringIO
 
 import support
 
@@ -162,6 +163,16 @@ class CompoundTests(unittest.TestCase):
                 "PDB-CCD:MCM",
             ],
         )
+
+    def test_pathway_round_trip(self):
+        """str() of a record keeps the PATHWAY map ids and names."""
+        with open(support.DATA / "KEGG" / "compound.sample") as handle:
+            record = list(Compound.parse(handle))[2]
+        self.assertEqual(record.entry, "C00099")
+        self.assertIn("PATHWAY     map00240  Pyrimidine metabolism\n", str(record))
+        reparsed = next(Compound.parse(StringIO(str(record) + "\n")))
+        self.assertEqual(reparsed.pathway, record.pathway)
+        self.assertEqual(len(reparsed.pathway), 8)
 
     def test_irregular(self):
         """compound.irregular tests."""
