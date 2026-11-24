@@ -646,7 +646,18 @@ class PositionSpecificScoringMatrix(GenericPositionMatrix):
         return numerator / denominator
 
     def distribution(self, background=None, precision=10**3):
-        """Calculate the distribution of the scores at the given precision."""
+        """Calculate the distribution of the scores at the given precision.
+
+        The background must be the one the PSSM was built with, as the motif
+        probabilities are recovered from the scores as 2**score * background.
+        It defaults to a uniform background. With any other background the
+        false negative rates are wrong. A BiopythonWarning is given when, in
+        any column, 2**score * background adds up to a total that differs
+        from 1 by more than 0.1% (math.isclose with rel_tol=1e-3), that is,
+        when the background does not match the normalised column weights. This
+        check can miss a mismatched background whose column totals still
+        come to 1.
+        """
         from .thresholds import ScoreDistribution
 
         if background is None:

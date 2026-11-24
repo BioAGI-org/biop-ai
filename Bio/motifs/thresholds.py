@@ -6,8 +6,12 @@
 """Approximate calculation of appropriate thresholds for motif finding."""
 
 import contextlib
+import math
+import warnings
 
 import numpy as np
+
+from Bio import BiopythonWarning
 
 
 def _cast(values, dtype):
@@ -158,6 +162,7 @@ class ScoreDistribution:
         else:
             mo_density = _Bins.from_list(self.mo_density)
             bg_density = _Bins.from_list(self.bg_density)
+            mismatched = False
             for position in range(pssm.length):
                 shifts = []
                 mo_weights = []
@@ -171,8 +176,19 @@ class ScoreDistribution:
                     bg_weights.append(bg)
                 mo_density = self._add_column(mo_density, shifts, mo_weights)
                 bg_density = self._add_column(bg_density, shifts, bg_weights)
+                if not math.isclose(math.fsum(mo_weights), 1, rel_tol=1e-3):
+                    mismatched = True
             self.mo_density = mo_density.tolist()
             self.bg_density = bg_density.tolist()
+            if mismatched:
+                # 2**score * background gives the motif's probabilities only
+                # for the background the PSSM was built with.
+                warnings.warn(
+                    "The background is not the one the PSSM was built with, so "
+                    "the motif score density does not add up to 1, and "
+                    "threshold_fnr and threshold_balanced will be wrong.",
+                    BiopythonWarning,
+                )
 
     def _index_diff(self, x, y=0.0):
         return int((x - y + 0.5 * self.step) // self.step)
