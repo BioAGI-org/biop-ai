@@ -313,17 +313,26 @@ def _read_v3_cells(record, cells):
     # the whole array, so that a short file declaring large Rows and Cols
     # cannot make the parser allocate memory for cells it does not hold.
     index, intensities, stdevs, npix = cells
+    shape = (record.nrows, record.ncols)
+    # Usually each cell is listed once, in order. As every flat index lies in
+    # [0, nrows * ncols), that many strictly increasing ones must be exactly
+    # 0, 1, 2, ...; then use the stored values as they are, without copying.
+    flat = np.asarray(index)
+    if len(flat) == record.nrows * record.ncols and (flat[1:] > flat[:-1]).all():
+        record.intensities = np.asarray(intensities, float).reshape(shape)
+        record.stdevs = np.asarray(stdevs, float).reshape(shape)
+        record.npix = np.asarray(npix, int).reshape(shape)
+        return
     # A cell may be listed more than once; as before, the last line wins.
     # np.unique gives the first line of each distinct cell, in cell order;
     # on the lines reversed, that is the last.
-    last = np.unique(np.asarray(index)[::-1], return_index=True)[1]
+    last = np.unique(flat[::-1], return_index=True)[1]
     if len(last) < record.nrows * record.ncols:
         raise ParserError(
             f"CEL version 3 file has {record.nrows} rows and {record.ncols} "
             f"columns but values for {len(last)} cells"
         )
     last = len(index) - 1 - last
-    shape = (record.nrows, record.ncols)
     record.intensities = np.asarray(intensities, float)[last].reshape(shape)
     record.stdevs = np.asarray(stdevs, float)[last].reshape(shape)
     record.npix = np.asarray(npix, int)[last].reshape(shape)
