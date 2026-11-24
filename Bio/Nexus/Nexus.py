@@ -1415,14 +1415,15 @@ class Nexus:
         if not name:
             raise NexusError(f"Formatting error in line: {rest} ")
         name = quotestrip(name)
-        if opts.peek_nonwhitespace == "(":
-            open = opts.next_nonwhitespace()
-            qualifier = open.next_word()
-            close = opts.next_nonwhitespace()
-            if qualifier.lower() == "vector":
-                raise NexusError(f"Unsupported VECTOR format in line {opts}")
-            elif qualifier.lower() != "standard":
-                raise NexusError(f"Unknown qualifier {qualifier} in line {opts}")
+        if opts.peek_nonwhitespace() == "(":
+            opts.next_nonwhitespace()  # the "("
+            qualifier = (opts.next_word() or "").lower()
+            if opts.next_nonwhitespace() != ")":
+                raise NexusError(f"Formatting error in line: {rest} ")
+            if qualifier == "vector":
+                raise NexusError(f"Unsupported VECTOR format in line: {rest} ")
+            elif qualifier != "standard":
+                raise NexusError(f"Unknown qualifier in line: {rest} ")
         if opts.next_nonwhitespace() != separator:
             raise NexusError(f"Formatting error in line: {rest} ")
         return name
