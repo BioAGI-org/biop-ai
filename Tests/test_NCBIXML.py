@@ -4403,6 +4403,24 @@ class TestNCBIXML(unittest.TestCase):
             self.assertEqual(len(create_view_warnings), 1)
             self.assertIn("NCBIXML: Ignored:", str(create_view_warnings[0].message))
 
+    def test_entity_declarations_rejected(self):
+        """Refuse a DOCTYPE with nested entities instead of expanding them."""
+        # Each level doubles the text; 16 levels took 10 s before entities
+        # were refused, here 3 levels are enough to show they are.
+        xml_data = b"""<?xml version="1.0"?>
+<!DOCTYPE BlastOutput [
+<!ENTITY e0 "xxxxxxxxxxxxxxxx">
+<!ENTITY e1 "&e0;&e0;">
+<!ENTITY e2 "&e1;&e1;">
+<!ENTITY e3 "&e2;&e2;">
+]>
+<BlastOutput>
+<BlastOutput_program>&e3;</BlastOutput_program>
+</BlastOutput>
+"""
+        with self.assertRaisesRegex(ValueError, "entity declarations"):
+            list(NCBIXML.parse(io.BytesIO(xml_data)))
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
