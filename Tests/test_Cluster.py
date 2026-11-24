@@ -1380,12 +1380,22 @@ class TestCluster(unittest.TestCase):
             "Cluster",
             "clustermodule.c",
         )
+        if sys.platform == "win32":
+            # A gcc found on PATH (MinGW) does not match the MSVC headers
+            self.skipTest("compiles with gcc or clang, not on Windows")
         compiler = shutil.which("gcc") or shutil.which("clang")
+        include = sysconfig.get_paths()["include"]
         if compiler is None or not os.path.exists(source):
             self.skipTest("needs gcc or clang and the Bio.Cluster C source")
-        include = sysconfig.get_paths()["include"]
+        if not os.path.exists(os.path.join(include, "Python.h")):
+            self.skipTest("needs the Python C headers")
+        includes = ["-I", include]
+        # pyconfig.h may be in a separate platform-specific directory
+        platinclude = sysconfig.get_paths().get("platinclude")
+        if platinclude and platinclude != include and os.path.isdir(platinclude):
+            includes += ["-I", platinclude]
         result = subprocess.run(
-            [compiler, "-fsyntax-only", "-Wcast-function-type", "-I", include, source],
+            [compiler, "-fsyntax-only", "-Wcast-function-type", *includes, source],
             capture_output=True,
             text=True,
             timeout=60,
