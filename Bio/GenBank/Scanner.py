@@ -68,10 +68,12 @@ class InsdcScanner:
 
     def __init__(self, debug=0):
         """Initialize the class."""
-        assert len(self.RECORD_START) == self.HEADER_WIDTH
+        assert len(self.RECORD_START) == self.HEADER_WIDTH  # noqa: S101
         for marker in self.SEQUENCE_HEADERS:
-            assert marker == marker.rstrip()
-        assert len(self.FEATURE_QUALIFIER_SPACER) == self.FEATURE_QUALIFIER_INDENT
+            assert marker == marker.rstrip()  # noqa: S101
+        assert (  # noqa: S101
+            len(self.FEATURE_QUALIFIER_SPACER) == self.FEATURE_QUALIFIER_INDENT
+        )
         self.debug = debug
         self.handle = None
         self.line = None
@@ -366,7 +368,7 @@ class InsdcScanner:
                             f"Expected a qualifier starting with '/' in the "
                             f"'{feature_key}' feature, found {line!r}"
                         )
-                    assert key == qualifiers[-1][0]
+                    assert key == qualifiers[-1][0]  # noqa: S101
                     # if debug : print("Unquoted Cont %s:%s" % (key, line))
                     if qualifiers[-1][1] is None:
                         raise StopIteration
@@ -705,7 +707,7 @@ class EmblScanner(InsdcScanner):
         return misc_lines, "".join(seq_lines).replace(" ", "")
 
     def _feed_first_line(self, consumer, line):
-        assert line[: self.HEADER_WIDTH].rstrip() == "ID"
+        assert line[: self.HEADER_WIDTH].rstrip() == "ID"  # noqa: S101
         if line[self.HEADER_WIDTH :].count(";") == 6:
             # Looks like the semi colon separated style introduced in 2006
             self._feed_first_line_new(consumer, line)
@@ -738,7 +740,7 @@ class EmblScanner(InsdcScanner):
         fields = [
             data.strip() for data in line[self.HEADER_WIDTH :].strip()[:-3].split(";")
         ]
-        assert len(fields) == 4
+        assert len(fields) == 4  # noqa: S101
         consumer.locus(fields[0])
         consumer.residue_type(fields[1])  # semi-redundant
         consumer.data_file_division(fields[2])
@@ -751,7 +753,7 @@ class EmblScanner(InsdcScanner):
         # e.g. ID   DI500001       STANDARD;      PRT;   111 AA.
         #
         # This follows the style of _feed_first_line_old
-        assert line[: self.HEADER_WIDTH].rstrip() == "ID"
+        assert line[: self.HEADER_WIDTH].rstrip() == "ID"  # noqa: S101
         fields = [line[self.HEADER_WIDTH :].split(None, 1)[0]]
         fields.extend(line[self.HEADER_WIDTH :].split(None, 1)[1].split(";"))
         fields = [entry.strip() for entry in fields]
@@ -773,7 +775,7 @@ class EmblScanner(InsdcScanner):
         # Expects an ID line in the style before 2006, e.g.
         # ID   SC10H5 standard; DNA; PRO; 4870 BP.
         # ID   BSUB9999   standard; circular DNA; PRO; 4214630 BP.
-        assert line[: self.HEADER_WIDTH].rstrip() == "ID"
+        assert line[: self.HEADER_WIDTH].rstrip() == "ID"  # noqa: S101
         fields = [line[self.HEADER_WIDTH :].split(None, 1)[0]]
         fields.extend(line[self.HEADER_WIDTH :].split(None, 1)[1].split(";"))
         fields = [entry.strip() for entry in fields]
@@ -806,9 +808,9 @@ class EmblScanner(InsdcScanner):
         # Expects an ID line in the style introduced in 2006, e.g.
         # ID   X56734; SV 1; linear; mRNA; STD; PLN; 1859 BP.
         # ID   CD789012; SV 4; linear; genomic DNA; HTG; MAM; 500 BP.
-        assert line[: self.HEADER_WIDTH].rstrip() == "ID"
+        assert line[: self.HEADER_WIDTH].rstrip() == "ID"  # noqa: S101
         fields = [data.strip() for data in line[self.HEADER_WIDTH :].strip().split(";")]
-        assert len(fields) == 7
+        assert len(fields) == 7  # noqa: S101
         """
         The tokens represent:
 
@@ -1059,7 +1061,7 @@ class _ImgtScanner(EmblScanner):
     ]
 
     def _feed_first_line(self, consumer, line):
-        assert line[: self.HEADER_WIDTH].rstrip() == "ID"
+        assert line[: self.HEADER_WIDTH].rstrip() == "ID"  # noqa: S101
         if line[self.HEADER_WIDTH :].count(";") != 5:
             # Assume its an older EMBL-like line,
             return EmblScanner._feed_first_line(self, consumer, line)
@@ -1078,7 +1080,7 @@ class _ImgtScanner(EmblScanner):
         #
         # ID   HLA00001; SV 1; standard; DNA; HUM; 3503 BP.
         fields = [data.strip() for data in line[self.HEADER_WIDTH :].strip().split(";")]
-        assert len(fields) == 6
+        assert len(fields) == 6  # noqa: S101
         """
         The tokens represent:
 

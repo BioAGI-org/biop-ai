@@ -528,7 +528,7 @@ class _FeatureConsumer(_BaseGenBankConsumer):
         # e.g. EMBL new line:
         # ID   X56734; SV 1; linear; mRNA; STD; PLN; 1859 BP.
         # Scanner calls consumer.version_suffix(1)
-        assert version.isdigit()
+        assert version.isdigit()  # noqa: S101
         self.data.annotations["sequence_version"] = int(version)
 
     def db_source(self, content):
@@ -829,7 +829,7 @@ class _FeatureConsumer(_BaseGenBankConsumer):
         into a list of strings, and then uses string.join later to put
         them together. Supposedly, this is a big time savings
         """
-        assert " " not in content
+        assert " " not in content  # noqa: S101
         self._seq_data.append(content.upper())
 
     def record_end(self, content):
@@ -1181,7 +1181,7 @@ class _RecordConsumer(_BaseGenBankConsumer):
         list together to make the final sequence. This is faster than
         adding on the new string every time.
         """
-        assert " " not in content
+        assert " " not in content  # noqa: S101
         self._seq_data.append(content.upper())
 
     def record_end(self, content):
