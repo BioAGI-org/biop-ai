@@ -68,6 +68,13 @@ from Bio.SeqRecord import SeqRecord
 
 Field = namedtuple("Field", ("as_type", "name", "comment"))
 
+# The largest data block, once decompressed, that the reader accepts. The file
+# header gives the size of its largest block (uncompressBufSize), but a
+# crafted file can set that to up to 4 GB and make a small zlib block expand
+# about 1000-fold. Real blocks are far smaller: UCSC's example bigMaf file
+# has blocks of at most 635 kB, so this leaves plenty of room.
+_MAX_UNCOMPRESS_BUF_SIZE = 256 * 1024 * 1024
+
 
 class AutoSQLTable(list):
     """AutoSQL table describing the columns of an (possibly extended) BED format."""
@@ -768,7 +775,9 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             self._compressed = True
         else:
             self._compressed = False
-        self._uncompressBufSize = header.uncompressBufSize
+        self._uncompressBufSize = min(
+            header.uncompressBufSize, _MAX_UNCOMPRESS_BUF_SIZE
+        )
         stream.seek(0, io.SEEK_END)
         self._file_size = stream.tell()
 
