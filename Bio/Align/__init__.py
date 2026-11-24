@@ -1273,7 +1273,11 @@ class Alignment:
         msa_coordinates = []
         # Initialize positions and next_positions arrays
         positions = np.array([next(c) for c in coordinates])
-        next_positions = np.array([next(c) for c in coordinates])
+        # A pairwise alignment with a single column (e.g. of two empty
+        # sequences) has no next position.
+        next_positions = np.array(
+            [next(c, (sys.maxsize, sys.maxsize)) for c in coordinates]
+        )
         # Add initial positions
         msa_coordinates.append([reference_position] + list(positions[:, 1]))
 
