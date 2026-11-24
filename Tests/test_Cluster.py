@@ -2761,6 +2761,45 @@ class TestCluster(unittest.TestCase):
         ix, iy = np.unravel_index(distances.argmin(), distances.shape)
         self.assertEqual(clusterid.tolist(), [[ix, iy]])
 
+    def test_wrong_size_raises_value_error(self):
+        """Check a weight or celldata of the wrong size raises ValueError.
+
+        treecluster, somcluster and clusterdistance raised RuntimeError for a
+        weight of the wrong size, while kcluster and distancematrix raised
+        ValueError. The private somcluster also raised RuntimeError for
+        celldata of the wrong size, next to ValueError for mask and clusterids.
+        """
+        if TestCluster.module != "Bio.Cluster":
+            self.skipTest("Pycluster raises RuntimeError")
+        from Bio.Cluster import _cluster, clusterdistance, somcluster, treecluster
+
+        data = np.arange(12.0).reshape(4, 3)
+        weight = [1.0, 1.0]
+        message = "^weight has incorrect size 2 \\(expected 3\\)$"
+        with self.assertRaisesRegex(ValueError, message):
+            treecluster(data, weight=weight)
+        with self.assertRaisesRegex(ValueError, message):
+            somcluster(data, weight=weight)
+        with self.assertRaisesRegex(ValueError, message):
+            clusterdistance(data, weight=weight, index1=[0], index2=[1])
+        message = (
+            "^the celldata array size is not consistent with the data "
+            "\\(last dimension is 5; expected 3\\)$"
+        )
+        with self.assertRaisesRegex(ValueError, message):
+            _cluster.somcluster(
+                np.zeros((4, 2), np.intc),
+                np.zeros((2, 1, 5)),
+                data,
+                np.ones(data.shape, np.intc),
+                np.ones(3),
+                0,
+                0.02,
+                5,
+                "e",
+                1,
+            )
+
     def test_distancematrix_arguments(self):
         # Test if incorrect arguments are caught by the C code
         if TestCluster.module == "Bio.Cluster":

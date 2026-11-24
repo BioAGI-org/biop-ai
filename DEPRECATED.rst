@@ -350,6 +350,18 @@ handle raises ``ValueError("No records found in handle")`` instead of a bare
 ``StopIteration``. Code that relied on getting the first of several records
 should use ``next(Bio.Medline.parse(handle))``.
 
+Bio.Cluster weight of the wrong size
+------------------------------------
+Changed in biop-ai 1.89 without a deprecation period.
+``Bio.Cluster.treecluster``, ``Bio.Cluster.somcluster`` and
+``Bio.Cluster.clusterdistance`` now raise ``ValueError`` instead of
+``RuntimeError`` when ``weight`` does not have one value per column (one per
+row with ``transpose=True``), as ``kcluster`` and ``distancematrix`` already
+did. The private ``Bio.Cluster._cluster.somcluster`` likewise raises
+``ValueError`` when the last dimension of ``celldata`` does not match the
+data. Code catching ``RuntimeError`` for these cases should catch
+``ValueError`` instead.
+
 Bio.Entrez
 ----------
 The ``egquery`` function wrapping the NCBI EGQuery (Entrez Global Query)
