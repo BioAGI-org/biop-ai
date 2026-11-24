@@ -16,39 +16,72 @@ Comput Appl Biosci 1997 , 13:291-295
 ftp://ftp.lmcp.jussieu.fr/pub/sincris/software/protein/p-sea/
 """
 
+import contextlib
+import errno
 import os
+import shutil
 import subprocess
 import tempfile
 
 from Bio.PDB.Polypeptide import is_aa
 
 
+def _move(src, dst):
+    """Move file src to exactly dst, replacing it, also across filesystems."""
+    try:
+        os.replace(src, dst)
+    except OSError as err:
+        if err.errno != errno.EXDEV:
+            raise
+        # Copy next to dst first, so that dst is replaced in one step.
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(dst))
+        os.close(fd)
+        try:
+            shutil.copy2(src, tmp)
+            os.replace(tmp, dst)
+        except BaseException:
+            # tmp is gone if the interruption came after it was renamed.
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(tmp)
+            raise
+
+
+def _join_cwd(cwd, fname):
+    """Return fname as an absolute path, taking a relative one from cwd."""
+    # Not os.path.abspath, which would resolve "link/.." without following
+    # the link, unlike psea opening the file.
+    path = os.path.join(cwd, fname)
+    if not os.path.isabs(path):
+        # A Windows path on another drive, such as "D:tiny.pdb", is still
+        # relative, to the current directory of that drive.
+        path = os.path.abspath(path)
+    return path
+
+
 def run_psea(fname, verbose=False):
     """Run PSEA and return output filename."""
+    # Once, so that the input and output paths stay in the directory of the
+    # call even if the working directory changes while psea runs.
+    cwd = os.getcwd()
+    fname = _join_cwd(cwd, fname)
     last = os.path.basename(fname)
     base = os.path.splitext(last)[0]
     cmd = ["psea", fname]
 
-    curdir = os.getcwd()
-
     with tempfile.TemporaryDirectory() as tmpdir:
-        os.chdir(tmpdir)
-
-        p = subprocess.run(cmd, capture_output=True, text=True)
+        p = subprocess.run(cmd, cwd=tmpdir, capture_output=True, text=True)
 
         if verbose:
             print(p.stdout)
 
-        output = base + ".sea"
+        output = os.path.join(tmpdir, base + ".sea")
 
         if not p.stderr.strip() and os.path.exists(output):
-            # move output back to original directory
-            final_path = os.path.join(curdir, output)
-            os.rename(output, final_path)
-            os.chdir(curdir)
+            # move output to the current directory
+            final_path = os.path.join(cwd, base + ".sea")
+            _move(output, final_path)
             return final_path
         else:
-            os.chdir(curdir)
             raise RuntimeError(f"Error running p-sea: {p.stderr}")
 
 

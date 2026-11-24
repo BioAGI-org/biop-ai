@@ -47,7 +47,7 @@ class TestPDBPSEA(unittest.TestCase):
         sys.stdout = captured_ouput
         psae_run = run_psea(support.DATA / "PDB" / "1A8O.pdb", verbose=True)
         sys.stdout = sys.__stdout__
-        self.assertEqual(psae_run, "1A8O.sea")
+        self.assertEqual(os.path.basename(psae_run), "1A8O.sea")
         self.assertTrue(captured_ouput.getvalue())
 
     def test_run_psea_quiet(self):
@@ -55,7 +55,7 @@ class TestPDBPSEA(unittest.TestCase):
         sys.stdout = captured_ouput
         psae_run = run_psea(support.DATA / "PDB" / "1A8O.pdb", verbose=False)
         sys.stdout = sys.__stdout__
-        self.assertEqual(psae_run, "1A8O.sea")
+        self.assertEqual(os.path.basename(psae_run), "1A8O.sea")
         self.assertFalse(captured_ouput.getvalue())
 
     def test_psea(self):
@@ -98,14 +98,9 @@ class TestPDBPSEA(unittest.TestCase):
         )
 
     def test_run_psea_tempdir(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            psae_run = run_psea(support.DATA / "PDB" / "1A8O.pdb", outdir=tmpdir)
-            output_file = os.path.join(tmpdir, psae_run)
-
-            self.assertTrue(os.path.exists(output_file))
-            self.assertTrue(psae_run.endwith(".sea"))
+        psae_run = run_psea(support.DATA / "PDB" / "1A8O.pdb")
+        self.assertTrue(os.path.exists(psae_run))
+        self.assertTrue(psae_run.endswith(".sea"))
 
 
 class TestPSEA(unittest.TestCase):
