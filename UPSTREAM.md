@@ -77,8 +77,9 @@ imposed on its own work.
 ## Queued
 
 The defects below were verified as unreported in the GitHub tracker and still
-present on upstream `master`. The rows are ordered by how self-evident the
-defect is, not by severity.
+present on upstream `master` when they were added. Some have since been filed
+or fixed upstream, and their notes say which. The rows are ordered by how
+self-evident the defect is, not by severity.
 
 | # | subject | note |
 |---|---|---|

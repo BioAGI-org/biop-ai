@@ -1061,7 +1061,7 @@ The ``is_palindrom`` function was removed in Release 1.79.
 
 Bio.SeqUtils.MeltingTemp
 ------------------------
-As of Release 1.88, the ``Tm_NN``, ``Tm_GC`` and ``Tm_Wallace`` functions
+As of biop-ai 1.88, the ``Tm_NN``, ``Tm_GC`` and ``Tm_Wallace`` functions
 reject a sequence containing characters that are not valid for the chosen
 method, raising ``ValueError`` instead of silently discarding them. Previously
 ``Tm_Wallace`` ignored non-DNA characters entirely, and ``Tm_NN`` and ``Tm_GC``

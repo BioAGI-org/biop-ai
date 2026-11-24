@@ -136,11 +136,11 @@ explicitly. Delete the `print` and re-raise with the offending key and types.
 
 ### 0.4 `Seq.search()` never matches at the final position **[reproduced — bug FIXED]**
 
-> **Status: the off-by-one is fixed** in PR #7. The loop at `Bio/Seq.py:997`
-> is now `range(len(self) + 1)`. The separate rewrite suggested below
-> (`bytes.find` cursors, deterministic ordering) has not been done. The loop
-> still allocates a slice per (position, length) pair, and yield order across
-> differing lengths still depends on dict insertion order.
+> **Status: the off-by-one is fixed** in PR #7. The loop, now at
+> `Bio/Seq.py:1131`, is `range(len(self) + 1)`. The separate rewrite
+> suggested below (`bytes.find` cursors, deterministic ordering) has not been
+> done. The loop still allocates a slice per (position, length) pair, and
+> yield order across differing lengths still depends on dict insertion order.
 
 `Bio/Seq.py:997` iterates `range(len(self) - 1)`, one short.
 
@@ -156,7 +156,8 @@ The same six lines are also O(n·k). They allocate a fresh `bytes` slice per
 (position, length) pair instead of using C-level `bytes.find`, and yield order
 across differing lengths depends on dict insertion order.
 
-**Fix:** use `range(len(self))`. Separately, reimplement over `bytes.find`
+**Fix:** use `range(len(self) + 1)`, so that an empty pattern also matches at
+the end. Separately, reimplement over `bytes.find`
 cursors merged by position so results are ordered deterministically, and
 document the ordering. Test a match at index `len-1` for each substring length.
 **Effort S (bug) / M (rewrite) · Impact high**
@@ -563,8 +564,10 @@ bug rather than one instance.
 >   2011, pinned by `test_reading_alignments_maf1`).
 > - **The writers have to stay anyway.** Only nexus output is byte-identical
 >   between the stacks. The eight `Bio/AlignIO` format modules hold 3,326
->   lines: 634 are writers and 614 are `MafIndex`. At most the 1,556 lines of
->   readers could go, and they encode exactly the behaviour the tests pin.
+>   lines: 634 are writers and 614 are `MafIndex`. The other 522 are module
+>   docstrings, imports, comments, blank lines and two small helpers. At most
+>   the 1,556 lines of readers could go, and they encode exactly the behaviour
+>   the tests pin.
 > - **`Bio.SeqIO` goes through `AlignIO`.** It reads 11 alignment format
 >   names and writes 8 with `AlignIO`'s classes
 >   (`Bio/SeqIO/__init__.py:473-558`), so a shim would change SeqIO output
@@ -1302,8 +1305,8 @@ pointer over silent deletion.
   free deletion. `Bio/Alphabet/__init__.py` is the precedent for the
   alternative: keep the package and raise `ImportError` with a pointer.
 - `Tests/run_tests.py:69-73` still excludes doctests for five modules removed in
-  1.86, and `:96` for `Bio.PDB.Vector`, removed in **1.74**. The whole 45-entry
-  list is guarded by `if np is None:` (`:61`), which is unreachable, since
+  1.86, and `:96` for `Bio.PDB.Vector`, removed in **1.74**. The whole 38-entry
+  list is guarded by `if np is None:` (`:62`), which is unreachable, since
   numpy is a hard dependency. **[FIXED]** The block and the `try: import numpy`
   that fed it are gone. A full offline run reports the same 520 modules before
   and after, which is what "unreachable" predicts.
@@ -1886,7 +1889,7 @@ a 40,000-line source diff.
 > time-boxed instead of a live `getaddrinfo` at import; and
 > `test_PAML_tools.py` uses `shutil.which`.
 
-- `run_tests.py:62-104` is a 43-line `if np is None:` block excluding 40
+- `run_tests.py:62-104` is a 43-line `if np is None:` block excluding 38
   modules from doctests. numpy is a hard dependency, so this is unreachable
   (also §2.1). **[FIXED]**
 - At `run_tests.py:167-172`, `--offline` monkeypatches only
@@ -2403,7 +2406,7 @@ pending a duplicate-check against the tracker.
   `concurrency:` group on `release.yml`. A hung cibuildwheel runs for six
   hours, and two tags pushed close together interleave their publishes.
   *Fixed in PR #161.*
-- Set `persist-credentials: false` on the ten checkouts, since nothing
+- Set `persist-credentials: false` on every checkout, since nothing
   pushes. Decide `fail_ci_if_error` for the three codecov uploads. Delete
   the no-op `zip-safe` line. `packages.find` could replace the 68-entry
   list, but it needs a wheel-contents diff first, because three data-only
@@ -2896,7 +2899,7 @@ Seven independent reviews examined the tree at `5d6fe8d22`, and each was
 assigned one dimension: build/packaging/CI; the core sequence stack; the I/O
 and parser architecture; static typing and API surface; accumulated
 deprecations and dead code; performance and the C extensions; and the test
-suite. All seven are represented below.
+suite. All seven are represented above.
 
 Findings were required to cite file and line, and to be verified by reading or
 running code rather than inferred from general knowledge. The four bugs marked

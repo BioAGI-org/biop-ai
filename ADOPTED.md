@@ -7,7 +7,8 @@ asked whether an AI tool was involved. This fork does not ask that question, so
 it can take them.
 
 This file records every one, who wrote it, what was taken, and what was left
-behind. Nothing here is this fork's work.
+behind. The adopted code is not this fork's work; what the fork added is
+marked **Added by the fork**.
 
 ## How this is done, and why the history is kept
 
@@ -731,7 +732,7 @@ rather than quadratic. It touches the same `next_word` but is a different
 change, not taken here. Its commit merges onto this one without conflict
 (`git merge-tree`).
 
-### [#5279](https://github.com/biopython/biopython/pull/5279) — Yiyabo
+### [#5279](https://github.com/biopython/biopython/pull/5279) — Xinxiang Wang (yiyabo)
 
 The pull request answers upstream issue
 [#5257](https://github.com/biopython/biopython/issues/5257), where Anika
@@ -1597,7 +1598,7 @@ existing caller that today gets a slightly short result set would start getting
 an exception instead, and the argument for that is about API taste, not
 correctness. The narrow fix already does what
 `IMPROVEMENTS.md`'s harvest table asked for. If the fork later wants the
-opt-in strictness, those commits are still there to take.
+stricter default, those commits are still there to take.
 
 The `except Exception` in `_get_gly_cb_vector` is also left as it is. The
 pull request narrows it to `KeyError` and adds a warning, which is a separate
@@ -1608,7 +1609,7 @@ improvement worth its own change.
 `multi_coord_space` computes the polar angle as `arccos(np.divide(p[:, 2], r,
 where=r != 0))`. Without an `out=` argument, `np.divide` allocates its result
 with `np.empty`, so every entry the `where` mask skips keeps whatever was in
-that memory. Each such entry is a hedron whose second atom sits on its first.
+that memory. Each such entry is a hedron whose third atom sits on its second.
 The polar angle, and the transform built from it, are then read from
 uninitialised heap. Passing `out=np.ones_like(r)` makes the quotient 1 there,
 so the angle is zero, which is what the scalar function

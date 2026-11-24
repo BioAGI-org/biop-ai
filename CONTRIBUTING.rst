@@ -1,5 +1,5 @@
 Contributing to biop-ai
-==========================
+=======================
 
 We welcome pull requests to fix bugs or add new features, from anyone, or
 anything, able to write a good patch. See `AGENTS.md <AGENTS.md>`__ for what
