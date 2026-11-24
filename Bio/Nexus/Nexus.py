@@ -1439,8 +1439,10 @@ class Nexus:
         items = set()
         if options_buffer.peek_nonwhitespace():
             try:
-                # capture all possible exceptions and treat them as formatting
-                # errors, if they are not NexusError
+                # A badly formed list (e.g. "1-", "1-5\\0" or a set name in a
+                # range) raises ValueError or TypeError: report it as a
+                # formatting error.  Anything else, such as MemoryError, is
+                # not about the format, so let it propagate.
                 while True:
                     identifier = options_buffer.next_word()  # next list element
                     if not identifier:  # end of list?
@@ -1482,7 +1484,7 @@ class Nexus:
                             items.add(start)
             except NexusError:
                 raise
-            except Exception:  # FIXME - this seems unwise
+            except (ValueError, TypeError):
                 return None
         return items
 
@@ -1540,6 +1542,9 @@ class Nexus:
                     ) from None
             else:
                 if n > 0 and n <= self.ntax:
+                    # taxlabels can be shorter than ntax, e.g. with no matrix.
+                    if n > len(self.taxlabels):
+                        raise NexusError(f"Unknown taxon identifier: {identifier}")
                     return self.taxlabels[n - 1]
                 else:
                     raise NexusError(
