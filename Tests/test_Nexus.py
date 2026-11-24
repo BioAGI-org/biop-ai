@@ -1828,8 +1828,7 @@ class TestUnclosedQuote(unittest.TestCase):
     """A quoted word that runs to the end of the text raises NexusError.
 
     The file may close the quote, but not within the part of it that one
-    parser reads: a line of the matrix, or one comma-separated part of a
-    partition.
+    parser reads, such as a line of the matrix.
     """
 
     def setUp(self):
@@ -1868,19 +1867,48 @@ class TestUnclosedQuote(unittest.TestCase):
         for text, word in (
             # a taxon label split over two lines of the matrix
             (matrix + "'t1\nt2' ACGT\nt3 ACGT\n;\nend;\n", "'t1"),
-            # partitions are split at commas outside single quotes only
-            ('begin sets;\ntaxpartition p = "a,b" : 1;\nend;\n', '"a'),
-            (
-                matrix + "t1 ACGT\nt2 ACGT\n;\nend;\n"
-                'begin sets;\ncharpartition p = "a,b" : 1;\nend;\n',
-                '"a',
-            ),
         ):
             with self.subTest(text=text):
                 with self.assertRaisesRegex(
                     Nexus.NexusError, f"^Missing closing quote in: {word}$"
                 ):
                     Nexus.Nexus("#NEXUS\n" + text)
+
+
+class TestPartitionQuotes(unittest.TestCase):
+    """A comma inside a quoted name does not split a partition."""
+
+    def test_comma_in_quoted_name(self):
+        """Single and double quotes both keep a comma in a name."""
+        for quote, other in (("'", '"'), ('"', "'")):
+            with self.subTest(quote=quote):
+                # A comma in a double-quoted name split the partition there,
+                # raising "Missing closing quote in: \"a". The other quote
+                # character inside a name must not close the quote.
+                nexus = Nexus.Nexus(
+                    "#NEXUS\nbegin data;\ndimensions ntax=4 nchar=6;\n"
+                    "format datatype=dna;\nmatrix\n'a,b' ACGTAC\n"
+                    f"{quote}a{other}b,c{quote} ACGTAC\nc ACGTAC\nd ACGTAC\n"
+                    ";\nend;\nbegin sets;\ntaxpartition tp = "
+                    f"one: {quote}a,b{quote}, two: {quote}a{other}b,c{quote} c, "
+                    "three: d;\ncharpartition cp = "
+                    f"{quote}x,y{quote}: 1-2, {quote}x{other}y,z{quote}: 3-4, "
+                    "z: 5-6;\nend;\n"
+                )
+                self.assertEqual(
+                    nexus.taxpartitions,
+                    {
+                        "tp": {
+                            "one": ["a,b"],
+                            "two": [f"a{other}b,c", "c"],
+                            "three": ["d"],
+                        }
+                    },
+                )
+                self.assertEqual(
+                    nexus.charpartitions,
+                    {"cp": {"x,y": [0, 1], f"x{other}y,z": [2, 3], "z": [4, 5]}},
+                )
 
 
 class TestMatchchar(unittest.TestCase):
