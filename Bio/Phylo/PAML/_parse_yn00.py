@@ -40,7 +40,7 @@ def parse_ng86(lines, results):
             # Find all floating point numbers in this line, accounting
             # for the fact that the sequence IDs might have bits that
             # look like floating point values.
-            line_floats_res = re.findall(r"-*\d+\.\d+", matrix_row_res.group(2))
+            line_floats_res = re.findall(r"-?\d+\.\d+", matrix_row_res.group(2))
             line_floats = [float(val) for val in line_floats_res]
 
             seq_name = matrix_row_res.group(1).strip()
@@ -70,7 +70,7 @@ def parse_yn00(lines, results, sequences):
     # +- 0.0151
     for line in lines:
         # Find all floating point numbers in this line
-        line_floats_res = re.findall(r"-*\d+\.\d+", line)
+        line_floats_res = re.findall(r"-?\d+\.\d+", line)
         line_floats = [float(val) for val in line_floats_res]
         row_res = re.match(r"\s+(\d+)\s+(\d+)", line)
         if row_res is not None:
