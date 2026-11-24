@@ -659,6 +659,24 @@ class TestAbiCorrupt(unittest.TestCase):
         # the number of entries times the block size. Now only the last does:
         self.assertEqual(decoded, [20, 20, 20])
 
+    def test_several_elements_of_several_fields(self):
+        """Test entries holding more than one date, time or point."""
+        dates = struct.pack(">hBBhBB", 2020, 1, 2, 2021, 3, 4)
+        times = bytes([1, 2, 3, 0, 4, 5, 6, 0])
+        points = struct.pack(">6h", *range(6))
+        entries = [
+            (b"RUND", 1, 10, 4, 2, 8, 128, 0),
+            (b"RUNT", 1, 11, 4, 2, 8, 136, 0),
+            (b"ZZZZ", 1, 14, 4, 3, 12, 144, 0),
+        ]
+        data = self.abif(dates + times + points, entries)
+        # The count went in front of the code, giving ">2h2B" (6 bytes)
+        # for two dates, ">24B" for two times and ">32h" for three points:
+        raw = SeqIO.read(BytesIO(data), "abi").annotations["abif_raw"]
+        self.assertEqual(raw["RUND1"], ("2020-01-02", "2021-03-04"))
+        self.assertEqual(raw["RUNT1"], ("01:02:03", "04:05:06"))
+        self.assertEqual(raw["ZZZZ1"], ((0, 1), (2, 3), (4, 5)))
+
     def test_overlapping_data_blocks(self):
         """Test directory entries whose data blocks overlap."""
         # 50 entries of 1000 chars (type 2), each starting one byte after

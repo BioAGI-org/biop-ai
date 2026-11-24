@@ -598,19 +598,33 @@ def _parse_tag_data(elem_code, elem_num, raw_data):
 
     """
     if elem_code in _BYTEFMT:
+        code = _BYTEFMT[elem_code]
+        # A count cannot go in front of a code of several fields: three
+        # "2i" are not "32i". Such elements are decoded one by one below.
+        many_fields = len(code) > 1 and elem_num != 1
         # because '>1s' unpack differently from '>s'
-        if elem_num == 1:
+        if elem_num == 1 or many_fields:
             num = ""
         else:
             num = str(elem_num)
-        fmt = ">" + num + _BYTEFMT[elem_code]
+        fmt = ">" + num + code
 
         size = struct.calcsize(fmt)
+        if many_fields:
+            size *= elem_num
         if len(raw_data) != size:
             raise ValueError(
                 f"Expected {size} bytes of data for {elem_num} ABIF elements of "
                 f"type {elem_code}, found {len(raw_data)}"
             )
+        if many_fields:
+            # One tuple per element, each as a single element would be
+            data = tuple(struct.iter_unpack(fmt, raw_data))
+            if elem_code == 10:
+                return tuple(str(datetime.date(*d)) for d in data)
+            elif elem_code == 11:
+                return tuple(str(datetime.time(*d[:3])) for d in data)
+            return data
         data = struct.unpack(fmt, raw_data)
 
         # no need to use tuple if len(data) == 1
