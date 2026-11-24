@@ -932,6 +932,45 @@ class CmsearchCases(unittest.TestCase):
         self.assertRaises(StopIteration, next, qresults)
         self.assertEqual(1, count)
 
+    def test_cmsearch_mq_stray_line(self):
+        """Test a stray line between '//' and the next 'Query:' line."""
+        # The parser used to read the next query's block under the previous
+        # query's id and length.
+        text = get_file("cmsearch_114_IRES_5S_U2_Yeast.txt").read_text()
+        old = "//\nQuery:       5S_rRNA"
+        self.assertEqual(text.count(old), 1)
+        text = text.replace(old, "//\nStray line\nQuery:       5S_rRNA")
+        qresults = list(parse(io.StringIO(text), FMT))
+        self.assertEqual(
+            [(q.id, q.seq_len, len(q)) for q in qresults],
+            [("IRES_HCV", 352, 0), ("5S_rRNA", 119, 3), ("U2", 193, 5)],
+        )
+        self.assertEqual({hit.query_id for hit in qresults[1]}, {"5S_rRNA"})
+
+    def test_cmsearch_mq_stray_line_before_ok(self):
+        """Test a stray line between the last '//' and the '[ok]' line."""
+        # Skipping the stray line used to skip the '[ok]' check too, so the
+        # parser read on past the end marker into the query data after it.
+        text = get_file("cmsearch_114_IRES_5S_U2_Yeast.txt").read_text()
+        self.assertTrue(text.endswith("//\n[ok]\n"))
+        text = text.removesuffix("[ok]\n") + "Stray line\n[ok]\n" + text
+        qresults = list(parse(io.StringIO(text), FMT))
+        self.assertEqual([q.id for q in qresults], ["IRES_HCV", "5S_rRNA", "U2"])
+
+    def test_cmsearch_mq_stray_line_containing_ok(self):
+        """Test that a stray line with embedded '[ok]' is skipped."""
+        # Only a line that is exactly '[ok]' ends the results; a stray line
+        # with '[ok]' inside it must not drop the queries after it.
+        text = get_file("cmsearch_114_IRES_5S_U2_Yeast.txt").read_text()
+        first = text.index("//\n") + len("//\n")
+        text = (
+            text[:first]
+            + "Stray line\nValidation recorded [ok] for previous query\n"
+            + text[first:]
+        )
+        qresults = list(parse(io.StringIO(text), FMT))
+        self.assertEqual([q.id for q in qresults], ["IRES_HCV", "5S_rRNA", "U2"])
+
     def test_cmsearch_mq(self):
         """Test parsing infernal-text, cmsearch, multiple queries"""
         tab_file = get_file("cmsearch_114_IRES_5S_U2_Yeast.txt")
