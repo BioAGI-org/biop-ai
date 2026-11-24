@@ -41,8 +41,10 @@ tokens = [
     (r"[^\s\(\)\[\]\'\:\;\,]+", "unquoted node label"),
     (r"\:\s*(?P<edge_length>[+-]?[0-9]*\.?[0-9]+([eE][+-]?[0-9]+)?)", "edge length"),
     (r"\,", "comma"),
-    (r"\[(\\.|[^\]])*\]", "comment"),
-    (r"\'(\\.|[^\'])*\'", "quoted node label"),
+    # A backslash matches only the escape alternative, so a long run of them
+    # with no closing ']' or "'" fails in linear time, not exponential.
+    (r"\[(?:[^\]\\]|\\[\s\S])*\\?\]", "comment"),
+    (r"\'(?:[^\'\\]|\\[\s\S])*\\?\'", "quoted node label"),
     (r"\;", "semicolon"),
     (r"\n", "newline"),
 ]

@@ -8,6 +8,8 @@
 import math
 import os
 import random
+import subprocess
+import sys
 import tempfile
 import unittest
 import warnings
@@ -15,6 +17,7 @@ from io import StringIO
 
 import support
 
+import Bio
 from Bio import BiopythonWarning
 from Bio import Phylo
 from Bio.Nexus.Nexus import NexusError
@@ -571,6 +574,37 @@ end;
         Phylo.write(tree, mem_file, "newick")
         mem_file.seek(0)
         self.assertEqual(mem_file.read(), "('Node''Name':0)Root:0;\n")
+
+    def test_newick_unclosed_comment_backslashes(self):
+        """Parse an unclosed comment or quote and many backslashes quickly."""
+        # The comment and quoted label tokens once let a backslash match two
+        # ways, so 60 backslashes after an unclosed '[' or "'" took days.
+        # Run in a child process, so that a regression fails, not hangs.
+        code = r"""
+from io import StringIO
+from Bio import Phylo
+for quote in "['":
+    tree = Phylo.read(StringIO("(a" + quote + "\\" * 60 + ");"), "newick")
+    print(tree.count_terminals())
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("Newick parser took over 60 s on 65 characters")
+        self.assertEqual(result.stdout, "1\n1\n", result.stderr)
 
 
 class TreeTests(unittest.TestCase):
