@@ -144,6 +144,16 @@ class KDTreeTest(unittest.TestCase):
                     self.assertEqual(point1.index, point2.index)
                     self.assertAlmostEqual(point1.radius, point2.radius)
 
+    def test_KDTree_repr(self):
+        """Test repr() of Point and Neighbor objects, including search results."""
+        self.assertEqual(repr(kdtrees.Point(3, 1.5)), "3: 1.5")
+        self.assertEqual(repr(kdtrees.Neighbor(1, 2, 0.25)), "(1, 2): 0.25")
+        kdt = kdtrees.KDTree(array([[0.0, 0, 0], [1.0, 0, 0]]), self.bucket_size)
+        points = sorted(kdt.search(array([0.0, 0, 0]), 2.0), key=lambda p: p.index)
+        self.assertEqual([repr(p) for p in points], ["0: 0.0", "1: 1.0"])
+        neighbors = kdt.neighbor_search(2.0)
+        self.assertEqual([repr(n) for n in neighbors], ["(0, 1): 1.0"])
+
     def test_KDTree_neighbor_search_simple(self):
         """Test all fixed radius neighbor search.
 
