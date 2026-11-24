@@ -1773,6 +1773,13 @@ class TestXMS(unittest.TestCase):
         ):
             motifs.parse(StringIO(data), "xms")
 
+    def test_xms_malformed(self):
+        """Test that malformed XML raises ValueError, not ExpatError."""
+        with self.assertRaisesRegex(
+            ValueError, "Improper XMS XML input file: no element found: line 1"
+        ):
+            motifs.parse(StringIO("<motifset><motif><name>x</name>"), "xms")
+
 
 class TestJASPAR(unittest.TestCase):
     """Testing parsing JASPAR files."""
