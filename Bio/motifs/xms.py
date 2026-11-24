@@ -9,6 +9,7 @@
 import re
 from xml.dom import expatbuilder
 from xml.dom import Node
+from xml.parsers import expat
 
 from Bio import motifs
 
@@ -115,11 +116,14 @@ def read(handle):
     This format was defined by Thomas Down, and used in the NestedMICA and MotifExplorer programs.
     """
     builder = _ExpatBuilder()
-    if isinstance(handle, str):  # a file name, as minidom.parse accepts
-        with open(handle, "rb") as stream:
-            xms_doc = builder.parseFile(stream)
-    else:
-        xms_doc = builder.parseFile(handle)
+    try:
+        if isinstance(handle, str):  # a file name, as minidom.parse accepts
+            with open(handle, "rb") as stream:
+                xms_doc = builder.parseFile(stream)
+        else:
+            xms_doc = builder.parseFile(handle)
+    except expat.ExpatError as e:
+        raise ValueError(f"Improper XMS XML input file: {e}") from e
     record = XMSScanner(xms_doc).record
 
     return record
