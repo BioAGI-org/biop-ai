@@ -160,6 +160,14 @@ def parse(handle):
             record.formula = data
         elif keyword in ("MASS        ", "EXACT_MASS  "):
             record.mass = data
+        elif keyword == "STRUCTURES  ":
+            if ":" in data:
+                database, accessions = data.split(":", 1)
+                record.structures.append((database, accessions.split()))
+            elif record.structures:
+                record.structures[-1][1].extend(data.split())
+            elif data:
+                raise ValueError(f"STRUCTURES ids before any database: {line!r}")
         elif keyword == "DBLINKS     ":
             if ":" in data:
                 key, values = data.split(":")
