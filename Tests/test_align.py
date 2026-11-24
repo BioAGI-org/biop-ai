@@ -1034,6 +1034,16 @@ class TestFromAlignmentsWithSameReference(unittest.TestCase):
         with self.assertRaises(ValueError):
             Alignment.from_alignments_with_same_reference([])
 
+    def test_single_column_input(self):
+        """Test input alignments with only one coordinate column."""
+        empty = Alignment(["", ""], np.array([[0], [0]]))
+        insertion = Alignment(["", "AC"], np.array([[0, 0], [0, 2]]))
+        msa = Alignment.from_alignments_with_same_reference([empty])
+        self.assertEqual(msa.coordinates.tolist(), [[0], [0]])
+        msa = Alignment.from_alignments_with_same_reference([empty, insertion])
+        self.assertEqual(msa.coordinates.tolist(), [[0, 0], [0, 0], [0, 2]])
+        self.assertEqual(str(msa[2]), "AC")
+
     def test_input_with_three_sequences(self):
         """Test that the method works with input Alignments of three sequences"""
         # Input sequences
