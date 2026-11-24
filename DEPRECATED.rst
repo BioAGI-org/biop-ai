@@ -475,7 +475,7 @@ instead.
 contents failed one step later with an error that never mentioned the removal.
 The package is now a stub whose import raises ``ImportError`` naming the four
 removed modules and the replacement, following the pattern used for
-``Bio.Alphabet`` and the command line wrappers above. Code guarded with
+``Bio.Alphabet`` and ``Bio.Application``. Code guarded with
 ``except ImportError`` keeps working.
 
 Bio.PDB.Polypeptide
