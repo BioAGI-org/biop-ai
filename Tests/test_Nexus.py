@@ -1392,6 +1392,26 @@ Root:  16
         self.assertEqual(data.comment, "[&p]")
         self.assertEqual(data.branchlength, 0.1)
 
+    def test_NexusComments_many_per_node(self):
+        """Strip a million comments from one node in linear time.
+
+        Tree._get_values rebuilt the node's text once for each comment it
+        removed, so this 4 MB tree took minutes to parse. A stray [ before
+        a comment, which that rebuilding joined to the text after the
+        comment to make a new one, is now an error.
+        """
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Trees
+tree = Trees.Tree("(A:1" + "[&x]" * int(sys.argv[1]) + ",B:2);")
+data = tree.node(tree.node(tree.root).succ[0]).data
+print(json.dumps([data.taxon, data.branchlength, data.comment]))
+"""
+        self.assertEqual(parse_in_child(self, code, 1_000_000), ["A", 1.0, "[&x]"])
+        with self.assertRaisesRegex(Trees.TreeError, r"\[ before a comment"):
+            Trees.Tree("(A:1[[&a]&b],B:2);")
+
 
 class TestSelf(unittest.TestCase):
     def test_repeated_names_no_taxa(self):

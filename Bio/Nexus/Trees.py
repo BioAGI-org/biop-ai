@@ -233,6 +233,8 @@ class Tree(Nodes.Chain):
         # consensus tree has two per node: the clade posterior before the
         # branch length, and the branch length statistics after it.
         nodecomment = None
+        pieces = []
+        pos = 0
         nc_start = text.find(NODECOMMENT_START)
         while nc_start != -1:
             nc_end = text.find(NODECOMMENT_END, nc_start)
@@ -243,8 +245,16 @@ class Tree(Nodes.Chain):
                 )
             if nodecomment is None:
                 nodecomment = text[nc_start : nc_end + 1]
-            text = text[:nc_start] + text[nc_end + 1 :]
-            nc_start = text.find(NODECOMMENT_START)
+            pieces.append(text[pos:nc_start])
+            pos = nc_end + 1
+            nc_start = text.find(NODECOMMENT_START, pos)
+        pieces.append(text[pos:])
+        text = "".join(pieces)
+        if NODECOMMENT_START in text:
+            # a stray "[" just before a comment, as in "1[[&a]&b]"
+            raise TreeError(
+                f"Error in tree description: [ before a comment in {text!r}"
+            )
 
         # parse out supports and branchlengths, with internal node taxa info
         values = []
