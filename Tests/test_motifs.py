@@ -6014,6 +6014,33 @@ class TestScoreDistribution(unittest.TestCase):
                     self.assertIs(value_type, np.float32)
                     self.assert_same_as_per_bin_loop(pssm, 10, background, direct=True)
 
+    def test_threshold_rates_out_of_range(self):
+        """Rates of 1 stay in the score range; rates outside [0, 1] raise.
+
+        Here the densities add up to 0.9999999999999999, so the loops ran
+        past the end bin: threshold_fnr(1.0) raised IndexError and
+        threshold_fpr(1.0) wrapped round to below min_score.
+        """
+        motif = motifs.create([Seq("ACGT"), Seq("ACGA"), Seq("TCGT")])
+        motif.pseudocounts = 0.5
+        motif.background = {"A": 0.3, "C": 0.2, "G": 0.2, "T": 0.3}
+        distribution = motif.pssm.distribution(motif.background, precision=1000)
+        lowest = distribution.min_score
+        highest = lowest + (distribution.n_points - 1) * distribution.step
+        self.assertEqual(distribution.threshold_fpr(1.0), lowest)
+        self.assertEqual(distribution.threshold_fnr(1.0), highest)
+        self.assertEqual(distribution.threshold_balanced(1e-20), lowest)
+        for rate in (-0.1, 1.5, 2.5, math.nan):
+            with self.subTest(rate=rate):
+                with self.assertRaises(ValueError):
+                    distribution.threshold_fpr(rate)
+                with self.assertRaises(ValueError):
+                    distribution.threshold_fnr(rate)
+        for rate_proportion in (0, -1, math.nan, math.inf):
+            with self.subTest(rate_proportion=rate_proportion):
+                with self.assertRaises(ValueError):
+                    distribution.threshold_balanced(rate_proportion)
+
 
 # Run only while the GIL is off. A free-threaded build turns it back on when
 # an undeclared extension is imported, unless PYTHON_GIL=0 is set.
