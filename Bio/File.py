@@ -473,7 +473,7 @@ class _SQLiteManySeqFilesDict(_IndexedSeqFileDict[_RecordT_co]):
                         )
                 self._filenames = tmp
                 del tmp
-            if filenames and len(filenames) != len(self._filenames):
+            if filenames is not None and len(filenames) != len(self._filenames):
                 con.close()
                 raise ValueError(
                     "Index file says %i files, not %i"
