@@ -143,8 +143,11 @@ class ClustalIterator(AlignmentIterator):
 
         # There should be two blank lines after the header line
         line = handle.readline()
-        while line.strip() == "":
+        while line and not line.strip():
             line = handle.readline()
+        if not line:
+            # A header line with no alignment after it
+            raise StopIteration
 
         # If the alignment contains entries with the same sequence
         # identifier (not a good idea - but seems possible), then this
