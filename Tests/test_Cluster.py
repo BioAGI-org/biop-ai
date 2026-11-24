@@ -2788,6 +2788,31 @@ class TestCluster(unittest.TestCase):
         ix, iy = np.unravel_index(distances.argmin(), distances.shape)
         self.assertEqual(clusterid.tolist(), [[ix, iy]])
 
+    def test_somcluster_transpose_matches_transposed_data(self):
+        """Check transpose=True trains the same map as the transposed data.
+
+        With transpose=True, the search for the closest cell compared each
+        column with cell (0, 0) on every pass, so (0, 0) always won. The
+        final assignment also started each column from the previous column's
+        cell, so ties (common with dist="k") went to a different cell.
+        """
+        if TestCluster.module != "Bio.Cluster":
+            self.skipTest("Pycluster's somcluster has no rng_seed")
+        from Bio.Cluster import somcluster
+
+        data = np.random.default_rng(1).normal(size=(6, 12))
+        kwargs = {"nxgrid": 3, "nygrid": 2, "niter": 200, "inittau": 0.5}
+        for dist in "ebcauxsk":
+            with self.subTest(dist=dist):
+                clusterid1, celldata1 = somcluster(
+                    data, transpose=True, dist=dist, rng_seed=0, **kwargs
+                )
+                clusterid2, celldata2 = somcluster(
+                    data.T.copy(), transpose=False, dist=dist, rng_seed=0, **kwargs
+                )
+                self.assertEqual(clusterid1.tolist(), clusterid2.tolist())
+                np.testing.assert_allclose(celldata1, celldata2)
+
     def test_wrong_size_raises_value_error(self):
         """Check a weight or celldata of the wrong size raises ValueError.
 

@@ -4588,7 +4588,7 @@ somworker(ClusterRNG* rng, int nrows, int ncolumns, double** data, int** mask,
                 for (iy = 0; iy < nygrid; iy++) {
                     double distance;
                     for (i = 0; i < ndata; i++)
-                        celldatavector[i] = &(celldata[ixbest][iybest][i]);
+                        celldatavector[i] = &(celldata[ix][iy][i]);
                     distance = metric(ndata, data, celldatavector, mask,
                                       dummymask, weights, iobject, 0,
                                       transpose);
@@ -4676,13 +4676,13 @@ somassign(int nrows, int ncolumns, double** data, int** mask,
     }
     else {
         double** celldatavector = MALLOC(ndata*sizeof(double*));
-        int ixbest = 0;
-        int iybest = 0;
         if (!celldatavector) {
             freedummymask(nmask, dummymask);
             return 0;
         }
         for (i = 0; i < ncolumns; i++) {
+            int ixbest = 0;
+            int iybest = 0;
             double closest;
             int ix, iy;
             for (j = 0; j < ndata; j++)
