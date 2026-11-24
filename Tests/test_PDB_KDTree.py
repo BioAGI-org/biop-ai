@@ -113,6 +113,20 @@ class KDTreeTest(unittest.TestCase):
             kdt = kdtrees.KDTree(random((nr_points, 3 - 2)), bucket_size)
         self.assertIn("expected a Nx3 numpy array", str(context.exception))
 
+    def test_KDTree_keyword_arguments(self):
+        """Keyword arguments are parsed like positional ones (issue #415)."""
+        coords = random((10, 3)) * 10
+        for bad in (0, -5):
+            with self.subTest(bucket_size=bad):
+                with self.assertRaisesRegex(ValueError, "bucket size should be"):
+                    kdtrees.KDTree(coords, bucket_size=bad)
+        with self.assertRaises(TypeError):
+            kdtrees.KDTree(coords, bucket_size="x")
+        with self.assertRaises(TypeError):
+            kdtrees.KDTree(coords, nonsense=1)
+        kdt = kdtrees.KDTree(coordinates=coords, bucket_size=2)
+        self.assertEqual(len(kdt.search(coords[0], 1e-6)), 1)
+
     def test_KDTree_point_search(self):
         """Test searching all points within a certain radius of center.
 
