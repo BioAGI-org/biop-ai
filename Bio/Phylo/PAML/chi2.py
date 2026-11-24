@@ -30,18 +30,19 @@ def cdf_chi2(df, stat):
         raise ValueError("df must be at least 1")
     if stat < 0:
         raise ValueError("The test statistic must be positive")
-    if df > 1e6:
+    if df > 1e6 and isfinite(df):
         # As df grows, the incomplete gamma ratio below loses accuracy, gets
         # slower, and never ends once df is above 2**53. From here on the
         # Wilson-Hilferty normal approximation is used. Its error is at most
         # about 1e-2 / df, largest near stat = df +- 0.74 sqrt(2 df): 1e-8 at
         # df = 1e6, where the series' is 2.6e-9, and the smaller of the two
-        # from about df = 4e6. The cube root of stat / df, less 1, is taken
+        # from about df = 4e6. An infinite df would divide by zero here, so it
+        # takes the path below. The cube root of stat / df, less 1, is taken
         # with log1p and expm1 from stat - df, as forming stat / df first
         # would round away the offset that matters near the mean.
         v = 2 / 9 / df
         r = (stat - df) / df
-        t = expm1(log1p(r) / 3) if r > -1 else -1.0
+        t = -1.0 if r <= -1.0 else expm1(log1p(r) / 3)
         z = (t + v) / sqrt(v)
         return 0.5 * erfc(z / sqrt(2))
     x = 0.5 * stat
