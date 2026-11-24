@@ -39,7 +39,10 @@ class SearchTests(unittest.TestCase):
         for result in results:
             self.assertIsInstance(result, dict)
             self.assertGreater(len(result), 0)
-            self.assertEqual(set(result.keys()), expected_keys)
+            # UniProt may add metadata such as extraAttributes, so check
+            # that the requested keys are there and an unrequested one is not.
+            self.assertLessEqual(expected_keys, set(result.keys()))
+            self.assertNotIn("sequence", result)
 
     def test_search_results_slicing(self):
         query = "Insulin AND (reviewed:true)"
