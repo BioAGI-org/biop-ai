@@ -299,25 +299,35 @@ class InsdcScanner:
         # Skip any blank lines
         iterator = (x for x in lines if x)
         try:
-            line = next(iterator)
+            line = next(iterator).strip()
 
-            feature_location = line.strip()
-            while feature_location[-1:] == ",":
+            # Collect the location's lines and join them once at the end,
+            # keeping the last character seen and the number of unclosed
+            # parentheses as each line is added. Recounting the whole
+            # location, or adding each line to a string (on PyPy), took
+            # quadratic time.
+            location_lines = [line]
+            last = line[-1:]
+            while last == ",":
                 # Multiline location, still more to come!
-                line = next(iterator)
-                feature_location += line.strip()
-            if feature_location.count("(") > feature_location.count(")"):
+                line = next(iterator).strip()
+                location_lines.append(line)
+                last = line[-1:] or last
+            feature_location = "".join(location_lines)
+            depth = feature_location.count("(") - feature_location.count(")")
+            if depth > 0:
                 # Including the prev line in warning would be more explicit,
                 # but this way get one-and-only-one warning shown by default:
                 warnings.warn(
                     "Non-standard feature line wrapping (didn't break on comma)?",
                     BiopythonParserWarning,
                 )
-                while feature_location[-1:] == "," or feature_location.count(
-                    "("
-                ) > feature_location.count(")"):
-                    line = next(iterator)
-                    feature_location += line.strip()
+                while last == "," or depth > 0:
+                    line = next(iterator).strip()
+                    location_lines.append(line)
+                    last = line[-1:] or last
+                    depth += line.count("(") - line.count(")")
+                feature_location = "".join(location_lines)
 
             qualifiers = []
 
