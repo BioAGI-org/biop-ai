@@ -107,6 +107,181 @@ Visible changes from these fixes, all for unusual input:
   and character number 0 in a NEXUS set is rejected (it used to mean the last
   column).
 
+A second round of fixes from the same audit (issues #353 to #447) covers
+smaller faults found alongside the first: readers whose run time grew with
+the square of a line's length or with the nesting depth, crafted files that
+used memory far beyond their size, malformed input that raised
+``IndexError``, ``TypeError``, ``AttributeError`` and the like instead of
+``ValueError``, and a few places that gave wrong results with no error.
+Valid files give the same results as before, except as listed here.
+
+``Bio.Align`` and ``Bio.AlignIO``:
+
+- ``Alignment.counts()`` raises ``ValueError`` for numpy sequence rows that
+  are not one-dimensional, C-contiguous, aligned int32, int8 or uint8
+  arrays. Before,
+  it returned 0 identities and 0 mismatches for them.
+- ``Alignment.inverse_indices`` raises a ``ValueError`` saying the sequence
+  length is unknown, for example on alignments read from BED files, and
+  ``Alignment.from_alignments_with_same_reference`` accepts alignments with a
+  single coordinate column.
+- The PSL and PSLX parser rejects a negative block size. The ``Bio.Align``
+  Stockholm parser raises ``ValueError`` for an alignment with no closing
+  ``//``, which it used to drop; ``Bio.AlignIO`` still accepts such files.
+  Malformed EMBOSS files raise ``ValueError``, not ``TypeError``.
+- bigBed, bigPsl and bigMaf: a data block may decompress to at most 256 MB,
+  so a file with a larger block can no longer be read. Files whose index
+  nodes have many children are read in linear time (a root with 65,535
+  leaves took about 5 minutes for each step, and now takes about 3 s in
+  all). Opening a bigMaf file decompresses only as much of the first block
+  as it needs, and a bigBed file with no data blocks gives no alignments.
+  Malformed index or data blocks raise ``ValueError``, as does an 'i' or 'q'
+  line that does not follow an 's' line in a bigMaf item.
+- A Clustal file holding only its header line gives no alignments; the
+  parser used to loop forever. The Mauve reader orders rows by the file
+  being read only, so parsing several files in one process no longer
+  changes the order.
+- ``MafIndex.get_spliced`` runs in linear time on long gap runs in the
+  reference (1.5 million gap columns take under a second, not minutes), and
+  ``MafIndex.search`` passes its coordinates to SQLite as parameters.
+
+``Bio.SeqIO``, ``Bio.bgzf`` and the XML readers:
+
+- A ``.2bit`` sequence longer than the file allows raises ``ValueError``
+  before any memory is reserved for it, and a file cut short inside a
+  sequence fails when it is parsed, not later when the missing bases are
+  read. A truncated BGZF block raises ``ValueError``, not ``struct.error``.
+- ABI entries of a multi-field type (date, time, rect and so on) that hold
+  several elements are decoded, one value per element, instead of being
+  rejected.
+- A FASTQ sequence line with non-ASCII letters raises ``ValueError``.
+- ``SeqIO.index`` and ``index_db`` work on BGZF-compressed IntelliGenetics
+  and UniProt XML files. ``index_db`` (in ``SeqIO`` and ``SearchIO``) with
+  ``filenames=[]`` on an existing index raises ``ValueError``; pass ``None``
+  to reuse the stored file names.
+- ``SeqIO.parse`` closes a file opened from a path when the parser rejects
+  its header.
+- SeqXML reads long sequences and descriptions in linear time.
+- An XML file that declares an entity raises ``ValueError`` in
+  ``Bio.Blast.NCBIXML``, ``SeqIO`` "uniprot-xml", ``SearchIO`` "blast-xml"
+  and "interproscan-xml", ``Phylo`` "nexml" and "phyloxml", and the KGML
+  parser. None of these formats uses entities. ``NCBIXML`` now raises the
+  real error instead of ``ExpatError: parsing finished``.
+- A NeXML ``<meta>`` property named like a ``Clade`` attribute is skipped
+  with a ``BiopythonParserWarning`` instead of overwriting that attribute.
+
+``Bio.SearchIO``:
+
+- The HHsuite text parsers raise ``ValueError`` instead of ``RuntimeError``,
+  ``TypeError`` or ``IndexError`` for malformed files, including header-only
+  files and an empty hit table; see ``DEPRECATED.rst``.
+- A HMMER3 text file that ends inside a hit table raises ``ValueError``
+  instead of returning the query with no hits. An Infernal file with a stray
+  line between queries gives the right query IDs, and a local end of zero
+  residues (``*[ 0]*``) parses.
+- Malformed or truncated FASTA ``-m 10``, HMMER and Infernal files raise
+  ``ValueError`` when parsed or indexed. Long FASTA ``-m 10`` alignments and
+  long runs of spaces in HMMER3 alignments are read in linear time.
+- A blast-xml version with no x.y.z number is kept as raw text.
+
+``Bio.Blast``:
+
+- ``qblast`` has a new ``timeout`` argument, in seconds, for each request to
+  the server. The default, ``None``, uses ``socket.getdefaulttimeout()`` as
+  before.
+- ``qblast(password=...)`` no longer installs its login opener as urllib's
+  global default, so later ``urlopen`` calls, and later ``qblast`` calls
+  without a password, no longer use that login.
+
+``Bio.Nexus``, ``Bio.Phylo`` and ``Bio.Phylo.PAML``:
+
+- NEXUS charsets with repeated ranges or names, deeply nested trees and
+  nodes with many ``[&...]`` comments no longer take time or memory far out
+  of proportion to the file. Adding or writing k sequences with one name
+  takes time growing with k squared, not k cubed.
+- ``(STANDARD)`` after a set name is accepted, and ``(VECTOR)`` raises a
+  clear error. A double-quoted partition name may contain a comma. A
+  ``MemoryError`` in a set list is no longer reported as "Formatting error",
+  and some malformed trees raise ``TreeError`` instead of giving a wrong
+  tree.
+- The Newick reader no longer hangs on an unclosed comment or quoted label
+  followed by backslashes.
+- The codeml, baseml and yn00 readers handle long runs of dashes or digits
+  in linear time, and read text such as ``--1.5`` as -1.5. ``codeml.read``
+  takes the parameter list only from the line after ``lnL``, so results
+  for some files gain keys such as ``"tree"`` and ``"site classes"``, and
+  ``"parameter list"`` is now correct where it was not.
+- ``chi2.cdf_chi2`` uses the Wilson-Hilferty approximation for degrees of
+  freedom above one million. Values just above that change by about 1e-8;
+  for larger degrees of freedom, where the result was wrong or never came,
+  it is now correct.
+- ``Codeml.run()``, ``Baseml.run()`` and ``Yn00.run()`` change back to the
+  original working directory when they raise.
+
+``Bio.Cluster``:
+
+- Ctrl-C stops a long ``kcluster``, ``kmedoids``, ``treecluster``,
+  ``somcluster`` or ``distancematrix`` call within about a second (longer
+  for the Kendall distance on very long rows), instead of when the call
+  finishes. This does not work on PyPy, whose C API does not deliver the
+  signal to C code.
+- ``somcluster(transpose=True)`` results change: it used to train every
+  step on grid cell (0, 0). ``somcluster`` on a single item now returns a
+  real result instead of uninitialised values.
+- ``Cluster.read`` takes ``eweight`` and ``eorder`` from the right columns
+  when NAME, GWEIGHT or GORDER follows a sample column.
+- A weight of the wrong length raises ``ValueError`` instead of
+  ``RuntimeError``, and ``treecluster`` on a single item raises
+  ``ValueError`` instead of ``MemoryError``; see ``DEPRECATED.rst``.
+- Condensed (1-D) distance matrices for 23,171 or more items are accepted.
+
+``Bio.motifs``:
+
+- Malformed XMS files raise ``ValueError`` instead of ``ExpatError``.
+- ``threshold_fpr`` and ``threshold_fnr`` raise ``ValueError`` for a rate
+  outside 0 to 1, and a rate of 1.0 gives the end of the score range.
+- ``pssm.distribution()`` gives a ``BiopythonWarning`` when the background
+  is not the one the PSSM was built with, since its false-negative-rate
+  thresholds are then wrong, and gives a clear error for infinite scores.
+- The ``pfm-four-rows`` reader skips lines without numbers, and raises
+  ``ValueError`` for a malformed count, a repeated letter, or a matrix cut
+  short at the end of the file. A signed number after the counts, as in
+  ``A 1 2 +3``, is now read as a count.
+
+``Bio.PDB``:
+
+- ``CEAligner`` releases the interpreter lock during the alignment, so other
+  threads keep running, and Ctrl-C stops a long alignment (not on PyPy).
+- ``run_psea`` accepts relative paths and no longer changes the process's
+  working directory. ``DSSP`` accepts file names that start with ``-``.
+- ``KDTree`` accepts ``coordinates`` and ``bucket_size`` as keywords. An
+  invalid or unknown keyword now raises an error instead of being ignored.
+  ``repr()`` of k-d tree search results no longer raises ``SystemError``.
+
+Other modules:
+
+- ``Bio.Affy``: a CEL v3 file that marks a cell outside the array, or a CEL
+  v4 file whose header blob has no terminator, raises ``ParserError``
+  instead of an ``IndexError`` or wrong intensities. CEL v3 files that list
+  each cell once, in order, need less than half the extra memory to parse.
+- ``Bio.GenBank``: a feature location wrapped over many lines is read in
+  linear time (300,000 lines take 0.15 s instead of about nine minutes), in
+  GenBank, EMBL and IMGT files.
+- ``Bio.KEGG.Compound``: ``str(record)`` writes the pathway names, and
+  STRUCTURES lines are read into ``record.structures``.
+- ``Bio.Sequencing.Ace.read`` attaches RT, WR and CT tags only to the first
+  read or contig of that name, and keeps tags that name no read or contig.
+- ``Bio.SCOP`` raises ``ValueError`` instead of ``KeyError`` for a sunid
+  missing from the DES file, and ``Bio.Emboss.Primer3.parse`` raises
+  ``ValueError`` instead of ``AttributeError`` for a comment or primer line
+  before the header line.
+- ``Bio.NMR.xpktools`` treats residue -1 as a residue. A file with no data
+  lines gives ``minres`` and ``maxres`` of ``None``, and ``data_table``
+  returns ``[]`` for it.
+- ``SeqRecord`` objects loaded lazily from BioSQL work with ``len()``,
+  ``bytes()``, iteration, ``in`` and ``count()``, and can be written as
+  GenBank.
+
 ``Bio.PDB.PDBIO.save`` has a new ``write_ter`` keyword. The default, ``True``,
 writes exactly what it wrote before. With ``write_ter=False`` no ``TER``
 records are written, for tools that do not expect them. In the default
