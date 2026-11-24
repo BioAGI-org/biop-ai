@@ -2029,6 +2029,36 @@ class TestIndexRange(unittest.TestCase):
                 ):
                     self.parse(commands)
 
+    def test_taxon_number_without_label(self):
+        """A taxon number with no taxon label yet raises NexusError."""
+        # Without a matrix, or before it, taxlabels is shorter than ntax, and
+        # such a number raised IndexError from Nexus.Nexus().
+        for nexus in (
+            "begin taxa;\ndimensions ntax=2;\ntaxlabels a b;\nend;\n"
+            "begin sets;\ntaxset t = 1;\nend;\n",
+            "begin taxa;\ndimensions ntax=2;\nend;\n"
+            "begin sets;\ntaxpartition p = a: 2;\nend;\n",
+        ):
+            with self.subTest(nexus=nexus):
+                with self.assertRaisesRegex(
+                    Nexus.NexusError, r"^Unknown taxon identifier: [12]$"
+                ):
+                    Nexus.Nexus("#NEXUS\n" + nexus)
+
+    def test_only_format_errors_are_formatting_errors(self):
+        """A badly formed list is a formatting error; MemoryError is not."""
+        nexus = self.parse("charset c1 = 1;\n")
+        for line in ("x = 1-", "x = 1-2\\0", "x = 1-2\\q", "x = c1-2"):
+            with self.subTest(line=line):
+                with self.assertRaisesRegex(Nexus.NexusError, "^Formatting error"):
+                    nexus._charset(line)
+        with self.assertRaisesRegex(Nexus.NexusError, "^Formatting error"):
+            nexus._taxset("x = t1-")
+        # Every exception but NexusError was reported as "Formatting error".
+        with mock.patch.object(nexus, "_resolve", side_effect=MemoryError):
+            with self.assertRaises(MemoryError):
+                nexus._charset("x = 1-2")
+
 
 class TestNcharBound(unittest.TestCase):
     """A stated nchar must fit in the input, as the matrix needs that many."""
