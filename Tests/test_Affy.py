@@ -445,6 +445,8 @@ class AffyTest(unittest.TestCase):
         start = data.index("[INTENSITY]")
         start = data.index("\n", data.index("CellHeader=", start)) + 1
         header = data[:start].replace("Cols=5\nRows=5\n", f"Cols={n}\nRows={n}\n")
+        header = header.replace("NumberCells=25\n", f"NumberCells={n * n}\n")
+        self.assertIn(f"NumberCells={n * n}\n", header)
         lines = [f"{i % n}\t{i // n}\t{i}.0\t{i / 2}\t{i % 7}\n" for i in range(n * n)]
         tail = "\n" + data[data.index("[MASKS]") :]
         peaks = []
