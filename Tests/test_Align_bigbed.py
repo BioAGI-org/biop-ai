@@ -8234,6 +8234,46 @@ class TestAlign_malformed_data_index(unittest.TestCase):
             f"they are larger than the file ({len(data)} bytes)",
         )
 
+    def test_wide_node(self):
+        # A valid tree whose root has 65535 leaves, the most a node can
+        # have, each holding the data block of bed3.bb. Moving on to the
+        # next sibling used to search the parent's children from the start,
+        # so opening, iterating and searching each took time quadratic in
+        # the width, about 5 minutes each. All three now take a few seconds.
+        # Run them in a child process, which a timeout can stop.
+        width = 65535
+        stream, _ = self.make_stream([list(range(1, width + 1))] + [None] * width)
+        code = """\
+import sys
+from Bio import Align
+with Align.parse(sys.argv[1], "bigbed") as alignments:
+    print(sum(1 for alignment in alignments))
+    print(sum(1 for alignment in alignments.search("chr22")))
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "wide_node.bb")
+            with open(path, "wb") as output:
+                output.write(stream.getvalue())
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-c", code, path],
+                    timeout=60,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+            except subprocess.TimeoutExpired:
+                self.fail("Reading a root node of 65535 leaves took over 60 seconds")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, f"{2 * width}\n{2 * width}\n")
+
 
 class TestAlign_malformed_data_block(unittest.TestCase):
     """Compressed data blocks larger than uncompressBufSize, or incomplete."""
