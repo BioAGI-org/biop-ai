@@ -7,6 +7,7 @@
 
 import unittest
 import warnings
+from io import BytesIO
 
 import support
 
@@ -4061,6 +4062,18 @@ class BlastXmlSpecialCases(unittest.TestCase):
             "gi|347972582|ref|XM_309352.4| Anopheles gambiae str. PEST AGAP011294-PA (DEFI_ANOGA) mRNA, complete cds",
         )
         self.assertEqual(qresult.blast_id, "Query_1")
+
+
+class BlastXmlErrorTests(unittest.TestCase):
+    def test_entity_declaration(self):
+        """Check an XML entity declaration raises ValueError."""
+        data = b"""\
+<?xml version="1.0"?>
+<!DOCTYPE BlastOutput [<!ENTITY a "aaaaaaaaaa">]>
+<BlastOutput><BlastOutput_program>&a;&a;&a;</BlastOutput_program></BlastOutput>
+"""
+        with self.assertRaisesRegex(ValueError, "^XML entity declarations are not"):
+            list(parse(BytesIO(data), FMT))
 
 
 if __name__ == "__main__":

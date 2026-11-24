@@ -19,8 +19,8 @@ Functions:
 """
 
 from io import StringIO
-from xml.etree import ElementTree
 
+from Bio import _xml
 from Bio.KEGG.KGML.KGML_pathway import Component
 from Bio.KEGG.KGML.KGML_pathway import Entry
 from Bio.KEGG.KGML.KGML_pathway import Graphics
@@ -69,7 +69,7 @@ def parse(handle):
                 "An XML-containing handle or an XML string must be provided"
             ) from None
     # Parse XML and return each Pathway
-    for event, elem in ElementTree.iterparse(handle, events=("start", "end")):
+    for event, elem in _xml.iterparse(handle, events=("start", "end")):
         if event == "end" and elem.tag == "pathway":
             yield KGMLParser(elem).parse()
             elem.clear()

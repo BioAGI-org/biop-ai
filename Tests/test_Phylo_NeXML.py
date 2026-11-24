@@ -56,6 +56,16 @@ class ParseTests(unittest.TestCase):
             trees = list(Phylo.parse(path, "nexml"))
             self.assertEqual(len(trees), count, msg=msg)
 
+    def test_entity_declaration(self):
+        """Check an XML entity declaration raises ValueError."""
+        data = b"""\
+<?xml version="1.0"?>
+<!DOCTYPE nex:nexml [<!ENTITY a "aaaaaaaaaa">]>
+<nex:nexml xmlns:nex="http://www.nexml.org/2009" version="&a;&a;&a;"/>
+"""
+        with self.assertRaisesRegex(ValueError, "^XML entity declarations are not"):
+            list(Phylo.parse(BytesIO(data), "nexml"))
+
 
 class WriterTests(unittest.TestCase):
     """NeXML writer tests."""

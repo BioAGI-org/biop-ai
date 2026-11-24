@@ -717,6 +717,18 @@ class ParserErrorTests(unittest.TestCase):
         ):
             list(SeqIO.parse(BytesIO(data), "uniprot-xml"))
 
+    def test_entity_declaration(self):
+        """Check an XML entity declaration raises ValueError."""
+        data = b"""\
+<?xml version="1.0"?>
+<!DOCTYPE uniprot [<!ENTITY a "aaaaaaaaaa">]>
+<uniprot xmlns="http://uniprot.org/uniprot">
+<entry><accession>P12345</accession><name>&a;&a;&a;</name></entry>
+</uniprot>
+"""
+        with self.assertRaisesRegex(ValueError, "^XML entity declarations are not"):
+            list(SeqIO.parse(BytesIO(data), "uniprot-xml"))
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)

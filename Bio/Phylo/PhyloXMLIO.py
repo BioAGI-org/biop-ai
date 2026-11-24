@@ -21,6 +21,7 @@ About capitalization:
 
 from xml.etree import ElementTree
 
+from Bio import _xml
 from Bio.Phylo import PhyloXML as PX
 
 # Recognize the phyloXML namespace when parsing
@@ -274,7 +275,7 @@ class Parser:
     def __init__(self, file):
         """Initialize the class."""
         # Get an iterable context for XML parsing events
-        context = iter(ElementTree.iterparse(file, events=("start", "end")))
+        context = iter(_xml.iterparse(file, events=("start", "end")))
         event, root = next(context)
         self.root = root
         self.context = context
