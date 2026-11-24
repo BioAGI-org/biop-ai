@@ -2339,6 +2339,42 @@ print(json.dumps(nexus.taxlabels))
                 self.assertEqual(nexus.unaltered_taxlabels, read)
                 self.assertEqual(nexus.taxlabels, renamed)
                 self.assertEqual(list(nexus.matrix), renamed)
+        nexus = Nexus.Nexus()
+        for label in read:
+            nexus.add_sequence(label, "A")
+        self.assertEqual(nexus.taxlabels, renamed)
+
+    def test_add_sequence(self):
+        """Adding 4,000 sequences named "a", as the NEXUS writers do."""
+        # add_sequence walked the chain of copies from "a" for each repeat,
+        # checking each name against the list of all the labels, which took
+        # minutes. Writing an alignment as NEXUS calls it for each record.
+        n = 4000
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Nexus
+n = int(sys.argv[1])
+nexus = Nexus.Nexus()
+for _ in range(n):
+    nexus.add_sequence("a", "A")
+print(json.dumps([nexus.unaltered_taxlabels, nexus.taxlabels, list(nexus.matrix)]))
+"""
+        unaltered, taxlabels, matrix = parse_in_child(self, code, n)
+        self.assertEqual(unaltered, ["a"] * n)
+        self.assertEqual(taxlabels, self.renamed(n))
+        self.assertEqual(matrix, self.renamed(n))
+
+    def test_add_sequence_freed_name(self):
+        """add_sequence gives again a copy name the caller has removed."""
+        nexus = Nexus.Nexus()
+        for _ in range(3):
+            nexus.add_sequence("a", "A")
+        self.assertEqual(nexus.taxlabels, ["a", "a.copy", "a.copy1"])
+        nexus.taxlabels.remove("a.copy")
+        del nexus.matrix["a.copy"]
+        nexus.add_sequence("a", "A")
+        self.assertEqual(nexus.taxlabels, ["a", "a.copy1", "a.copy"])
 
 
 class TestWideClade(unittest.TestCase):

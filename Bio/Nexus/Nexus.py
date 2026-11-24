@@ -355,17 +355,28 @@ def _unique_label(previous_labels, label, skip=None):
     label passed over, the name found after it, so that a later call
     meeting that label, from whatever label it started, carries on from
     there instead of walking the same chain again.
+
+    Without skip, each name after the first is built from its number
+    instead of by _next_label; the names are the same.
     """
+    if skip is None:
+        if label in previous_labels:
+            label = _next_label(label)
+            base, _, last = label.rpartition(".")
+            number = 0 if last == "copy" else int(last[4:])
+            while label in previous_labels:
+                number += 1
+                label = f"{base}.copy{number}"
+        return label
     passed = []
     while label in previous_labels:
         passed.append(label)
-        if skip is not None and label in skip:
+        if label in skip:
             label = skip[label]
         else:
             label = _next_label(label)
-    if skip is not None:
-        for name in passed:
-            skip[name] = label
+    for name in passed:
+        skip[name] = label
     return label
 
 
@@ -2087,7 +2098,7 @@ class Nexus:
             sequence += self.missing * diff
 
         if name in self.taxlabels:
-            unique_name = _unique_label(self.taxlabels, name)
+            unique_name = _unique_label(set(self.taxlabels), name)
             # print("WARNING: Sequence name %s is already present. Sequence was added as %s." % (name,unique_name))
         else:
             unique_name = name
