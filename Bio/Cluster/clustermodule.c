@@ -453,19 +453,22 @@ _convert_array_to_distancematrix(PyObject* array, Distancematrix* distances)
         goto exit;
     }
     if (view->ndim == 1) {
-        int m = (int) view->shape[0];
-        if (m != view->shape[0]) {
-            PyErr_Format(PyExc_ValueError,
-                         "distance matrix is too large (size = %zd)",
-                         view->shape[0]);
-            goto exit;
-        }
-        n = (int)(1+sqrt(1+8*m)/2); /* rounds to (1+sqrt(1+8*m))/2 */
-        if (n*n-n != 2 * m) {
+        /* m = n * (n - 1) / 2 distances; do the arithmetic in Py_ssize_t,
+         * as int overflows for n >= 23171. */
+        const Py_ssize_t m = view->shape[0];
+        /* rounds to (1+sqrt(1+8*m))/2 */
+        const Py_ssize_t nn = (Py_ssize_t)(1+sqrt(1+8.0*m)/2);
+        if (nn*nn-nn != 2 * m) {
             PyErr_SetString(PyExc_ValueError,
                             "distance matrix has unexpected size.");
             goto exit;
         }
+        if (nn > INT_MAX) {
+            PyErr_Format(PyExc_ValueError,
+                         "distance matrix is too large (size = %zd)", m);
+            goto exit;
+        }
+        n = (int) nn;
         distances->n = n;
         values = PyMem_Malloc(n*sizeof(double*));
         if (!values) {
