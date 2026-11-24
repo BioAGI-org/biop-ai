@@ -9,6 +9,7 @@ import os
 import struct
 import tempfile
 import unittest
+from unittest import mock
 
 try:
     import numpy.testing
@@ -429,6 +430,51 @@ class AffyTest(unittest.TestCase):
             if not was_tracing:
                 tracemalloc.stop()
         self.assertLess(peak, 2**20)
+
+    @unittest.skipIf(tracemalloc is None, "tracemalloc is not available")
+    def testAffy3CellsInOrderMemory(self):
+        # Turning the stored cell lines into arrays deduplicated them with
+        # np.unique and fancy indexing, about 41 bytes per cell, even in the
+        # usual file where each cell is listed once and in order. Those lines
+        # now become the arrays without a copy.
+        if tracemalloc.is_tracing():
+            self.skipTest("tracemalloc is already tracing")
+        with open(self.affy3) as f:
+            data = f.read()
+        n = 200
+        start = data.index("[INTENSITY]")
+        start = data.index("\n", data.index("CellHeader=", start)) + 1
+        header = data[:start].replace("Cols=5\nRows=5\n", f"Cols={n}\nRows={n}\n")
+        lines = [f"{i % n}\t{i // n}\t{i}.0\t{i / 2}\t{i % 7}\n" for i in range(n * n)]
+        tail = "\n" + data[data.index("[MASKS]") :]
+        peaks = []
+        read_cells = CelFile._read_v3_cells
+
+        def traced_read_cells(record, cells):
+            tracemalloc.start()
+            try:
+                read_cells(record, cells)
+                peaks.append(tracemalloc.get_traced_memory()[1])
+            finally:
+                tracemalloc.stop()
+
+        # In order, and then out of order with a cell listed twice (the last
+        # line wins), which is deduplicated as before.
+        for cell_lines in (lines, ["0\t0\t9.0\t9.0\t9\n"] + lines[::-1]):
+            with self.subTest(in_order=cell_lines is lines):
+                with mock.patch.object(CelFile, "_read_v3_cells", traced_read_cells):
+                    record = CelFile.read(
+                        io.StringIO(header + "".join(cell_lines) + tail)
+                    )
+                expected = numpy.arange(n * n).reshape(n, n)
+                numpy.testing.assert_array_equal(record.intensities, expected)
+                numpy.testing.assert_array_equal(record.stdevs, expected / 2)
+                numpy.testing.assert_array_equal(record.npix, expected % 7)
+                self.assertEqual(record.intensities.dtype, float)
+                self.assertEqual(record.stdevs.dtype, float)
+                self.assertEqual(record.npix.dtype, int)
+        # In order: less than one array of n * n floats
+        self.assertLess(peaks[0], 8 * n * n)
 
     def readV4Example(self, **changes):
         """Return the version 4 example file with some of its sizes changed.
