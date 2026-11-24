@@ -2059,6 +2059,25 @@ class TestIndexRange(unittest.TestCase):
             with self.assertRaises(MemoryError):
                 nexus._charset("x = 1-2")
 
+    def test_standard_and_vector_qualifiers(self):
+        """A (STANDARD) qualifier after a set name is accepted; VECTOR is not."""
+        # (STANDARD) was rejected as "Formatting error in line: ...".
+        nexus = self.parse(
+            "charset c (STANDARD) = 1-2;\ntaxset t (Standard) = t1;\n"
+            "charpartition p (standard) = a: 1, b: 2;\n"
+        )
+        self.assertEqual(nexus.charsets, {"c": [0, 1]})
+        self.assertEqual(nexus.taxsets, {"t": ["t1"]})
+        self.assertEqual(nexus.charpartitions, {"p": {"a": [0], "b": [1]}})
+        for line, message in (
+            ("c (VECTOR) = 11", "^Unsupported VECTOR format in line: c "),
+            ("c (FOO) = 1", "^Unknown qualifier in line: c "),
+            ("c (STANDARD = 1", "^Formatting error in line: c "),
+        ):
+            with self.subTest(line=line):
+                with self.assertRaisesRegex(Nexus.NexusError, message):
+                    nexus._charset(line)
+
 
 class TestNcharBound(unittest.TestCase):
     """A stated nchar must fit in the input, as the matrix needs that many."""
