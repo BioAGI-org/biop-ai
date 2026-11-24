@@ -565,9 +565,9 @@ bug rather than one instance.
 > - **The writers have to stay anyway.** Only nexus output is byte-identical
 >   between the stacks. The eight `Bio/AlignIO` format modules hold 3,326
 >   lines: 634 are writers and 614 are `MafIndex`. The other 522 are module
->   docstrings, imports, comments, blank lines and two small helpers. At most
->   the 1,556 lines of readers could go, and they encode exactly the behaviour
->   the tests pin.
+>   docstrings, imports, constants, comments, blank lines, two `__main__`
+>   doctest hooks and two small helpers. At most the 1,556 lines of readers
+>   could go, and they encode exactly the behaviour the tests pin.
 > - **`Bio.SeqIO` goes through `AlignIO`.** It reads 11 alignment format
 >   names and writes 8 with `AlignIO`'s classes
 >   (`Bio/SeqIO/__init__.py:473-558`), so a shim would change SeqIO output
