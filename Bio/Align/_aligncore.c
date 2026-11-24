@@ -160,7 +160,7 @@ Parser_feed_impl(Parser* self, PyObject* line, Py_ssize_t offset)
     }
     if (*s == '-') row[i++] = 0;
 
-    data = PyMem_Realloc(self->data, (n+1)*size*sizeof(Py_uintptr_t*));
+    data = PyMem_Realloc(self->data, (n+1)*sizeof(Py_uintptr_t*));
     if (!data) {
         PyMem_Free(row);
         PyErr_NoMemory();
