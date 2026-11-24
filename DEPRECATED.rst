@@ -619,6 +619,16 @@ The ``QueryResult.iteritems`` method, named after the Python 2
 ``zip(qresult.iterhit_keys(), qresult.iterhits())`` or the ``items``
 property instead.
 
+Changed in biop-ai 1.89 without a deprecation period. The ``hhsuite2-text``
+and ``hhsuite3-text`` parsers now raise ``ValueError`` in two cases where
+they used to raise ``RuntimeError``: when a line after ``No N`` is not a hit
+description line, and when no hit block comes within the first 5000 lines,
+which includes header-only files and files with an empty hit table. They
+also raise ``ValueError``, not ``TypeError``, for a hit block with no Q or T
+sequence rows, and not ``IndexError``, for a ``Match_columns`` line with no
+value. Code catching ``RuntimeError`` from these parsers should catch
+``ValueError`` instead.
+
 Bio.SeqRecord
 -------------
 Creating a SeqRecord with a plain string as the seq argument was deprecated in
