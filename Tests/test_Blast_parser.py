@@ -5,13 +5,17 @@
 """Test the Blast XML parser."""
 
 import io
+import sys
 import unittest
+import urllib.request
+import warnings
 from unittest import mock
 
 import numpy as np
 import support
 
 from Bio import Blast
+from Bio import BiopythonDeprecationWarning
 from Bio import StreamModeError
 from Bio.SeqRecord import SeqRecord
 
@@ -15356,6 +15360,43 @@ class TestBlastMalformedInput(unittest.TestCase):
             "b'<?xml ', found b'Error: database not found\\n'",
         )
         self.assertTrue(answer.closed)
+
+    def test_qblast_password_keeps_global_opener(self):
+        """Using qblast with a password must not replace urllib's global opener."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", BiopythonDeprecationWarning)
+            from Bio.Blast import NCBIWWW
+
+        previous = urllib.request._opener
+        self.addCleanup(urllib.request.install_opener, previous)
+        url_base = "http://localhost/blast"
+        xml = "<?xml version='1.0'?>\n"
+        # Bio.Blast.qblast returns bytes; the deprecated NCBIWWW.qblast, text.
+        for qblast, expected in [(Blast.qblast, xml.encode()), (NCBIWWW.qblast, xml)]:
+            with self.subTest(qblast=qblast.__module__):
+                opener = mock.Mock()
+                opener.open.side_effect = [
+                    io.BytesIO(b"RID = ABC123\nRTOE = 11\n"),
+                    io.BufferedReader(io.BytesIO(xml.encode())),
+                ]
+                module = sys.modules[qblast.__module__]
+                with (
+                    mock.patch.object(module, "build_opener", return_value=opener),
+                    mock.patch.object(
+                        module, "urlopen", side_effect=AssertionError("urlopen used")
+                    ),
+                    mock.patch("time.sleep"),
+                ):
+                    stream = qblast(
+                        "blastn", "nt", "ACGT", url_base=url_base, password="secret"
+                    )
+                self.assertEqual(stream.read(), expected)
+                # Both the submit and the poll request went through the opener.
+                self.assertEqual(
+                    [call.args[0].full_url for call in opener.open.call_args_list],
+                    [url_base, url_base],
+                )
+                self.assertIs(urllib.request._opener, previous)
 
 
 if __name__ == "__main__":
