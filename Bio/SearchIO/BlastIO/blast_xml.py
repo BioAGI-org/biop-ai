@@ -186,8 +186,9 @@ _DTD_OPT = (
 )
 
 # compile RE patterns
-# for capturing BLAST version
-_RE_VERSION = re.compile(r"\d+\.\d+\.\d+\+?")
+# for capturing BLAST version; the lookbehind stops a match from starting
+# inside a run of digits, which would make the search quadratic
+_RE_VERSION = re.compile(r"(?<!\d)\d+\.\d+\.\d+\+?")
 # for splitting ID-description pairs
 _RE_ID_DESC_PAIRS_PATTERN = re.compile(" +>")
 # for splitting ID and description (must be used with maxsplit = 1)
@@ -283,7 +284,10 @@ class BlastXmlParser:
 
         # we only want the version number, sans the program name or date
         if meta.get("version") is not None:
-            meta["version"] = re.search(_RE_VERSION, meta["version"]).group(0)
+            # keep the text as it is if it holds no x.y.z version number
+            match = _RE_VERSION.search(meta["version"])
+            if match:
+                meta["version"] = match.group(0)
 
         return meta, fallback
 
