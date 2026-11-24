@@ -34,7 +34,6 @@ from urllib.parse import urlencode
 from urllib.request import build_opener
 from urllib.request import HTTPBasicAuthHandler
 from urllib.request import HTTPPasswordMgrWithDefaultRealm
-from urllib.request import install_opener
 from urllib.request import Request
 from urllib.request import urlopen
 
@@ -224,8 +223,9 @@ def qblast(
         password_mgr = HTTPPasswordMgrWithDefaultRealm()
         password_mgr.add_password(None, url_base, username, password)
         handler = HTTPBasicAuthHandler(password_mgr)
-        opener = build_opener(handler)
-        install_opener(opener)
+        open_url = build_opener(handler).open
+    else:
+        open_url = urlopen
 
     if url_base == NCBI_BLAST_URL:
         parameters.update({"email": email, "tool": tool})
@@ -236,7 +236,7 @@ def qblast(
     # Note the NCBI do not currently impose a rate limit here, other
     # than the request not to make say 50 queries at once using multiple
     # threads.
-    handle = urlopen(request)
+    handle = open_url(request)
 
     # Format the "Get" command, which gets the formatted results from qblast
     # Parameters taken from http://www.ncbi.nlm.nih.gov/BLAST/Doc/node6.html on 9 July 2007
@@ -296,7 +296,7 @@ def qblast(
             )
 
         request = Request(url_base, message, {"User-Agent": "BiopythonClient"})
-        handle = urlopen(request)
+        handle = open_url(request)
         results = handle.read().decode()
 
         # Can see an "\n\n" page while results are in progress,
