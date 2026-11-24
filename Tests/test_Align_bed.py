@@ -12204,6 +12204,20 @@ query             0 --TTC-GCTAGC-TG--- 11
         self.assertEqual(format(alignment, "bed"), line)
 
 
+class TestAlign_inverse_indices(unittest.TestCase):
+    def test_unknown_target_length(self):
+        """Test inverse_indices when BED leaves the target length unknown."""
+        stream = StringIO("chr1\t100\t110\tread1\t0\t+\n")
+        alignment = next(Align.parse(stream, "bed"))
+        with self.assertRaisesRegex(ValueError, "length of a sequence is unknown"):
+            alignment.inverse_indices
+        alignment.sequences[0] = Seq(None, length=200)
+        inverse_indices = alignment.inverse_indices
+        self.assertEqual(inverse_indices[0][99], -1)
+        self.assertEqual(inverse_indices[0][100], 0)
+        self.assertEqual(inverse_indices[1].tolist(), list(range(10)))
+
+
 class TestAlign_searching(unittest.TestCase):
     path = support.DATA / "Blat" / "bigbedtest.bed"
 

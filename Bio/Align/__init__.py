@@ -3359,7 +3359,15 @@ class Alignment:
         [array([-1, -1,  0,  1,  2,  3, -1]), array([3, 2, 1, 0])]
 
         """
-        a = [-np.ones(len(sequence), int) for sequence in self.sequences]
+        lengths = [len(sequence) for sequence in self.sequences]
+        if sys.maxsize in lengths:
+            # Placeholder length, set for example by the BED parser.
+            raise ValueError(
+                "inverse_indices needs the full sequence lengths, but the "
+                "length of a sequence is unknown (for example, because the "
+                "alignment was read from a BED file)"
+            )
+        a = [-np.ones(length, int) for length in lengths]
         n, m = self.coordinates.shape
         steps = np.diff(self.coordinates, 1)
         aligned = sum(steps != 0, 0) > 1
