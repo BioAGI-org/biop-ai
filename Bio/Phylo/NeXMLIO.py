@@ -13,10 +13,12 @@
 See: http://www.nexml.org
 """
 
+import warnings
 from io import StringIO
 from xml.dom import minidom
 from xml.etree import ElementTree
 
+from Bio import BiopythonParserWarning
 from Bio import _xml
 from Bio.Phylo import NeXML
 
@@ -114,6 +116,16 @@ class Parser:
 
         if prop in matches("cdao:has_Support_Value"):
             node_dict["confidence"] = float(meta_node.text)
+        elif prop == "self" or prop.startswith("_") or hasattr(NeXML.Clade(), prop):
+            # A bare name such as is_terminal or clades would replace the
+            # Clade attribute of that name and break the tree; "self" would
+            # clash with the first argument of the Clade constructor, and a
+            # name such as __deepcopy__ would be called by the copy module.
+            warnings.warn(
+                f"Ignoring NeXML meta property {prop!r}, "
+                "whose name is reserved by Clade",
+                BiopythonParserWarning,
+            )
         else:
             node_dict[prop] = meta_node.text
 
