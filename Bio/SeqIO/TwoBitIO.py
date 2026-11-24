@@ -307,6 +307,14 @@ class TwoBitIterator(SequenceIterator):
             if reserved != 0:
                 raise ValueError("Found non-zero reserved field %u" % reserved)
             sequence.offset = stream.tell()
+            # Four bases are packed in each byte. Check that they fit in the
+            # file, so that reading the sequence does not allocate dnaSize
+            # bytes for a sequence that is not there.
+            if sequence.offset + (dnaSize + 3) // 4 > filesize:
+                raise ValueError(
+                    "Found dnaSize %u for sequence %s, too long for a file of %u bytes"
+                    % (dnaSize, name, filesize)
+                )
             sequence = Seq(sequence)
             sequences[name] = records[offset] = sequence
         # Check the blocks only now, so that the block counts of every record

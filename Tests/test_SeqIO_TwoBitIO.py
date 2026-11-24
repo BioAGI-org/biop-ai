@@ -302,6 +302,33 @@ for start, end, step in ((0, 16, 1), (0, 16, 2), (15, -1, -1)):
                         str(cm.exception), "Unexpected end of file at byte %d" % size
                     )
 
+    def test_dna_size_too_large(self):
+        """Check a sequence length is checked against the file size."""
+        # One record holding one byte of DNA (TCAG), with no blocks
+        data = (0x1A412743).to_bytes(4, "little")
+        data += (0).to_bytes(4, "little")
+        data += (1).to_bytes(4, "little")
+        data += (0).to_bytes(4, "little")
+        data += b"\x04chr1" + (25).to_bytes(4, "little")
+        for dnaSize in (4, 5, 4_000_000_000):
+            record = dnaSize.to_bytes(4, "little") + bytes(12) + b"\x1b"
+            with self.subTest(dnaSize=dnaSize):
+                # np.fromfile needs a real file, not an io.BytesIO
+                with tempfile.TemporaryFile() as stream:
+                    stream.write(data + record)
+                    stream.seek(0)
+                    if dnaSize == 4:
+                        seq = next(SeqIO.parse(stream, "twobit")).seq
+                        self.assertEqual(seq, "TCAG")
+                        continue
+                    with self.assertRaises(ValueError) as cm:
+                        SeqIO.parse(stream, "twobit")
+                self.assertEqual(
+                    str(cm.exception),
+                    "Found dnaSize %u for sequence chr1, "
+                    "too long for a file of 42 bytes" % dnaSize,
+                )
+
     def test_sequence_count_too_large(self):
         """Check the index is not read past the end of the file."""
         # A header claiming 2**32 - 1 sequences, with no index after it
