@@ -95,6 +95,40 @@ class NmrTests(unittest.TestCase):
             table(1, 1_000_001)
         self.assertIn("1 to 1000001", str(context.exception))
 
+    def test_residue_minus_one(self):
+        """Residue -1 is a residue, not a marker for no residue seen yet."""
+        with open(support.DATA / "NMR" / "noed.xpk") as handle:
+            lines = handle.readlines()
+        header, peak = lines[:6], lines[-1]  # the peak of residue 10
+
+        with tempfile.TemporaryDirectory() as directory:
+            paths = []
+            for residues in ([-1, -5], [1, -1, 2], [], [1, 2]):
+                path = os.path.join(directory, f"{len(paths)}.xpk")
+                with open(path, "w") as handle:
+                    handle.writelines(header)
+                    for residue in residues:
+                        handle.write(peak.replace("10.", f"{residue}."))
+                paths.append(path)
+            ranges = []
+            for path in paths:
+                residue_dict = xpktools.Peaklist(path).residue_dict("H1")
+                ranges.append((residue_dict["minres"], residue_dict["maxres"]))
+            self.assertEqual(ranges, [(-5, -1), (-1, 2), (None, None), (1, 2)])
+            rows = xpktools.data_table(paths[:1], "H1.P", "H1")
+            self.assertEqual(
+                [row.split("\t")[0] for row in rows], ["-5", "-4", "-3", "-2", "-1"]
+            )
+            rows = xpktools.data_table(paths[1:2], "H1.P", "H1")
+            self.assertEqual(
+                rows, ["-1\t7.663\n", "0\t*\n", "1\t7.663\n", "2\t7.663\n"]
+            )
+            # a file with no peaks adds a column of '*', not a residue -1 row
+            rows = xpktools.data_table([paths[3], paths[2]], "H1.P", "H1")
+            self.assertEqual(rows, ["1\t7.663\t*\n", "2\t7.663\t*\n"])
+            # a file with no peaks gives no rows, not a made-up residue -1
+            self.assertEqual(xpktools.data_table(paths[2:3], "H1.P", "H1"), [])
+
     def test_noetools(self):
         """Self test for NMR.NOEtools.
 
