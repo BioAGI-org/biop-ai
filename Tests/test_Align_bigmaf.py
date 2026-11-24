@@ -16,6 +16,7 @@ import numpy as np
 import support
 
 from Bio import Align
+from Bio.Align import bigmaf
 
 try:
     import tracemalloc
@@ -13211,6 +13212,59 @@ class TestAlign_malformed_first_block(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             Align.parse(stream, "bigmaf")
         self.assertEqual(str(cm.exception), self.no_s_line.format(685))
+
+
+class TestAlign_malformed_item(unittest.TestCase):
+    """Malformed MAF text in a bigMaf item gives a ValueError naming the line."""
+
+    def check(self, mafBlock, message):
+        # The MAF text of an item, with semicolons in place of newlines,
+        # ended by a NUL byte, as it is in a data block of a bigMaf file.
+        data = mafBlock + b"\0"
+        create_alignment = bigmaf.AlignmentIterator._create_alignment
+        with self.assertRaises(ValueError) as cm:
+            create_alignment(None, 0, 0, 3, data, 0, len(data))
+        self.assertEqual(str(cm.exception), message)
+
+    def test_unexpected_line(self):
+        # The first of these used to raise UnboundLocalError; the second
+        # quoted the 'a' line before the bad one, as a bytes repr.
+        message = "Error parsing alignment - unexpected line:\nx bad line"
+        self.check(b"x bad line", message)
+        self.check(b"a score=1;x bad line", message)
+
+    def test_i_q_line_not_after_s_line(self):
+        # An 'i' or 'q' line annotates the 's' line before it. Without one,
+        # these used to raise UnboundLocalError, and after an 'e' line for
+        # the same sequence they annotated the record of the 'e' line. An
+        # 'e' line also ends the 's' line before it, so an 'i' or 'q' line
+        # after the 'e' line must not annotate that 's' line either.
+        s_line = b";s hg19.chr1 0 3 + 10 AAA;"
+        e_line = b"e hg19.chr1 0 3 + 10 I;"
+        for before in (b"", e_line, s_line[1:] + e_line):
+            for line in ("i hg19.chr1 N 0 C 0", "q hg19.chr1 999"):
+                with self.subTest(before=before, line=line):
+                    self.check(
+                        before + line.encode() + s_line,
+                        f"Found '{line[0]}' line that does not follow an 's' "
+                        f"line:\n{line}",
+                    )
+
+    def test_bad_line_at_end(self):
+        # A bad 'i', 'q' or 'e' line as the last line of the item, with no
+        # semicolon after it, used to be quoted with the NUL byte that ends
+        # the item.
+        s_line = b"s hg19.chr1 0 3 + 10 AAA;"
+        no_s_line = "line that does not follow an 's' line"
+        for before, line, message in (
+            (s_line, "i hg19.chr1 N 0 C", "Expected 6 fields in 'i' line, found 5"),
+            (s_line, "q hg19.chr1", "Expected 3 fields in 'q' line, found 2"),
+            (s_line, "e hg18.chr1 0 3 + 10", "Expected 7 fields in 'e' line, found 6"),
+            (b"", "i hg19.chr1 N 0 C 0", f"Found 'i' {no_s_line}"),
+            (b"", "q hg19.chr1 999", f"Found 'q' {no_s_line}"),
+        ):
+            with self.subTest(line=line):
+                self.check(before + line.encode(), f"{message}:\n{line}")
 
 
 if __name__ == "__main__":
