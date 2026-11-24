@@ -40,6 +40,7 @@ __all__ = [
 ]
 
 import io
+import socket
 import textwrap
 import time
 import warnings
@@ -1076,6 +1077,7 @@ def qblast(
     template_length=None,
     username="blast",
     password=None,
+    timeout=None,
 ):
     """BLAST search using NCBI's QBLAST server.
 
@@ -1108,6 +1110,13 @@ def qblast(
                       manually set parameters like word size and e value. Turns
                       off when sequence length is > 30 residues. Default: None.
      - service        plain, psi, phi, rpsblast, megablast (lower case)
+     - timeout        Socket timeout in seconds for the blocking operations
+                      (connecting, each read) of every request; it does not
+                      limit the whole search. A server that stays silent for
+                      longer raises TimeoutError; a connection that cannot be
+                      made in time raises urllib.error.URLError. Default
+                      None, which uses socket.getdefaulttimeout() (no limit
+                      unless set).
 
     This function does no checking of the validity of the parameters
     and passes the values to the server as is.  More help is available at:
@@ -1197,6 +1206,8 @@ def qblast(
         open_url = build_opener(handler).open
     else:
         open_url = urlopen
+    if timeout is None:
+        timeout = socket.getdefaulttimeout()
 
     if url_base == NCBI_BLAST_URL:
         parameters.update({"email": email, "tool": tool})
@@ -1207,7 +1218,7 @@ def qblast(
     # Note the NCBI do not currently impose a rate limit here, other
     # than the request not to make say 50 queries at once using multiple
     # threads.
-    stream = open_url(request)
+    stream = open_url(request, timeout=timeout)
 
     # Format the "Get" command, which gets the formatted results from qblast
     # Parameters taken from http://www.ncbi.nlm.nih.gov/BLAST/Doc/node6.html on 9 July 2007
@@ -1265,7 +1276,7 @@ def qblast(
                 BiopythonWarning,
             )
         request = Request(url_base, message, {"User-Agent": "BiopythonClient"})
-        stream = open_url(request)
+        stream = open_url(request, timeout=timeout)
         data = stream.peek()
         if format_type == "HTML" and b"<title>NCBI Blast:</title>" in data:
             continue
