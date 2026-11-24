@@ -630,9 +630,9 @@ class MafIndex:
             result = con.execute(
                 "SELECT DISTINCT start, end, offset FROM offset_data "
                 "WHERE bin IN (%s) "
-                "AND (end BETWEEN %s AND %s OR %s BETWEEN start AND end) "
-                "ORDER BY start, end, offset ASC;"
-                % (possible_bins, exonstart, exonend - 1, exonend - 1)
+                "AND (end BETWEEN ? AND ? OR ? BETWEEN start AND end) "
+                "ORDER BY start, end, offset ASC;" % possible_bins,
+                (int(exonstart), int(exonend) - 1, int(exonend) - 1),
             )
 
             rows = result.fetchall()
