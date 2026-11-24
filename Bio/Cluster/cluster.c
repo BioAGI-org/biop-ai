@@ -4815,7 +4815,7 @@ If a memory error occurs, somcluster returns 0.
     const int lcelldata = (celldata == NULL) ? 0 : 1;
     ClusterRNG rng;
 
-    if (nobjects < 2) return 1;
+    if (nobjects < 1) return 1;
 
     clusterrng_init(&rng, rng_seed);
 

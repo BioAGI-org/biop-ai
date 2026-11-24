@@ -2736,6 +2736,31 @@ class TestCluster(unittest.TestCase):
         self.assertEqual(len(clusterid), len(data))
         self.assertEqual(len(clusterid[0]), 2)
 
+    def test_somcluster_one_item(self):
+        """Check a self-organizing map is trained on a single item.
+
+        somcluster returned at once for fewer than two items, so the caller
+        got the placeholder clusterid [[1, 1]], outside a 1x1 grid, and
+        celldata that was never written.
+        """
+        if TestCluster.module == "Bio.Cluster":
+            from Bio.Cluster import somcluster
+        elif TestCluster.module == "Pycluster":
+            from Pycluster import somcluster
+
+        # One column, clustered with transpose=True, on a 1x1 grid
+        clusterid, celldata = somcluster(
+            np.array([[1.0], [2.0]]), transpose=True, nxgrid=1, nygrid=1
+        )
+        self.assertEqual(clusterid.tolist(), [[0, 0]])
+        self.assertTrue(np.isfinite(celldata).all())
+        # One row on a 4x3 grid: the item is assigned to its closest cell
+        data = np.array([[1.0, 2.0]])
+        clusterid, celldata = somcluster(data, nxgrid=4, nygrid=3, niter=10)
+        distances = ((celldata - data[0]) ** 2).sum(axis=2)
+        ix, iy = np.unravel_index(distances.argmin(), distances.shape)
+        self.assertEqual(clusterid.tolist(), [[ix, iy]])
+
     def test_distancematrix_arguments(self):
         # Test if incorrect arguments are caught by the C code
         if TestCluster.module == "Bio.Cluster":
