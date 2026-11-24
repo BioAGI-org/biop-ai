@@ -458,10 +458,6 @@ class UniprotRandomAccess(SequentialSeqFileRandomAccess):
                     length += len(line)
                 elif end_entry_marker in line:
                     length += line.find(end_entry_marker) + 8
-                    end_offset = (
-                        handle.tell() - len(line) + line.find(end_entry_marker) + 8
-                    )
-                    assert start_offset + length == end_offset  # noqa: S101
                     break
                 elif marker_re.match(line) or not line:
                     # Start of next record or end of file
@@ -530,10 +526,9 @@ class IntelliGeneticsRandomAccess(SeqFileRandomAccess):
         handle = self._handle
         handle.seek(0)
         # Skip any header
-        offset = 0
-        line = ""
         while True:
-            offset += len(line)
+            # Offsets come from tell(), as a BGZF file needs virtual offsets
+            offset = handle.tell()
             line = handle.readline()
             if not line:
                 break  # Premature end of file, or just empty?
@@ -541,20 +536,20 @@ class IntelliGeneticsRandomAccess(SeqFileRandomAccess):
                 break
         while line:
             length = 0
-            assert offset + len(line) == handle.tell()  # noqa: S101
             if not line.startswith(b";"):
                 raise ValueError(f"Records should start with ';' and not:\n{line!r}")
             while line.startswith(b";"):
                 length += len(line)
+                next_offset = handle.tell()
                 line = handle.readline()
             key = line.rstrip()
             # Now look for the first line which starts ";"
             while line and not line.startswith(b";"):
                 length += len(line)
+                next_offset = handle.tell()
                 line = handle.readline()
             yield key.decode(), offset, length
-            offset += length
-            assert offset + len(line) == handle.tell()  # noqa: S101
+            offset = next_offset
 
     def get_raw(self, offset):
         """Return the raw record from the file as a bytes string."""
