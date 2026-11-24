@@ -1076,6 +1076,10 @@ class FastqIteratorAbstractBaseClass(SequenceIterator[str]):
         if second_title and second_title != title_line:
             raise ValueError("Sequence and quality captions differ.")
 
+        # Seq stores bytes, so a non-ASCII letter would make the sequence
+        # longer than its quality string.
+        if not seq_string.isascii():
+            raise ValueError("Non-ASCII characters are not allowed in the sequence.")
         # Note: str.isprintable is False for ASCII characters 0-32 and 127
         if not seq_string.isprintable() or " " in seq_string:
             # first printable character
