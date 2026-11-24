@@ -445,8 +445,11 @@ all-against-all `CEAligner` run over 10,000 pairs leaks roughly 1.1 GB.
 > | plus `pathBuffer` freed | 0.1 | 11.7 | 0.5 |
 >
 > The object leak is fixed; **most of the byte leak is not**. The residual
-> 31.7 KB/call is exactly `MAX_PATHS(20) × sizeof(afp)(8) × n(200)` =
-> 31.25 KiB. `curPath` is `PyMem_RawMalloc`'d at `:451` and stored into
+> 31.7 KB/call is mostly the surviving path buffers,
+> `MAX_PATHS(20) × sizeof(afp)(8) × n(200)` = 32,000 bytes (31.25 KiB),
+> plus the ~0.5 KB/call background that the fixed build still shows. Line
+> numbers in this paragraph are from the code before PR #16.
+> `curPath` is `PyMem_RawMalloc`'d at `:451` and stored into
 > `pathBuffer[]` at `:574`, but freed at `:578` **only** in the
 > `bufferSize == MAX_PATHS` overflow case. The surviving entries are never
 > freed before `return result;` at `:672`. The complete fix needs, before
