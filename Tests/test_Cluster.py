@@ -4566,19 +4566,13 @@ record.save({self.jobname!r}, *{list(solutions)!r})
         """Check save rejects a gorder or eorder of the wrong size.
 
         The items missing from the order were never written, so save looped
-        forever. Cluster.read takes the EORDER values from the columns after
-        the last NAME, GWEIGHT or GORDER column, so a file with NAME between
-        two samples and an EORDER row gives an eorder one value short.
+        forever.
         """
         from Bio.Cluster import read
 
-        text = (
-            "UNIQID\tEXP1\tNAME\tEXP2\n"
-            "G1\t1.0\tn1\t3.0\n"
-            "G2\t2.0\tn2\t4.0\n"
-            "EORDER\t2\t\t1\n"
-        )
+        text = "UNIQID\tEXP1\tNAME\tEXP2\nG1\t1.0\tn1\t3.0\nG2\t2.0\tn2\t4.0\n"
         record = read(io.StringIO(text))
+        record.eorder = [1.0]
         with self.assertRaises(ValueError) as cm:
             record.save(self.jobname, expclusters=LimitedReads([1, 0]))
         self.assertEqual(str(cm.exception), "eorder has incorrect size 1 (expected 2)")
@@ -4587,6 +4581,33 @@ record.save({self.jobname!r}, *{list(solutions)!r})
             record.save(self.jobname, geneclusters=LimitedReads([1, 0]))
         self.assertEqual(str(cm.exception), "gorder has incorrect size 1 (expected 2)")
         self.assertEqual(os.listdir(self.directory), [])
+
+    def test_read_eweight_eorder_between_other_columns(self):
+        """Check EWEIGHT and EORDER are read from the sample columns only.
+
+        Cluster.read took these values from the columns after the last NAME,
+        GWEIGHT or GORDER column, so a sample before one of those columns
+        lost its value and the others were matched to the wrong samples.
+        """
+        from Bio.Cluster import read
+
+        text = (
+            "UNIQID\tEXP1\tNAME\tEXP2\tEXP3\tGORDER\n"
+            "EWEIGHT\t0.5\t\t0.7\t0.9\t\n"
+            "EORDER\t3\t\t2\t1\t\n"
+            "G1\t1.0\tn1\t2.0\t3.0\t1\n"
+        )
+        record = read(io.StringIO(text))
+        self.assertEqual(record.expid, ["EXP1", "EXP2", "EXP3"])
+        self.assertEqual(record.eweight.tolist(), [0.5, 0.7, 0.9])
+        self.assertEqual(record.eorder.tolist(), [3.0, 2.0, 1.0])
+        record.save(self.jobname)
+        self.assertEqual(
+            self.read_output("job.cdt"),
+            "UNIQID\tNAME\tGWEIGHT\tEXP3\tEXP2\tEXP1\n"
+            "EWEIGHT\t\t\t0.900000\t0.700000\t0.500000\n"
+            "G1\tn1\t1.000000\t3.0\t2.0\t1.0\n",
+        )
 
 
 if __name__ == "__main__":
