@@ -174,6 +174,31 @@ class CompoundTests(unittest.TestCase):
         self.assertEqual(reparsed.pathway, record.pathway)
         self.assertEqual(len(reparsed.pathway), 8)
 
+    def test_structures(self):
+        """STRUCTURES lines, including a continuation line, are parsed."""
+        text = (
+            "ENTRY       C00001                      Compound\n"
+            "NAME        H2O\n"
+            "STRUCTURES  PDB: 1ABC  2DEF  3GHI\n"
+            "                 4JKL\n"
+            "DBLINKS     PubChem: 3303\n"
+            "///\n"
+        )
+        record = next(Compound.parse(StringIO(text)))
+        self.assertEqual(record.structures, [("PDB", ["1ABC", "2DEF", "3GHI", "4JKL"])])
+        self.assertEqual(record.dblinks, [("PubChem", ["3303"])])
+        reparsed = next(Compound.parse(StringIO(str(record) + "\n")))
+        self.assertEqual(reparsed.structures, record.structures)
+
+    def test_structures_without_database(self):
+        """An empty STRUCTURES line is skipped; ids with no database raise."""
+        text = "ENTRY       C00001\nSTRUCTURES  \n            PDB: 1ABC\n///\n"
+        record = next(Compound.parse(StringIO(text)))
+        self.assertEqual(record.structures, [("PDB", ["1ABC"])])
+        text = "ENTRY       C00001\nSTRUCTURES  1ABC\n///\n"
+        with self.assertRaisesRegex(ValueError, "^STRUCTURES ids before any database"):
+            next(Compound.parse(StringIO(text)))
+
     def test_irregular(self):
         """compound.irregular tests."""
         with open(support.DATA / "KEGG" / "compound.irregular") as handle:
