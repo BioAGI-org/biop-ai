@@ -13780,6 +13780,26 @@ query             0 --TTC-GCTAGC-TG--- 11
         self.assertEqual(format(alignment, "psl"), line)
 
 
+class TestAlign_bad_block_sizes(unittest.TestCase):
+    def test_negative_block_size(self):
+        """Test that a negative block size raises ValueError."""
+        # A positive block followed by a negative one; and a single negative
+        # block, which used to read silently as reverse strand on both rows.
+        mixed = (
+            "5\t0\t0\t0\t0\t0\t0\t0\t+\tq\t10\t0\t3\tt\t10\t0\t3\t2\t5,-2,\t0,5,\t0,5,"
+        )
+        single = "5\t0\t0\t0\t0\t0\t0\t0\t+\tq\t10\t5\t3\tt\t10\t5\t3\t1\t-2,\t5,\t5,"
+        for line in (
+            mixed,
+            mixed + "\tAAAAA,AA,\tAAAAA,AA,",
+            single,
+            single + "\tAA,\tAA,",
+        ):
+            with self.subTest(line=line):
+                with self.assertRaisesRegex(ValueError, "Negative block size -2"):
+                    next(Align.parse(StringIO(line + "\n"), "psl"))
+
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     unittest.main(testRunner=runner)
