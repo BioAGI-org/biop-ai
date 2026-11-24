@@ -187,6 +187,11 @@ def _set_hsp_seqs(hsp, parsed, program):
     :type program: string
 
     """
+    # the parser collects the aligned sequence lines in lists
+    for seq_type in ("hit", "query"):
+        parsed[seq_type]["seq"] = "".join(parsed[seq_type]["seq"])
+    if "similarity" in hsp.aln_annotation:
+        hsp.aln_annotation["similarity"] = "".join(hsp.aln_annotation["similarity"])
     # get aligned sequences and check if they have equal lengths
     start = 0
     for seq_type in ("hit", "query"):
@@ -480,9 +485,9 @@ class FastaM10Parser:
             ):
                 # append last parsed_hsp['hit']['seq'] line
                 if state == _STATE_HIT_BLOCK:
-                    parsed_hsp["hit"]["seq"] += line.strip()
+                    parsed_hsp["hit"]["seq"].append(line.strip())
                 elif state == _STATE_CONS_BLOCK:
-                    hsp.aln_annotation["similarity"] += line.strip("\r\n")
+                    hsp.aln_annotation["similarity"].append(line.strip("\r\n"))
                 # process HSP alignment and coordinates
                 _set_hsp_seqs(hsp, parsed_hsp, self._preamble["program"])
                 hit = Hit(hsp_list)
@@ -532,7 +537,7 @@ class FastaM10Parser:
                     if not query_id.startswith(line[1:].split(" ")[0]):
                         raise ValueError(f"{query_id!r} vs {line!r}")
                     state = _STATE_QUERY_BLOCK
-                    parsed_hsp["query"]["seq"] = ""
+                    parsed_hsp["query"]["seq"] = []
                 elif state == _STATE_QUERY_BLOCK:
                     # make sure it's the correct hit
                     if not hit_id.startswith(line[1:].split(" ")[0]):
@@ -541,11 +546,11 @@ class FastaM10Parser:
                             f" found:\n{line!r}"
                         )
                     state = _STATE_HIT_BLOCK
-                    parsed_hsp["hit"]["seq"] = ""
+                    parsed_hsp["hit"]["seq"] = []
             # check for conservation block
             elif line.startswith("; al_cons"):
                 state = _STATE_CONS_BLOCK
-                hsp.fragment.aln_annotation["similarity"] = ""
+                hsp.fragment.aln_annotation["similarity"] = []
             elif line.startswith(";"):
                 # Fasta outputs do not make a clear distinction between Hit
                 # and HSPs, so we check the attribute names to determine
@@ -582,11 +587,11 @@ class FastaM10Parser:
                     )
                 # if we're in hit, parse into hsp.hit
                 if state == _STATE_HIT_BLOCK:
-                    parsed_hsp["hit"]["seq"] += line.strip()
+                    parsed_hsp["hit"]["seq"].append(line.strip())
                 elif state == _STATE_QUERY_BLOCK:
-                    parsed_hsp["query"]["seq"] += line.strip()
+                    parsed_hsp["query"]["seq"].append(line.strip())
                 elif state == _STATE_CONS_BLOCK:
-                    hsp.fragment.aln_annotation["similarity"] += line.strip("\r\n")
+                    hsp.fragment.aln_annotation["similarity"].append(line.strip("\r\n"))
                 # we should not get here!
                 else:
                     raise ValueError("Unexpected line: %r" % line)
