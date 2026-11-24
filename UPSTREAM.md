@@ -200,7 +200,7 @@ file-driven.
 - `AlignIO`'s FASTA reader raises `IndexError` on a bare `>>` line.
 - `qblast(format_type="HTML")` can never succeed, because the polling loop's `<!DOCTYPE html` branch matches the result page.
 - `Bio.Blast`'s XML2 parser fails with unhelpful errors on a root with no namespace or no `schemaLocation`.
-- `SearchIO`'s BLAST XML `get_raw` loops forever if the file was truncated after its `index_db` was built.
+- `SearchIO`'s BLAST XML `get_raw` loops forever if the file was truncated after its `index_db` was built. **Fixed here in [#347](https://github.com/BioAGI-org/biop-ai/pull/347).**
 - `SearchIO.index_db` does not wrap a lone `pathlib.Path` in a list, as it does a `str`.
 - `Bio/PDB/binary_cif.py`'s string decoder ignores the column mask: `IndexError`, or wrong values, on current RCSB files.
 - `Bio/PDB/binary_cif.py` and `FragmentMapper` do not accept `os.PathLike`.
@@ -264,10 +264,10 @@ file-driven.
 ### Found while fixing known upstream defects, 9 to 11 November 2026
 
 These were found by the pull requests in
-[Known upstream, fixed here](#known-upstream-fixed-here). Each is still on
-upstream `master` `1ef21971a` (read, not run there, unless the line says
-otherwise) and **is not fixed here either**, so each needs a fix, or at least
-a reproduction, before it is worth filing. The tracker was searched on
+[Known upstream, fixed here](#known-upstream-fixed-here). Unless the line
+says otherwise, each is still on upstream `master` `1ef21971a` (read, not run
+there) and **is not fixed here either**, so each needs a fix, or at least a
+reproduction, before it is worth filing. The tracker was searched on
 2026-11-10 (2026-11-11 for the last two) with the terms given, and had nothing
 on any of them.
 
@@ -290,7 +290,11 @@ on any of them.
   returning `""`
   ([`Bio/Emboss/Primer3.py:98-101`](https://github.com/biopython/biopython/blob/1ef21971aa828fd357897567044357e9f985abc8/Bio/Emboss/Primer3.py#L98)).
   Seen on 1.88 during [#319](https://github.com/BioAGI-org/biop-ai/pull/319). Searched "Primer3", "Primer3 parse empty",
-  "Primer3 infinite loop".
+  "Primer3 infinite loop". **Fixed here in
+  [#348](https://github.com/BioAGI-org/biop-ai/pull/348)**, which stops the
+  loop at end of file, so `parse()` yields no records and `read()` raises
+  "No records found in handle". Still on upstream `master` `86e9ea56d`
+  (read, not run, 2026-11-24).
 - **`Bio.UniGene` sets `homol = True` for `HOMOL NO`.** Both branches assign
   `True`
   ([`Bio/UniGene/__init__.py:299-302`](https://github.com/biopython/biopython/blob/1ef21971aa828fd357897567044357e9f985abc8/Bio/UniGene/__init__.py#L299)),
@@ -515,7 +519,7 @@ they are not fixed here either.
 | [#1624](https://github.com/biopython/biopython/issues/1624); PR [#1625](https://github.com/biopython/biopython/pull/1625) (closed) | The FASTA, FASTQ and QUAL writers raise `IndexError` on a whitespace-only description | [#316](https://github.com/BioAGI-org/biop-ai/pull/316) | Written here | — |
 | [#2853](https://github.com/biopython/biopython/issues/2853) | `Bio.UniGene` fails on the blank lines between fields in NCBI's Xenopus files | [#317](https://github.com/BioAGI-org/biop-ai/pull/317) | Written here | `read()` still rejects a blank line after the final `//`; `HOMOL NO` sets `True`, see Needs work |
 | [#4144](https://github.com/biopython/biopython/issues/4144); PRs [#4138](https://github.com/biopython/biopython/pull/4138) (merged), [#3931](https://github.com/biopython/biopython/pull/3931) (merged) | A v3 CEL file whose DatHeader scanner ID has no scanner type cannot be read; fixed upstream by #4138, without the test asked for on the issue | [#318](https://github.com/BioAGI-org/biop-ai/pull/318) | Written here: the test. The PR's main fix, a subfield-count check that is built and never raised, has no report and is queued as row 47 | — |
-| [#4926](https://github.com/biopython/biopython/issues/4926); PR [#3031](https://github.com/biopython/biopython/pull/3031) (merged, other parsers) | Ten more parsers fail on a `tempfile.NamedTemporaryFile` handle, which has no `__next__` | [#319](https://github.com/BioAGI-org/biop-ai/pull/319) | Written here | `Primer3.parse` loops forever on empty input; see Needs work |
+| [#4926](https://github.com/biopython/biopython/issues/4926); PR [#3031](https://github.com/biopython/biopython/pull/3031) (merged, other parsers) | Ten more parsers fail on a `tempfile.NamedTemporaryFile` handle, which has no `__next__` | [#319](https://github.com/BioAGI-org/biop-ai/pull/319) | Written here | `Primer3.parse` looped forever on empty input, **fixed here in [#348](https://github.com/BioAGI-org/biop-ai/pull/348)**; see Needs work |
 | [#969](https://github.com/biopython/biopython/issues/969); PR [#970](https://github.com/biopython/biopython/pull/970) (closed) | `Polypeptide.get_ca_list`, `get_tau_list` and `get_theta_list` raise `KeyError` for a residue with no CA | [#320](https://github.com/BioAGI-org/biop-ai/pull/320) | Written here; #970 has no licence answer | — |
 | [#4652](https://github.com/biopython/biopython/issues/4652); PR [#5380](https://github.com/biopython/biopython/pull/5380) (open) | The Tutorial has no example of finding residues near a residue with `NeighborSearch` | [#321](https://github.com/BioAGI-org/biop-ai/pull/321) | Adopted from #5380 | — |
 | [#2828](https://github.com/biopython/biopython/issues/2828); PR [#5386](https://github.com/biopython/biopython/pull/5386) (open) | The ruff settings live only in the pre-commit hook, so a bare `ruff check` disagrees with CI | [#322](https://github.com/BioAGI-org/biop-ai/pull/322) | Three of #5386's four commits adopted | — |

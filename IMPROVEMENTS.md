@@ -2698,7 +2698,7 @@ on 2026-10-13 as a segfault or an abort; the other two were read.
   parsed earlier in the process. (PR #157)
 - `Bio/SearchIO/BlastIO/blast_xml.py:678` (`BlastXmlIndexer.get_raw`):
   loops forever if the file was truncated after its `index_db` was built.
-  Upstream too. (PR #156)
+  Upstream too. (PR #156) *Fixed in PR #347.*
 - `Bio/SearchIO/InfernalIO/infernal_text.py:489`: `assert gap_len > 0`
   probably rejects valid `*[ 0]*` output. Unconfirmed: it needs a real
   Infernal file (see §0.8). (PR #180)
