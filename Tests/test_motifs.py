@@ -6072,6 +6072,24 @@ class TestScoreDistribution(unittest.TestCase):
                 with self.assertWarnsRegex(BiopythonWarning, "background"):
                     pssm.distribution(background)
 
+    def test_infinite_score_raises(self):
+        """An infinite log-odds score raises a ValueError naming the cause.
+
+        This failed with "cannot convert float NaN to integer", as the bins
+        span pssm.max - pssm.min, which is infinite (#421).
+        """
+        motif = motifs.create([Seq("ACGT"), Seq("ACGA")])
+        # A zero count without pseudocounts gives -inf.
+        self.assertEqual(motif.pssm.min, -math.inf)
+        with self.assertRaisesRegex(ValueError, "pseudocounts"):
+            motif.pssm.distribution()
+        # A zero background frequency gives +inf.
+        motif.pseudocounts = 0.5
+        motif.background = {"A": 0.5, "C": 0.5, "G": 0.0, "T": 0.0}
+        self.assertEqual(motif.pssm.max, math.inf)
+        with self.assertRaisesRegex(ValueError, "background frequency is zero"):
+            motif.pssm.distribution()
+
 
 # Run only while the GIL is off. A free-threaded build turns it back on when
 # an undeclared extension is imported, unless PYTHON_GIL=0 is set.
