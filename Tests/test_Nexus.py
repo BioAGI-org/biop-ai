@@ -2519,6 +2519,31 @@ print(json.dumps([[data.taxon, data.branchlength, data.comment] for data in chil
             [[f"t{i}", float(i), f"[&r={{{i},{i}}}]"] for i in range(n)],
         )
 
+    def test_deep_tree(self):
+        """A wide clade nested 900 deep parses in linear time.
+
+        Tree._parse scanned the text of each clade again at every level of
+        nesting above it, so the time grew with the tree length times the
+        depth: this 1.5 MB tree took about 100 seconds to parse.
+        """
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Trees
+n, depth = map(int, sys.argv[1:])
+star = "(" + ",".join(f"t{i}" for i in range(n)) + ")"
+tree = Trees.Tree("(" * depth + star + ",x)" * depth + ";")
+node, siblings = tree.node(tree.root), []
+for level in range(depth):
+    inner, outer = (tree.node(i) for i in node.succ)
+    siblings.append(outer.data.taxon)
+    node = inner
+print(json.dumps([siblings, [tree.node(i).data.taxon for i in node.succ]]))
+"""
+        siblings, leaves = parse_in_child(self, code, 200_000, 900)
+        self.assertEqual(siblings, ["x"] * 900)
+        self.assertEqual(leaves, [f"t{i}" for i in range(200_000)])
+
 
 @unittest.skipIf(cnexus is None, "C extension Bio.Nexus.cnexus not available")
 @unittest.skipUnless(

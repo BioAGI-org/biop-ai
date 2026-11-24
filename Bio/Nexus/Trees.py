@@ -86,14 +86,48 @@ class Tree(Nodes.Chain):
             self._add_subtree(parent_id=root.id, tree=subtree_info)
 
     def _parse(self, tree):
-        """Parse (a,b,c...)[[[xx]:]yy] into subcomponents and travels down recursively (PRIVATE)."""
-        # Remove any leading/trailing white space - want any string starting
-        # with " (..." should be recognised as a leaf, "(..."
-        tree = tree.strip()
+        """Parse a newick tree into nested lists of subclades and values (PRIVATE).
 
-        if tree.count("(") != tree.count(")"):
+        One pass over the tree finds the ")" that closes each "(", skipping
+        [&...] comments, so that _parse_subtree can step over each child
+        clade rather than scan it again at every level of nesting above it.
+        """
+        closing = {}
+        opened = []
+        incomment = False
+        for match in _re_block_delimiters.finditer(tree):
+            blk = match.group()
+            if incomment:
+                incomment = blk != NODECOMMENT_END
+            elif blk == NODECOMMENT_START:
+                incomment = True
+            elif blk == "(":
+                opened.append(match.start())
+            elif blk == ")":
+                if not opened:
+                    raise TreeError("Parentheses do not match in (sub)tree: " + tree)
+                closing[opened.pop()] = match.start()
+        if incomment:
+            raise TreeError(
+                "Error in tree description: Found %s without matching %s"
+                % (NODECOMMENT_START, NODECOMMENT_END)
+            )
+        if opened:
             raise TreeError("Parentheses do not match in (sub)tree: " + tree)
-        if tree.count("(") == 0:  # a leaf
+        return self._parse_subtree(tree, 0, len(tree), closing)
+
+    def _parse_subtree(self, tree, start, end, closing):
+        """Parse tree[start:end], (a,b,c...)[[[xx]:]yy] or a leaf, recursively (PRIVATE)."""
+        # Skip leading white space - want any string starting
+        # with " (..." should be recognised as a subtree, "(..."
+        while start < end and tree[start].isspace():
+            start += 1
+
+        if not tree.startswith("(", start, end):
+            tree = tree[start:end].strip()
+            if "(" in tree or ")" in tree:
+                raise TreeError("Parentheses do not match in (sub)tree: " + tree)
+            # a leaf
             # check if there's a colon, or a special comment, or both  after the taxon name
             nodecomment = tree.find(NODECOMMENT_START)
             colon = tree.find(":")
@@ -118,33 +152,34 @@ class Tree(Nodes.Chain):
 
             return [branch, comment]
         else:
-            closing = tree.rfind(")")
-            val = self._get_values(tree[closing + 1 :])
+            close = closing[start]
+            text = tree[close + 1 : end].strip()
+            if "(" in text or ")" in text:
+                raise TreeError(
+                    "Parentheses do not match in (sub)tree: " + tree[start:end]
+                )
+            val = self._get_values(text)
             if not val:
                 val = [None]
 
-            subtrees = []
-            plevel = 0
-            prev = 1
-            incomment = False
-
-            for match in _re_block_delimiters.finditer(tree, 1, closing):
+            # Split at the commas of this clade, jumping over each child
+            # clade and [&...] comment
+            subclades = []
+            prev = pos = start + 1
+            while match := _re_block_delimiters.search(tree, pos, close):
                 blk = match.group()
-                if not incomment:
-                    if blk == "(":
-                        plevel += 1
-                    elif blk == ")":
-                        plevel -= 1
-                    elif blk == NODECOMMENT_START:
-                        incomment = True
-                    elif blk == "," and plevel == 0:
-                        subtrees.append(tree[prev : match.start()])
-                        prev = match.end()
-                elif blk == NODECOMMENT_END:
-                    incomment = False
-            subtrees.append(tree[prev:closing])
-
-            subclades = [self._parse(subtree) for subtree in subtrees]
+                if blk == "(":
+                    pos = closing[match.start()] + 1
+                elif blk == NODECOMMENT_START:
+                    pos = tree.index(NODECOMMENT_END, match.end()) + 1
+                elif blk == ",":
+                    subclades.append(
+                        self._parse_subtree(tree, prev, match.start(), closing)
+                    )
+                    prev = pos = match.end()
+                else:  # a "]" outside a comment
+                    pos = match.end()
+            subclades.append(self._parse_subtree(tree, prev, close, closing))
 
             return [subclades, val]
 
