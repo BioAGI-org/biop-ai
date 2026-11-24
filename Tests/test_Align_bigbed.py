@@ -8129,6 +8129,34 @@ class TestAlign_malformed_chromosome_index(unittest.TestCase):
             f"they are larger than the file ({len(data)} bytes)",
         )
 
+    def test_past_end_of_file(self):
+        # The root's one child is moved to the end of the file, or to the
+        # largest offset the index can hold, or the leaf, the last node in
+        # the file, claims one entry more than it holds. Reading a node or
+        # its entries past the end used to raise struct.error, and seeking
+        # to the largest offset OverflowError.
+        stream, offsets = self.make_stream([[1], []])
+        data = bytearray(stream.getvalue())
+        (keySize,) = struct.unpack_from("<I", data, offsets[0] - 32 + 8)
+        size = len(data)
+        cases = []
+        for offset in (size, 2**64 - 1):
+            moved = bytearray(data)
+            struct.pack_into("<Q", moved, offsets[0] + 4 + keySize, offset)
+            cases.append((moved, offset))
+        grown = bytearray(data)
+        struct.pack_into("<H", grown, offsets[1] + 2, 1)
+        cases.append((grown, offsets[1]))
+        for bad, offset in cases:
+            with self.subTest(offset=offset):
+                with self.assertRaises(ValueError) as cm:
+                    Align.parse(SeekGuard(bytes(bad)), "bigbed")
+                self.assertEqual(
+                    str(cm.exception),
+                    f"The node at offset {offset} in the chromosome index "
+                    f"extends past the end of the file ({size} bytes)",
+                )
+
 
 class TestAlign_malformed_data_index(unittest.TestCase):
     """R tree indices of the data whose nodes do not form a tree."""
@@ -8259,6 +8287,33 @@ class TestAlign_malformed_data_index(unittest.TestCase):
             "R tree index is not a tree: its nodes overlap, as together "
             f"they are larger than the file ({len(data)} bytes)",
         )
+
+    def test_past_end_of_file(self):
+        # The root's one child is moved to the end of the file, or to the
+        # largest offset the index can hold, or the leaf, the last node in
+        # the file, claims one entry more than it holds. Reading a node or
+        # its entries past the end used to raise struct.error, and seeking
+        # to the largest offset OverflowError.
+        stream, offsets = self.make_stream([[1], None])
+        data = bytearray(stream.getvalue())
+        size = len(data)
+        cases = []
+        for offset in (size, 2**64 - 1):
+            moved = bytearray(data)
+            struct.pack_into("<Q", moved, offsets[0] + 4 + 16, offset)
+            cases.append((moved, offset))
+        grown = bytearray(data)
+        struct.pack_into("<H", grown, offsets[1] + 2, 2)
+        cases.append((grown, offsets[1]))
+        for bad, offset in cases:
+            with self.subTest(offset=offset):
+                with self.assertRaises(ValueError) as cm:
+                    Align.parse(SeekGuard(bytes(bad)), "bigbed")
+                self.assertEqual(
+                    str(cm.exception),
+                    f"The node at offset {offset} in the R tree index "
+                    f"extends past the end of the file ({size} bytes)",
+                )
 
     def test_wide_node(self):
         # A valid tree whose root has 65535 leaves, the most a node can
