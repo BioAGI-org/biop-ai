@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 
@@ -30,6 +31,7 @@ except ImportError:
 import support
 
 import Bio
+from Bio import BiopythonWarning
 from Bio import motifs
 from Bio.motifs.matrix import PositionSpecificScoringMatrix
 from Bio.motifs.thresholds import ScoreDistribution
@@ -5753,6 +5755,14 @@ class TestScoreDistribution(unittest.TestCase):
     # Uniform, so that normalising it in pssm.distribution changes nothing.
     background = dict.fromkeys("ACGT", 0.25)
 
+    def setUp(self):
+        # Most tests here compare bins for a background other than the
+        # PSSM's own, which warns.
+        catcher = warnings.catch_warnings()
+        catcher.__enter__()
+        self.addCleanup(catcher.__exit__, None, None, None)
+        warnings.filterwarnings("ignore", "The background is not", BiopythonWarning)
+
     def make_pssm(self):
         with open(support.DATA / "motifs" / "REB1.pfm") as stream:
             motif = motifs.read(stream, "pfm")
@@ -6040,6 +6050,27 @@ class TestScoreDistribution(unittest.TestCase):
             with self.subTest(rate_proportion=rate_proportion):
                 with self.assertRaises(ValueError):
                     distribution.threshold_balanced(rate_proportion)
+
+    def test_mismatched_background_warns(self):
+        """A background other than the PSSM's own gives a warning.
+
+        The motif density is built as 2**score * background, which adds up
+        to 1 only with the background the PSSM was built with; with the
+        default uniform one it added up to 1.068 here, and the FNR
+        thresholds were silently wrong.
+        """
+        motif = motifs.create([Seq("TACAA"), Seq("TACGC"), Seq("AATGC")])
+        motif.pseudocounts = 0.5
+        motif.background = {"A": 0.3, "C": 0.2, "G": 0.2, "T": 0.3}
+        pssm = motif.pssm
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            distribution = pssm.distribution(motif.background)
+        self.assertAlmostEqual(sum(distribution.mo_density), 1)
+        for background in (None, {"A": 0.1, "C": 0.4, "G": 0.4, "T": 0.1}):
+            with self.subTest(background=background):
+                with self.assertWarnsRegex(BiopythonWarning, "background"):
+                    pssm.distribution(background)
 
 
 # Run only while the GIL is off. A free-threaded build turns it back on when
