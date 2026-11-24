@@ -33,6 +33,7 @@ from test_SeqIO import SeqIOTestBaseClass
 
 import Bio
 from Bio import BiopythonParserWarning
+from Bio import bgzf
 from Bio import SeqIO
 from Bio.SeqIO._index import _FormatToRandomAccess
 from Bio.SeqIO.Interfaces import SequenceIterator
@@ -1108,6 +1109,48 @@ class MalformedFileTests(unittest.TestCase):
         index = SeqIO.index(path, "uniprot-xml")
         self.addCleanup(index.close)
         self.assertEqual(list(index), parsed_ids)
+
+    # BGZF ---------------------------------------------------------------
+
+    def test_ig_and_uniprot_multi_block_bgzf(self):
+        """Record offsets in a BGZF file must be virtual offsets from tell().
+
+        These two indexers used to add up line lengths and assert the sum
+        matched handle.tell(), which fails for BGZF once a record crosses a
+        block boundary (and for IntelliGenetics at the EOF block, always).
+        """
+        ig = b";; header\n" + b"".join(
+            b";comment %d\nSEQ%d\nACGTACGTACGTACGT1\n" % (i, i) for i in range(20)
+        )
+        entry = (
+            b"<entry dataset='Swiss-Prot'>\n  <accession>P%05d</accession>\n"
+            b"  <sequence length='4' mass='400' version='1'>MKVL</sequence>\n"
+            b"</entry>\n"
+        )
+        xml = (
+            self.UNIPROT_HEADER.encode()
+            + b"".join(entry % i for i in range(20))
+            + b"</uniprot>\n"
+        )
+        for fmt, data in [("ig", ig), ("uniprot-xml", xml)]:
+            with self.subTest(fmt=fmt):
+                plain = os.path.join(self.temp_dir, fmt)
+                with open(plain, "wb") as handle:
+                    handle.write(data)
+                path = plain + ".bgz"
+                with bgzf.BgzfWriter(path, "wb") as handle:
+                    for i in range(0, len(data), 200):
+                        handle.write(data[i : i + 200])
+                        handle.flush()  # one BGZF block per 200 bytes
+                expected = SeqIO.index(plain, fmt)
+                self.addCleanup(expected.close)
+                index = SeqIO.index(path, fmt)
+                self.addCleanup(index.close)
+                self.assertEqual(list(index), list(expected))
+                self.assertEqual(len(index), 20)
+                for key in index:
+                    self.assertEqual(index.get_raw(key), expected.get_raw(key))
+                    self.assertEqual(index[key].seq, expected[key].seq)
 
     # PIR ----------------------------------------------------------------
 
