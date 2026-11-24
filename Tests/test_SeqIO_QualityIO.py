@@ -406,6 +406,19 @@ class TestFastqErrors(unittest.TestCase):
             self.check_fails(path, good_count)
             self.check_general_passes(path, full_count)
 
+    def test_reject_non_ascii_sequence(self):
+        # str.isprintable() accepts "é", but Seq stores it as two UTF-8 bytes,
+        # which would give a 3-letter sequence with only 2 quality scores.
+        for fmt in ("fastq", "fastq-illumina", "fastq-solexa"):
+            with self.subTest(fmt=fmt):
+                with self.assertRaisesRegex(ValueError, "Non-ASCII"):
+                    SeqIO.read(StringIO("@r1\nAé\n+\nII\n"), fmt)
+        # Non-printable non-ASCII characters get the same message
+        for letter in ("\x80", "\ufeff"):
+            with self.subTest(letter=letter):
+                with self.assertRaisesRegex(ValueError, "Non-ASCII"):
+                    SeqIO.read(StringIO(f"@r1\nA{letter}\n+\nII\n"), "fastq")
+
 
 class TestReferenceSffConversions(unittest.TestCase):
     def check(self, sff_name, sff_format, out_name, fmt):
