@@ -655,6 +655,18 @@ class AffyTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "should be None, 3 or 4"):
                 CelFile.read(f, version=5)
 
+    def testAffyNmodifiedAlwaysSet(self):
+        # nmodified was only set by a v3 [MODIFIED] section (issue #522).
+        self.assertIsNone(CelFile.Record().nmodified)
+        with open(self.affy4, "rb") as f:
+            self.assertIsNone(CelFile.read(f).nmodified)
+        with open(self.affy3) as f:
+            text = f.read()
+        text = text[: text.index("[MODIFIED]")]
+        record = CelFile.read(io.StringIO(text))
+        self.assertEqual(record.noutliers, 3)
+        self.assertIsNone(record.nmodified)
+
     # Writes a small example Affymetrix V4 CEL File
     def writeExampleV4(self, f, bad=False):
         preHeaders = {
