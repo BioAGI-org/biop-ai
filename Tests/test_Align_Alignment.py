@@ -104,10 +104,15 @@ class TestPrintedAlignmentParser(unittest.TestCase):
         import tracemalloc
 
         pointer = struct.calcsize("P")
-        n = 1000
+        # Many lines, so that a few kB allocated meanwhile by something else
+        # (tracemalloc counts every thread, and coverage records each line
+        # the first time it runs) cannot push the cost per line over the
+        # limit; the old three pointers per line still fail it clearly.
+        n = 10000
         if tracemalloc.is_tracing():
             self.skipTest("tracemalloc was already tracing")
         parser = _aligncore.PrintedAlignmentParser()
+        parser.feed(b"A")
         tracemalloc.start()
         try:
             before = tracemalloc.get_traced_memory()[0]
