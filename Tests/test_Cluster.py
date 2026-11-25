@@ -1190,6 +1190,22 @@ class TestCluster(unittest.TestCase):
         )
         self.assertAlmostEqual(distance, 0.360, places=3)
 
+    def test_clusterdistance_negative_weight(self):
+        if TestCluster.module == "Bio.Cluster":
+            from Bio.Cluster import clusterdistance
+        elif TestCluster.module == "Pycluster":
+            from Pycluster import clusterdistance
+
+        # With a negative weight the Euclidean distance here is -16.  The
+        # wrapper read any value below -2.5 as the -3.0 an interrupted call
+        # returns, and returned NULL with no exception set (SystemError).
+        # A distance below -1.5 is still read as -2.0, out of memory, as it
+        # was before the Ctrl-C check.
+        data = np.array([[4.0, 0.0], [0.0, 0.0]])
+        weight = np.array([-1.0, 2.0])
+        with self.assertRaises(MemoryError):
+            clusterdistance(data, weight=weight, index1=[0], index2=[1])
+
     def test_treecluster_arguments(self):
         # Test if incorrect arguments are caught by the C code
         if TestCluster.module == "Bio.Cluster":
@@ -4196,6 +4212,49 @@ else:
 """
 
 
+# Child process for TestClusterThreads.test_ctrl_c_stops_clusterdistance_and_pca.
+# Average linkage computes all 40,000 Kendall distances between the members
+# of the two clusters, which takes about ten minutes, and an SVD of a
+# 3000 x 3000 matrix takes minutes; _thread.interrupt_main simulates Ctrl-C
+# half a second into each call.
+CTRL_C_CLUSTERDISTANCE_PCA = """\
+import _thread
+import signal
+import threading
+
+import numpy as np
+
+from Bio.Cluster import clusterdistance, pca
+
+# interrupt_main does nothing if SIGINT is ignored, as it is in a shell's
+# background job, so install Python's own handler first.
+signal.signal(signal.SIGINT, signal.default_int_handler)
+
+rng = np.random.default_rng(0)
+calls = [
+    (
+        "clusterdistance",
+        lambda data: clusterdistance(
+            data, index1=range(200), index2=range(200), method="v", dist="k"
+        ),
+        rng.random((200, 2000)),
+    ),
+    ("pca", pca, rng.random((3000, 3000))),
+]
+for name, call, data in calls:
+    threading.Timer(0.5, _thread.interrupt_main).start()
+    try:
+        call(data)
+    except KeyboardInterrupt:
+        pass
+    else:
+        print(name, "finished")
+        break
+else:
+    print("OK")
+"""
+
+
 class TestClusterThreads(unittest.TestCase):
     """Tests of Bio.Cluster called from several threads at once."""
 
@@ -4385,6 +4444,15 @@ class TestClusterThreads(unittest.TestCase):
         signal after 45 of the 66 distances, minutes into the call.
         """
         self.run_ctrl_c(CTRL_C_KENDALL, "distancematrix")
+
+    @skip_ctrl_c_on_pypy
+    def test_ctrl_c_stops_clusterdistance_and_pca(self):
+        """Check Ctrl-C stops long clusterdistance and pca calls.
+
+        Before these kernels reported their work to the signal check,
+        KeyboardInterrupt waited for the whole calculation to finish.
+        """
+        self.run_ctrl_c(CTRL_C_CLUSTERDISTANCE_PCA, "clusterdistance or pca")
 
     def test_changing_clusterid_while_clustering(self):
         """Check another thread changing clusterid cannot crash kcluster.

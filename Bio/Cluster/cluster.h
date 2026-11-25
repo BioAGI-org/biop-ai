@@ -39,12 +39,13 @@
 
 #define CLUSTERVERSION "1.59"
 
-/* An optional way to stop the long-running routines (distancematrix,
- * kcluster, kmedoids, treecluster and somcluster) before they finish.
- * They call check(context, work) every so often, where work is roughly the
- * number of operations (such as terms of a distance) done since the
- * previous call. If check returns nonzero, the routine frees its memory
- * and returns as it does when it runs out of memory. Pass NULL to run
+/* An optional way to stop the long-running routines (clusterdistance,
+ * distancematrix, kcluster, kmedoids, treecluster, somcluster and pca)
+ * before they finish. They call check(context, work) every so often, where
+ * work is roughly the number of operations (such as terms of a distance)
+ * done since the previous call. If check returns nonzero, the routine frees
+ * its memory and returns as it does when it runs out of memory, except that
+ * clusterdistance then returns -3.0 and pca returns -2. Pass NULL to run
  * without checks. */
 typedef struct {
     int (*check)(void* context, size_t work);
@@ -54,7 +55,7 @@ typedef struct {
 /* Chapter 2 */
 double clusterdistance(int nrows, int ncolumns, double** data, int** mask,
   double weight[], int n1, int n2, int index1[], int index2[], char dist,
-  char method, int transpose);
+  char method, int transpose, ClusterInterrupt* interrupt);
 int distancematrix(int ngenes, int ndata, double** data, int** mask,
   double* weight, char dist, int transpose, double** distances,
   ClusterInterrupt* interrupt);
@@ -98,7 +99,8 @@ int somcluster(int nrows, int ncolumns, double** data, int** mask,
   int clusterid[][2], uint64_t rng_seed, ClusterInterrupt* interrupt);
 
 /* Chapter 6 */
-int pca(int m, int n, double** u, double** v, double* w);
+int pca(int m, int n, double** u, double** v, double* w,
+  ClusterInterrupt* interrupt);
 
 /* Utility routines, currently undocumented */
 void sort(int n, const double data[], int index[]);

@@ -2342,6 +2342,7 @@ py_clusterdistance(PyObject* self, PyObject* args, PyObject* keywords)
     int* indices1 = NULL;
     int* indices2 = NULL;
     PyObject* result = NULL;
+    SignalCheck signal_check;
 
     static char* kwlist[] = {"data",
                              "mask",
@@ -2392,6 +2393,7 @@ py_clusterdistance(PyObject* self, PyObject* args, PyObject* keywords)
     indices2 = copy_indices(&index2);
     if (!indices2) goto exit;
 
+    signal_check_init(&signal_check);
     Py_BEGIN_ALLOW_THREADS
     distance = clusterdistance(nrows,
                                ncols,
@@ -2404,10 +2406,15 @@ py_clusterdistance(PyObject* self, PyObject* args, PyObject* keywords)
                                indices2,
                                dist,
                                method,
-                               transpose);
+                               transpose,
+                               &signal_check.interrupt);
     Py_END_ALLOW_THREADS
 
-    if (distance < -1.5) /* Actually -2.0; avoiding roundoff errors */
+    /* A negative weight can give a negative distance, so -3.0 means
+     * interrupted only if the signal check left an exception set. */
+    if (distance < -2.5 && PyErr_Occurred()) /* Actually -3.0: interrupted */
+        ;
+    else if (distance < -1.5) /* Actually -2.0; avoiding roundoff errors */
         PyErr_NoMemory();
     else if (distance < -0.5) /* Actually -1.0; avoiding roundoff errors */
         PyErr_SetString(PyExc_IndexError, "index out of range");
@@ -2754,8 +2761,9 @@ py_pca(PyObject* self, PyObject* args)
     Py_buffer mean = {0};
     int nrows, ncols;
     int nmin;
-    int error = -2;
+    int error = -2;  /* an exception is set */
     double* p;
+    SignalCheck signal_check;
     double** values;
     int i, j;
 
@@ -2828,8 +2836,9 @@ py_pca(PyObject* self, PyObject* args)
         for (j = 0; j < ncols; j++)
             u[i][j] = values[i][j] - p[j];
     /* -- Perform the principal component analysis ----------------------- */
+    signal_check_init(&signal_check);
     Py_BEGIN_ALLOW_THREADS
-    error = pca(nrows, ncols, u, v, eigenvalues.buf);
+    error = pca(nrows, ncols, u, v, eigenvalues.buf, &signal_check.interrupt);
     Py_END_ALLOW_THREADS
     /* ------------------------------------------------------------------- */
 exit:

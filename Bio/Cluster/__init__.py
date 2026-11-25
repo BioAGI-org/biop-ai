@@ -9,9 +9,13 @@ designed with the application to gene expression data in mind. However,
 this module can also be used for cluster analysis of other types of data.
 
 On CPython, Ctrl-C stops a long kcluster, kmedoids, treecluster,
-somcluster or distancematrix call within about a second. On PyPy it
-does not: the KeyboardInterrupt arrives only when the call finishes,
-because PyPy's C API does not report pending signals to C code.
+somcluster, distancematrix or pca call, and a clusterdistance call with
+method "s", "x" or "v", within about a second. These calls check for
+Ctrl-C periodically as they work; clusterdistance checks between
+distance calculations, so one slow distance is not interrupted, and
+methods "a" and "m" are not checked. On PyPy Ctrl-C does not stop a
+call: the KeyboardInterrupt arrives only when the call finishes, because
+PyPy's C API does not report pending signals to C code.
 
 Bio.Cluster and the underlying C Clustering Library is described in
 M. de Hoon et al. (2004) https://doi.org/10.1093/bioinformatics/bth078

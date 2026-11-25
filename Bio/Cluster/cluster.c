@@ -545,7 +545,18 @@ the shortest distance.
 /* ********************************************************************* */
 
 static int
-svd(int m, int n, double** u, double w[], double** vt)
+interrupted(ClusterInterrupt* interrupt, size_t work)
+/* Report work done to the caller's interrupt check, if any. Return nonzero
+ * if the calling routine should stop. */
+{
+    return interrupt && interrupt->check(interrupt->context, work);
+}
+
+/* ********************************************************************* */
+
+static int
+svd(int m, int n, double** u, double w[], double** vt,
+    ClusterInterrupt* interrupt)
 /*
  * This subroutine is a translation of the Algol procedure svd, described in
  * G.H. Golub and C. Reinsch:
@@ -576,7 +587,9 @@ svd(int m, int n, double** u, double w[], double** vt)
  *  k:  if the k-th singular value has not been determined after 30 iterations,
  *  min(m, n): if u contains an infinity or a NaN, or the decomposition
  *      overflows,
- * -1:  if memory allocation fails.
+ * -1:  if memory allocation fails,
+ * -2:  if interrupt stops it. It is checked once per outer iteration of
+ *      each step, which does about m*n operations.
  *
  * w  contains the n (non-negative) singular values of a (the
  *    diagonal elements of s). they are unordered.
@@ -625,6 +638,7 @@ svd(int m, int n, double** u, double w[], double** vt)
     if (m >= n) {
         /* Householder reduction to bidiagonal form */
         for (i = 0; i < n; i++) {
+            if (interrupted(interrupt, (size_t)m*n)) goto stop;
             l = i + 1;
             rv1[i] = scale * g;
             g = 0.0;
@@ -691,6 +705,7 @@ svd(int m, int n, double** u, double w[], double** vt)
         }
         /* accumulation of right-hand transformations */
         for (i = n-1; i >= 0; i--) {
+            if (interrupted(interrupt, (size_t)m*n)) goto stop;
             if (i < n-1) {
                 if (g != 0.0) {
                     for (j = l; j < n; j++) vt[i][j] = (u[i][j] / u[i][l]) / g;
@@ -712,6 +727,7 @@ svd(int m, int n, double** u, double w[], double** vt)
         }
         /* accumulation of left-hand transformations */
         for (i = n-1; i >= 0; i--) {
+            if (interrupted(interrupt, (size_t)m*n)) goto stop;
             l = i + 1;
             g = w[i];
             if (i != n-1)
@@ -734,6 +750,7 @@ svd(int m, int n, double** u, double w[], double** vt)
         }
         /* diagonalization of the bidiagonal form */
         for (k = n-1; k >= 0; k--) {
+            if (interrupted(interrupt, (size_t)m*n)) goto stop;
             k1 = k-1;
             its = 0;
             while (1) {
@@ -843,6 +860,7 @@ svd(int m, int n, double** u, double w[], double** vt)
     else /* m < n */ {
         /* Householder reduction to bidiagonal form */
         for (i = 0; i < m; i++) {
+            if (interrupted(interrupt, (size_t)m*n)) goto stop;
             l = i + 1;
             rv1[i] = scale * g;
             g = 0.0;
@@ -903,6 +921,7 @@ svd(int m, int n, double** u, double w[], double** vt)
         }
         /* accumulation of right-hand transformations */
         for (i = m-1; i >= 0; i--) {
+            if (interrupted(interrupt, (size_t)m*n)) goto stop;
             if (i < m-1) {
                 if (g != 0.0) {
                     for (j = l; j < m; j++) vt[j][i] = (u[j][i] / u[l][i]) / g;
@@ -924,6 +943,7 @@ svd(int m, int n, double** u, double w[], double** vt)
         }
         /* accumulation of left-hand transformations */
         for (i = m-1; i >= 0; i--) {
+            if (interrupted(interrupt, (size_t)m*n)) goto stop;
             l = i + 1;
             g = w[i];
             if (i != m-1)
@@ -946,6 +966,7 @@ svd(int m, int n, double** u, double w[], double** vt)
         }
         /* diagonalization of the bidiagonal form */
         for (k = m-1; k >= 0; k--) {
+            if (interrupted(interrupt, (size_t)m*n)) goto stop;
             k1 = k-1;
             its = 0;
             while (1) {
@@ -1072,12 +1093,16 @@ svd(int m, int n, double** u, double w[], double** vt)
     }
     FREE(rv1);
     return ierr;
+stop:
+    FREE(rv1);
+    return -2;
 }
 
 /* ********************************************************************* */
 
 int
-pca(int nrows, int ncolumns, double** u, double** v, double* w)
+pca(int nrows, int ncolumns, double** u, double** v, double* w,
+    ClusterInterrupt* interrupt)
 /*
 Purpose
 =======
@@ -1106,6 +1131,9 @@ Not used on input.
 w                    (input) double[n], where n = min(nrows, ncolumns)
 Not used on input.
 
+interrupt            (input) ClusterInterrupt*
+Checked during the singular value decomposition. NULL means no checks.
+
 
 Return value
 ============
@@ -1132,10 +1160,10 @@ The eigenvalues of the covariance matrix are returned in w.
 The arrays u, v, and w are sorted according to eigenvalue, with the largest
 eigenvalues appearing first.
 
-The function returns 0 if successful, -1 if memory allocation fails, and a
-positive integer if the singular value decomposition fails to converge,
-including when u contains an infinity or a NaN, or values so large that the
-decomposition overflows.
+The function returns 0 if successful, -1 if memory allocation fails, -2 if
+interrupt stops it, and a positive integer if the singular value
+decomposition fails to converge, including when u contains an infinity or a
+NaN, or values so large that the decomposition overflows.
 */
 {
     int i;
@@ -1149,7 +1177,7 @@ decomposition overflows.
         if (temp) FREE(temp);
         return -1;
     }
-    error = svd(nrows, ncolumns, u, w, v);
+    error = svd(nrows, ncolumns, u, w, v, interrupt);
     if (error == 0) {
         if (nrows >= ncolumns) {
             for (j = 0; j < ncolumns; j++) {
@@ -2737,14 +2765,6 @@ centroid.
 }
 
 /* ********************************************************************* */
-
-static int
-interrupted(ClusterInterrupt* interrupt, size_t work)
-/* Report work done to the caller's interrupt check, if any. Return nonzero
- * if the calling routine should stop. */
-{
-    return interrupt && interrupt->check(interrupt->context, work);
-}
 
 static size_t
 metric_work(char dist, int ndata)
@@ -4977,7 +4997,7 @@ If a memory error occurs, or interrupt stops it, somcluster returns 0.
 double
 clusterdistance(int nrows, int ncolumns, double** data, int** mask,
     double weight[], int n1, int n2, int index1[], int index2[],
-    char dist, char method, int transpose)
+    char dist, char method, int transpose, ClusterInterrupt* interrupt)
 
 /*
 Purpose
@@ -4989,8 +5009,8 @@ distance between clusters, given the genes/samples in each cluster, can be
 defined in several ways. Several distance measures can be used.
 
 The routine returns the distance in double precision. It returns -1.0 if a
-cluster is empty or an index is out of range, and -2.0 if memory allocation
-fails.
+cluster is empty or an index is out of range, -2.0 if memory allocation
+fails, and -3.0 if interrupt stops it.
 If the parameter transpose is set to a nonzero value, the clusters are
 interpreted as clusters of samples, otherwise as clusters of gene.
 
@@ -5059,6 +5079,10 @@ If transpose is equal to zero, the distances between the rows is
 calculated. Otherwise, the distances between the columns is calculated.
 The former is needed when genes are being clustered; the latter is used
 when samples are being clustered.
+
+interrupt  (input) ClusterInterrupt*
+Checked once per pairwise distance for methods 's', 'x' and 'v'; the other
+methods make a single pass over the data. NULL means no checks.
 
 ========================================================================
 */
@@ -5363,6 +5387,8 @@ when samples are being clustered.
                     double distance;
                     j1 = index1[i1];
                     j2 = index2[i2];
+                    if (interrupted(interrupt, metric_work(dist, n)))
+                        return -3.0;
                     distance = metric(n, data, data, mask, mask, weight,
                                       j1, j2, transpose);
                     if (distance < mindistance) mindistance = distance;
@@ -5378,6 +5404,8 @@ when samples are being clustered.
                     double distance;
                     j1 = index1[i1];
                     j2 = index2[i2];
+                    if (interrupted(interrupt, metric_work(dist, n)))
+                        return -3.0;
                     distance = metric(n, data, data, mask, mask, weight,
                                       j1, j2, transpose);
                     if (distance > maxdistance) maxdistance = distance;
@@ -5392,6 +5420,8 @@ when samples are being clustered.
                 for (i2 = 0; i2 < n2; i2++) {
                     j1 = index1[i1];
                     j2 = index2[i2];
+                    if (interrupted(interrupt, metric_work(dist, n)))
+                        return -3.0;
                     distance += metric(n, data, data, mask, mask, weight,
                                        j1, j2, transpose);
                 }
