@@ -5179,6 +5179,7 @@ record.save({self.jobname!r}, *{list(solutions)!r})
         with self.assertRaises(ValueError) as cm:
             record.save(self.jobname, geneclusters=[1, 0])
         self.assertEqual(str(cm.exception), "gorder should be one-dimensional")
+        record.gorder = None
         record.eorder = [[0.0], [1.0]]
         with self.assertRaises(ValueError) as cm:
             record.save(self.jobname, expclusters=[1, 0])
@@ -5189,6 +5190,31 @@ record.save({self.jobname!r}, *{list(solutions)!r})
             record.save(self.jobname, geneclusters=[0])
         self.assertEqual(str(cm.exception), "gorder should be one-dimensional")
         self.assertEqual(os.listdir(self.directory), [])
+
+    def test_bad_order_without_kmeans(self):
+        """Check save rejects a bad gorder or eorder for any kind of result.
+
+        Only k-means results were checked. With no clustering result, a short
+        gorder silently left genes out of the .cdt file; with trees, a bad
+        eorder raised only after the .gtr file was written.
+        """
+        genetree = self.record.treecluster()
+        exptree = self.record.treecluster(transpose=True)
+        for gorder, eorder, message in (
+            ([2, 0, 1], None, "gorder has incorrect size 3 (expected 5)"),
+            (list(range(9)), None, "gorder has incorrect size 9 (expected 5)"),
+            (3, None, "gorder should be one-dimensional"),
+            (None, [[0, 1, 2]], "eorder should be one-dimensional"),
+            (None, [0, 1, 2, 3], "eorder has incorrect size 4 (expected 3)"),
+        ):
+            self.record.gorder = gorder
+            self.record.eorder = eorder
+            for clusters in ((), (genetree, exptree)):
+                with self.subTest(gorder=gorder, eorder=eorder, trees=bool(clusters)):
+                    with self.assertRaises(ValueError) as cm:
+                        self.record.save(self.jobname, *clusters)
+                    self.assertEqual(str(cm.exception), message)
+                    self.assertEqual(os.listdir(self.directory), [])
 
     def test_read_eweight_eorder_between_other_columns(self):
         """Check EWEIGHT and EORDER are read from the sample columns only.

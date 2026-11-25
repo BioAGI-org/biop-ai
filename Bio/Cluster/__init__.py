@@ -1201,6 +1201,17 @@ class Record:
             eorder = np.arange(nexps)
         else:
             eorder = self.eorder
+        # Check both orders before writing any file, for every kind of result
+        for ordername, order, n in (
+            ("gorder", gorder, ngenes),
+            ("eorder", eorder, nexps),
+        ):
+            if np.ndim(order) != 1:
+                raise ValueError(f"{ordername} should be one-dimensional")
+            if np.size(order) != n:
+                raise ValueError(
+                    f"{ordername} has incorrect size {np.size(order)} (expected {n})"
+                )
         if (
             geneclusters is not None
             and expclusters is not None
@@ -1213,9 +1224,9 @@ class Record:
             )
         # Check both k-means solutions before writing any file
         if geneclusters is not None and not isinstance(geneclusters, Tree):
-            geneclusters = self._checkkmeans(geneclusters, gorder, False)
+            geneclusters = self._checkkmeans(geneclusters, False)
         if expclusters is not None and not isinstance(expclusters, Tree):
-            expclusters = self._checkkmeans(expclusters, eorder, True)
+            expclusters = self._checkkmeans(expclusters, True)
         gid = 0
         aid = 0
         filename = jobname
@@ -1291,17 +1302,14 @@ class Record:
     def _checkkmeans(
         self,
         clusterids: "Sequence[int | np.integer[Any]] | NDArray[Any]",
-        order: "ArrayLike",
         transpose: bool,
     ) -> "NDArray[Any]":
         """Check a k-means solution, returning an array of Python ints (PRIVATE)."""
         if transpose:
             name = "expclusters"
-            ordername = "eorder"
             n = np.shape(self.data)[1]
         else:
             name = "geneclusters"
-            ordername = "gorder"
             n = np.shape(self.data)[0]
         # A copy as objects, so that NumPy does not turn integers too large
         # for int64 into floats. The cluster numbers become Python integers,
@@ -1324,12 +1332,6 @@ class Record:
             values[i] = int(value)
         if any(value < 0 for value in values):
             raise ValueError(f"{name} contains negative values")
-        if np.ndim(order) != 1:
-            raise ValueError(f"{ordername} should be one-dimensional")
-        if np.size(order) != n:
-            raise ValueError(
-                f"{ordername} has incorrect size {np.size(order)} (expected {n})"
-            )
         return values
 
     def _savekmeans(
