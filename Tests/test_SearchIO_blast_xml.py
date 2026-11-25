@@ -4126,6 +4126,37 @@ print(len(next(parse(BytesIO(data.encode()), "blast-xml")).version))
             self.fail("Parsing a 300,000 digit version took over 60 seconds")
         self.assertEqual(result.stdout, "300000\n", result.stderr)
 
+    def test_hit_def_with_long_space_run(self):
+        """Check a long run of spaces in Hit_def is split correctly, and fast."""
+        # A run of spaces not followed by '>' took quadratic time in the
+        # regex that splits ID-description pairs (about 1 s for 40,000
+        # spaces), so split it in a child process.
+        code = """\
+from Bio.SearchIO.BlastIO.blast_xml import _extract_ids_and_descs
+ids, descs, _ = _extract_ids_and_descs("gi|1|ref|A|", "x" + " " * 500_000 + "y >B z")
+print(ids, [len(d) for d in descs])
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("Splitting a Hit_def with 500,000 spaces took over 60 seconds")
+        self.assertEqual(
+            result.stdout, "['gi|1|ref|A|', 'B'] [500002, 1]\n", result.stderr
+        )
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
