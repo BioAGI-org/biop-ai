@@ -87,10 +87,9 @@ class Record:
 def read(handle, version=None):
     """Read Affymetrix CEL file and return Record object.
 
-    CEL files format versions 3 and 4 are supported.
-    Please specify the CEL file format as 3 or 4 if known for the version
-    argument. If the version number is not specified, the parser will attempt
-    to detect the version from the file contents.
+    CEL files format versions 3 and 4 are supported. The format is
+    detected from the file contents. If you pass the version argument (3 or
+    4), a ValueError is raised if the file is in the other format.
 
     The Record object returned by this function stores the intensities from
     the CEL file in record.intensities.
@@ -117,6 +116,8 @@ def read(handle, version=None):
     5 by 5 array
 
     """
+    if version not in (None, 3, 4):
+        raise ValueError(f"version should be None, 3 or 4, not {version!r}")
     try:
         data = handle.read(0)
     except AttributeError:
@@ -140,9 +141,10 @@ def read(handle, version=None):
         keyword, value = line.split("=", 1)
         if keyword != "Version":
             raise ValueError("Failed to parse Affy Version 3 CEL file.")
-        version = int(value)
-        if version != 3:
+        if int(value) != 3:
             raise ValueError("Incorrect version number in Affy Version 3 CEL file.")
+        if version == 4:
+            raise ValueError("expected CEL version 4, but the file is version 3")
         return _read_v3(handle)
     try:
         magicNumber = struct.unpack("<i", data)
@@ -156,6 +158,8 @@ def read(handle, version=None):
         ) from None
     if magicNumber != (64,):
         raise ValueError("Incorrect magic number in Affy Version 4 CEL file")
+    if version == 3:
+        raise ValueError("expected CEL version 3, but the file is version 4")
     return _read_v4(handle)
 
 
