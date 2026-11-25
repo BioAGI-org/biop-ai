@@ -2370,6 +2370,21 @@ class TestJASPAR(unittest.TestCase):
         )
         self.assertEqual(motif[1:-2].consensus, "CAAAAAAC")
 
+    def test_pfm_four_columns_malformed_input(self):
+        """Bad pfm-four-columns input raises ValueError naming its line (#539)."""
+        for text, message in (
+            ("Gene\nPos A C G T\n1 0.1 0.2 0.3 0.4\n", "Missing name in line: 'Gene'"),
+            ("Motif\n1 0.1 0.2 0.3 0.4\n", "Missing name in line: 'Motif'"),
+            (
+                "Transcription factor binding site\n1 2 3 4\n",
+                "Malformed count in row: 'Transcription factor binding site'",
+            ),
+            ("1 0.1 0.2 0.3 x\n", "Malformed count in row: '1 0.1 0.2 0.3 x'"),
+        ):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(ValueError, message):
+                    motifs.parse(StringIO(text), "pfm-four-columns")
+
     def test_pfm_four_rows_parsing(self):
         """Test if Bio.motifs.pfm can parse motifs in position frequency matrix format (4 rows)."""
         with open(support.DATA / "motifs" / "fourrows.pfm") as stream:
