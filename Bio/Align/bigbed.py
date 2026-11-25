@@ -2442,6 +2442,9 @@ class _BPlusTreeFormatter:
                     data = stream.read(formatter_nonleaf.size)
                     key, pos = formatter_nonleaf.unpack(data)
                     children.append(pos)
+                # Reversed, so that popping from the end visits the children
+                # left to right; list.pop(0) would take quadratic time.
+                children.reverse()
                 parent = node
                 node = Node(parent, children)
             while True:
@@ -2454,7 +2457,7 @@ class _BPlusTreeFormatter:
                     return targets
                 children = node.children
                 try:
-                    offset = children.pop(0)
+                    offset = children.pop()
                 except IndexError:
                     node = node.parent
                 else:
