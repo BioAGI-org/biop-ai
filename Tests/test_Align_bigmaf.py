@@ -13280,6 +13280,26 @@ class TestAlign_malformed_item(unittest.TestCase):
             with self.subTest(line=line):
                 self.check(before + line.encode(), f"{message}:\n{line}")
 
+    def test_no_semicolon_after_last_line(self):
+        # Each line of an item, the last one included, is followed by a
+        # semicolon. A well-formed last line without one used to give an
+        # empty "unexpected line" message, or, for an 'a' line, a float()
+        # error on the NUL byte that ends the item.
+        s_line = b"s hg19.chr1 0 3 + 10 AAA"
+        for before, line in (
+            (b"a score=1;", s_line),
+            (b"a score=1;" + s_line + b";", b"i hg19.chr1 N 0 C 0"),
+            (b"a score=1;" + s_line + b";", b"q hg19.chr1 999"),
+            (b"a score=1;" + s_line + b";", b"e hg18.chr1 0 3 + 10 I"),
+            (b"", b"a score=1"),
+            (b"a score=1;" + s_line + b";", b"# comment"),
+        ):
+            with self.subTest(line=line):
+                self.check(
+                    before + line,
+                    "bigMaf item at 0-3: last line is not followed by ';'",
+                )
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
