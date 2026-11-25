@@ -9,6 +9,7 @@ import gc
 import io
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -25,6 +26,11 @@ except ImportError:
     raise MissingPythonDependencyError(
         "Install NumPy if you want to use Bio.Cluster."
     ) from None
+
+try:
+    import tomllib
+except ImportError:  # Python 3.10
+    tomllib = None
 
 
 class TestCluster(unittest.TestCase):
@@ -5103,6 +5109,39 @@ record.save({self.jobname!r}, *{list(solutions)!r})
             record = read(io.StringIO(text))
             self.assertEqual(record.geneid, ["g1"])
             self.assertEqual(record.expid, ["S1"])
+
+
+class TestClusterBuild(unittest.TestCase):
+    @unittest.skipIf(tomllib is None, "tomllib is new in Python 3.11")
+    def test_extension_depends_lists_its_headers(self):
+        # Without a header in depends, an incremental build (build_ext, or a
+        # reused build/ directory) keeps a stale _cluster binary after only
+        # that header changes, such as cluster.h gaining a new signature.
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
+        pyproject = os.path.join(root, "pyproject.toml")
+        if not os.path.exists(pyproject):
+            self.skipTest("needs a source checkout")
+        with open(pyproject, "rb") as handle:
+            config = tomllib.load(handle)
+        (extension,) = [
+            ext
+            for ext in config["tool"]["setuptools"]["ext-modules"]
+            if ext["name"] == "Bio.Cluster._cluster"
+        ]
+        headers = set()
+        todo = list(extension["sources"])
+        while todo:
+            path = todo.pop()
+            with open(os.path.join(root, path)) as handle:
+                text = handle.read()
+            for name in re.findall(r'^#include "(.+)"', text, re.MULTILINE):
+                header = os.path.normpath(os.path.join(os.path.dirname(path), name))
+                header = header.replace(os.sep, "/")
+                if os.path.exists(os.path.join(root, header)) and header not in headers:
+                    headers.add(header)
+                    todo.append(header)
+        self.assertIn("Bio/Cluster/cluster.h", headers)
+        self.assertLessEqual(headers, set(extension.get("depends", [])))
 
 
 if __name__ == "__main__":
