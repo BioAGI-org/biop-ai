@@ -174,6 +174,39 @@ class CompoundTests(unittest.TestCase):
         self.assertEqual(reparsed.pathway, record.pathway)
         self.assertEqual(len(reparsed.pathway), 8)
 
+    def test_pathway_round_trip_odd_names(self):
+        """PATHWAY names with a double space, or long enough to wrap, read back."""
+        long_name = (
+            "Biosynthesis of various plant secondary metabolites"
+            " and other very long pathway names here"
+        )
+        record = Compound.Record()
+        record.entry = "C00001"
+        record.pathway = [
+            ("PATH", "map00240", "Foo  bar"),
+            ("PATH", "map00999", long_name),
+            ("PATH", "map00010", "Glycolysis"),
+        ]
+        self.assertIn("\n" + " " * 28 + "other very long", str(record))
+        reparsed = next(Compound.parse(StringIO(str(record) + "\n")))
+        self.assertEqual(reparsed.pathway, record.pathway)
+
+    def test_pathway_round_trip_double_space_at_wrap(self):
+        """A double space where a PATHWAY name wraps reads back as two spaces."""
+        record = Compound.Record()
+        record.entry = "C00001"
+        record.pathway = [
+            # the wrap leaves one space at the end of the first line
+            ("PATH", "map00240", "foo " * 13 + "word  suffix"),
+            # the wrap leaves one space at the start of the continuation
+            ("PATH", "map00241", "foo " * 13 + "words  suffix"),
+        ]
+        text = str(record)
+        self.assertIn(" word \n" + " " * 28 + "suffix\n", text)
+        self.assertIn(" words\n" + " " * 29 + "suffix\n", text)
+        reparsed = next(Compound.parse(StringIO(text + "\n")))
+        self.assertEqual(reparsed.pathway, record.pathway)
+
     def test_structures(self):
         """STRUCTURES lines, including a continuation line, are parsed."""
         text = (
