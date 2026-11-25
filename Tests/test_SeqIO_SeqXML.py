@@ -222,6 +222,18 @@ class TestReadHeader(unittest.TestCase):
             stream = records.stream
         self.assertTrue(stream.closed)
 
+    def test_no_reading_after_context_exit(self):
+        """Do not read from the caller's handle after leaving the with block."""
+        data = (support.DATA / "SeqXML" / "dna_example.xml").read_bytes()
+        handle = BytesIO(data)
+        with SeqIO.parse(handle, "seqxml") as records:
+            next(records)
+        position = handle.tell()
+        self.assertLess(position, len(data))
+        with self.assertRaises(AttributeError):
+            next(records)
+        self.assertEqual(handle.tell(), position)
+
 
 class TestReadAndWrite(unittest.TestCase):
     def test_read_write_rna(self):
@@ -333,30 +345,36 @@ class TestReadCorruptFiles(unittest.TestCase):
         ):
             list(SeqIO.parse(BytesIO(data), "seqxml"))
 
-    def test_nested_entities_linear_time(self):
+    def test_entity_declaration_refused(self):
+        """Refuse XML entity declarations, as the other XML readers do."""
+        data = (
+            b'<?xml version="1.0"?>\n'
+            b'<!DOCTYPE seqXML [<!ENTITY a "ACGT">]>\n'
+            b'<seqXML seqXMLversion="0.4"><entry id="x" source="s">'
+            b"<DNAseq>&a;&a;</DNAseq></entry></seqXML>"
+        )
+        with self.assertRaisesRegex(
+            ValueError, "^XML entity declarations are not allowed"
+        ):
+            list(SeqIO.parse(BytesIO(data), "seqxml"))
+
+    def test_many_text_pieces_linear_time(self):
         """Parse sequence text given in many small pieces in linear time.
 
-        Expat passes the expanded text of each entity in a separate call.
-        Appending each piece to a string took quadratic time: a 1.5 kB file
-        with nested entities that expand to 4,000,000 letters ran for well
-        over a minute. With the pieces joined once it takes well under a
-        second. Run it in a child process so a regression cannot hang the
-        test suite.
+        Expat passes the text before and after each character reference in
+        separate calls. Appending each piece to a string took quadratic
+        time: 800,000 pieces making up 4,000,000 letters ran for well over a
+        minute. With the pieces joined once it takes well under a second.
+        Run it in a child process so a regression cannot hang the test
+        suite.
         """
         code = """\
 from io import BytesIO
 from Bio import SeqIO
-entities = (
-    '<!ENTITY a "ACGTACGTAC">'
-    '<!ENTITY b "' + "&a;" * 10 + '">'
-    '<!ENTITY c "' + "&b;" * 10 + '">'
-    '<!ENTITY d "' + "&c;" * 10 + '">'
-)
 data = (
     '<?xml version="1.0" encoding="UTF-8"?>'
-    "<!DOCTYPE seqXML [" + entities + "]>"
     '<seqXML seqXMLversion="0.4"><entry id="x"><DNAseq>'
-    + "&d;" * 400
+    + "ACGTACGTA&#67;" * 400000
     + "</DNAseq></entry></seqXML>"
 ).encode()
 record = next(SeqIO.parse(BytesIO(data), "seqxml"))
@@ -378,7 +396,7 @@ print(len(record.seq), record.seq[:12])
                 env=env,
             )
         except subprocess.TimeoutExpired:
-            self.fail("parsing 4,000,000 letters of entity text took over 60 s")
+            self.fail("parsing 4,000,000 letters in 800,000 pieces took over 60 s")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "4000000 ACGTACGTACAC\n")
 

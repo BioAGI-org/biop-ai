@@ -19,6 +19,7 @@ from xml.sax import handler
 from xml.sax.saxutils import XMLGenerator
 from xml.sax.xmlreader import AttributesImpl
 
+from Bio._xml import _RefuseEntities
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
@@ -461,7 +462,10 @@ class SeqXmlIterator(SequenceIterator):
         # one specified in the XML file. With a binary handle, the correct
         # encoding is picked up by the parser from the XML file.
         super().__init__(stream_or_path, fmt="SeqXML")
-        stream = self.stream
+        # Read the prolog through a checker that refuses entity declarations.
+        # The loop below reads at least up to the root element, after which
+        # no entity can be declared, so __next__ reads self.stream directly.
+        stream = _RefuseEntities(self.stream)
         parser = sax.make_parser()
         content_handler = ContentHandler()
         parser.setContentHandler(content_handler)
