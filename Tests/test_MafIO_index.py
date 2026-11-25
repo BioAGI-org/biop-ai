@@ -393,6 +393,19 @@ if sqlite3:
             self.assertEqual(list(self.idx.search([1], [2])), [])
             self.assertEqual(list(self.idx.search([Odd(1)], [2])), [])
 
+            # An int subclass must still find the blocks a plain int finds.
+            # SeqRecord has no __eq__, so compare the block start coordinates.
+            def starts_of(starts, ends):
+                return [
+                    [r.annotations["start"] for r in a]
+                    for a in self.idx.search(starts, ends)
+                ]
+
+            expected = starts_of([3014689], [3014690])
+            self.assertEqual(len(expected), 1)
+            self.assertEqual(starts_of([Odd(3014689)], [3014690]), expected)
+            self.assertEqual(starts_of([Odd(3014689)], [Odd(3014690)]), expected)
+
         def test_coordinates_beyond_sqlite_integer_range(self):
             """Coordinates past 2**63 - 1 find no blocks instead of raising."""
             self.assertEqual(list(self.idx.search([2**63], [2**63 + 1])), [])
