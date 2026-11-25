@@ -454,6 +454,25 @@ tree length =   0.00000
             site_classes = params["site classes"]
             self.assertEqual(len(site_classes), 4, version_msg)
 
+    def testSiteClassOmegasAreFloats(self):
+        """Site-class omegas are floats, like the proportions."""
+        results = codeml.read(
+            os.path.join(
+                self.results_dir, "codeml", "all_NSsites", "all_NSsites-4_7.out"
+            )
+        )
+        site_classes = results["NSsites"][2]["parameters"]["site classes"]
+        self.assertEqual(
+            site_classes,
+            {
+                0: {"proportion": 1.0, "omega": 0.0},
+                1: {"proportion": 0.0, "omega": 1.0},
+                2: {"proportion": 0.0, "omega": 1.0},
+            },
+        )
+        for site_class in site_classes.values():
+            self.assertIsInstance(site_class["omega"], float)
+
     def testParseBranchSiteA(self):
         res_dir = os.path.join(self.results_dir, "codeml", "branchsiteA")
         for results_file in os.listdir(res_dir):

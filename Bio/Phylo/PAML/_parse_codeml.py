@@ -383,7 +383,7 @@ def parse_siteclass_omegas(line, site_classes):
     # numbers to sometimes run into each other, so we must use a different
     # regular expression to account for this. i.e.:
     # w:   0.00012  1.00000109.87121
-    line_floats = re.findall(r"\d{1,3}\.\d{5}", line)
+    line_floats = [float(val) for val in re.findall(r"\d{1,3}\.\d{5}", line)]
     if not site_classes or len(line_floats) == 0:
         return
     for n in range(len(line_floats)):
