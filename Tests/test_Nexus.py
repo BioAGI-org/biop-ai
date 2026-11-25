@@ -1727,6 +1727,27 @@ end;
             ["'dog-cat'", "'mouse-rat'", "'foo-bar'"],
         )
 
+    def test_translate_format_error(self):
+        # A bad or missing taxon number is a format error, but an unrelated
+        # exception must not be disguised as one (BioAGI-org/biop-ai#552).
+        nexus = Nexus.Nexus()
+        for options in ("1 a, x b", ""):
+            with self.assertRaisesRegex(Nexus.NexusError, "Format error"):
+                nexus._translate(options)
+        bug = AttributeError("bug in quotestrip")
+        with mock.patch.object(Nexus, "quotestrip", side_effect=bug):
+            with self.assertRaises(AttributeError) as cm:
+                nexus._translate("1 a, 2 b")
+        self.assertIs(cm.exception, bug)
+        # an error from reading the number is not a format error either
+        with self.assertRaisesRegex(Nexus.NexusError, "^Missing closing quote "):
+            nexus._translate("'1")
+        # A missing label was stored as None, and the tree using it then
+        # failed with AttributeError.
+        text = "#NEXUS\nbegin trees;\ntranslate 1;\ntree t = (1,1);\nend;\n"
+        with self.assertRaisesRegex(Nexus.NexusError, "^Missing label for 1 "):
+            Nexus.Nexus(text)
+
 
 class TestStandardDatatype(unittest.TestCase):
     """Matrices with datatype=standard, such as morphological characters.
