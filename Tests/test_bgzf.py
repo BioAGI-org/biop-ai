@@ -640,6 +640,25 @@ class BgzfTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "^Truncated BGZF block"):
                         load(io.BytesIO(data[:cut]))
 
+    def test_block_crc_or_size_mismatch(self):
+        """A block whose CRC or data length is wrong is a ValueError.
+
+        These were a RuntimeError, while other damaged blocks gave ValueError.
+        The error is still a RuntimeError for callers that catch that.
+        """
+        data = bgzf_block(b"ACGT" * 100)
+        for offset, error in ((-8, "^CRC is "), (-4, "^Decompressed to 400, not 401$")):
+            damaged = bytearray(data)
+            damaged[offset] ^= 1
+            for load in (
+                lambda h: bgzf.BgzfReader(fileobj=h),
+                lambda h: list(bgzf.BgzfBlocks(h)),
+            ):
+                with self.subTest(offset=offset):
+                    with self.assertRaisesRegex(ValueError, error) as cm:
+                        load(io.BytesIO(damaged))
+                    self.assertIsInstance(cm.exception, RuntimeError)
+
     def test_index_truncated_first_block(self):
         """SeqIO.index reports a cut first block, not a plain gzip file."""
         data = bgzf_block(b">a\nACGT\n")
