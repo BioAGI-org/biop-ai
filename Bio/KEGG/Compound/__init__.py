@@ -132,6 +132,7 @@ def parse(handle):
 
     """
     record = Record()
+    pathway_name = ""  # the latest PATHWAY name, as read, before trimming
     for line in handle:
         if line[:3] == "///":
             yield record
@@ -153,9 +154,16 @@ def parse(handle):
                 enzyme = column.strip()
                 record.enzyme.append(enzyme)
         elif keyword == "PATHWAY     ":
-            map, name = data.split("  ")
-            pathway = ("PATH", map, name)
-            record.pathway.append(pathway)
+            if line[:28].isspace() and record.pathway:
+                # A long name wrapped by str(record), indented 16 more spaces.
+                # The writer drops one space at the wrap, so put it back and
+                # keep any other spacing on either side of the wrap.
+                pathway_name += " " + line[28:].rstrip("\r\n")
+                kind, map_id = record.pathway[-1][:2]
+                record.pathway[-1] = (kind, map_id, pathway_name.strip())
+            else:
+                map_id, pathway_name = line[12:].rstrip("\r\n").split(None, 1)
+                record.pathway.append(("PATH", map_id, pathway_name.strip()))
         elif keyword == "FORMULA     ":
             record.formula = data
         elif keyword in ("MASS        ", "EXACT_MASS  "):
