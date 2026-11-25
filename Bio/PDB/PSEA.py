@@ -59,7 +59,24 @@ def _join_cwd(cwd, fname):
 
 
 def run_psea(fname, verbose=False):
-    """Run PSEA and return output filename."""
+    """Run P-SEA on a PDB file and return the path of its output file.
+
+    Arguments:
+     - fname - path of the PDB file; a relative path is taken from the
+       current working directory.
+     - verbose - if True, print P-SEA's standard output once it finishes.
+       Otherwise nothing is printed.
+
+    This needs the P-SEA program installed as ``psea`` on the ``PATH``;
+    otherwise ``FileNotFoundError`` is raised.
+
+    P-SEA runs in a temporary directory. Its output is then moved to
+    ``<name>.sea`` in the current working directory, where ``<name>`` is
+    the input file name without its last extension, replacing any file
+    of that name already there. The absolute path of that file is
+    returned. ``RuntimeError`` is raised if P-SEA writes anything other
+    than white space to standard error, or makes no output file.
+    """
     # Once, so that the input and output paths stay in the directory of the
     # call even if the working directory changes while psea runs.
     cwd = os.getcwd()
@@ -86,7 +103,11 @@ def run_psea(fname, verbose=False):
 
 
 def psea(pname):
-    """Parse PSEA output file."""
+    """Run P-SEA on a PDB file and return its secondary structure string.
+
+    This calls ``run_psea``, so it needs ``psea`` on the ``PATH`` and
+    leaves the ``<name>.sea`` output file in the current working directory.
+    """
     fname = run_psea(pname)
     start = 0
     ss = ""
