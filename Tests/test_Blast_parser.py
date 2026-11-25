@@ -15432,6 +15432,28 @@ class TestBlastMalformedInput(unittest.TestCase):
                         f"BLAST request ABC123 has status {status} on the server",
                     )
 
+    def test_qblast_closes_status_page(self):
+        """qblast must close each status page before it polls again."""
+        ref_page = io.BytesIO(b"RID = ABC123\nRTOE = 11\n")
+        page = b"<!DOCTYPE html><html>\n<!--QBlastInfoBegin\n\tStatus=WAITING\nQBlastInfoEnd\n-->"
+        waiting = io.BufferedReader(io.BytesIO(page))
+        answer = io.BufferedReader(io.BytesIO(b"<?xml version='1.0'?>\n"))
+        responses = [ref_page, waiting]
+        closed_at_next_poll = []
+
+        def urlopen(request, timeout=None):
+            if responses:
+                return responses.pop(0)
+            # The next poll; by now the status page must be closed.
+            closed_at_next_poll.append(waiting.closed)
+            return answer
+
+        with mock.patch.object(Blast, "urlopen", urlopen):
+            with mock.patch.object(Blast.time, "sleep"):
+                with Blast.qblast("blastn", "nt", "ACGT") as stream:
+                    self.assertIs(stream, answer)
+        self.assertEqual(closed_at_next_poll, [True])
+
     def test_qblast_max_wait(self):
         """qblast must give up on a search still running after max_wait seconds."""
         page = b"<!DOCTYPE html><html>\n<!--QBlastInfoBegin\n\tStatus=WAITING\nQBlastInfoEnd\n-->"
