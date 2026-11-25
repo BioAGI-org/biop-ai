@@ -26,6 +26,12 @@ import Bio
 class Hmmer3TextRawCases(CheckRaw):
     fmt = "hmmer3-text"
 
+    def test_multi_block_bgzf(self):
+        """Test get_raw on a BGZF copy with many blocks, as on the plain file."""
+        self.check_raw_multi_block_bgzf(
+            support.DATA / "Hmmer" / "text_30_hmmscan_001.out"
+        )
+
     def test_hmmer3text_30_multiple_first(self):
         """Test hmmer3-text raw string retrieval, HMMER 3.0, multiple queries, first (text_30_hmmscan_001.out)."""
         filename = support.DATA / "Hmmer" / "text_30_hmmscan_001.out"

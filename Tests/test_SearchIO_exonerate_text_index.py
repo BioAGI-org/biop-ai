@@ -17,6 +17,12 @@ class ExonerateTextRawCases(CheckRaw):
 
     fmt = "exonerate-text"
 
+    def test_multi_block_bgzf(self):
+        """Test get_raw on a BGZF copy with many blocks, as on the plain file."""
+        self.check_raw_multi_block_bgzf(
+            support.DATA / "Exonerate" / "exn_22_q_multiple.exn"
+        )
+
     def test_exn_22_m_est2genome_long_alignment(self):
         """Test exonerate-text raw string retrieval, query with a long alignment (exn_22_m_est2genome.exn)."""
         filename = support.DATA / "Exonerate" / "exn_22_m_est2genome.exn"

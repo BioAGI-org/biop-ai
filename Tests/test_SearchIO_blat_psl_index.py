@@ -17,6 +17,10 @@ class BlatPslRawCases(CheckRaw):
 
     fmt = "blat-psl"
 
+    def test_multi_block_bgzf(self):
+        """Test get_raw on a BGZF copy with many blocks, as on the plain file."""
+        self.check_raw_multi_block_bgzf(support.DATA / "Blat" / "psl_34_001.psl")
+
     def test_psl_34_001_many_hits(self):
         """Test blat-psl raw string retrieval, query with many hits (psl_34_001.psl)."""
         filename = support.DATA / "Blat" / "psl_34_001.psl"

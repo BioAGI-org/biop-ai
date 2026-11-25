@@ -19,6 +19,12 @@ from Bio import SearchIO
 class Hmmer2TextRawCases(CheckRaw):
     fmt = "hmmer2-text"
 
+    def test_multi_block_bgzf(self):
+        """Test get_raw on a BGZF copy with many blocks, as on the plain file."""
+        self.check_raw_multi_block_bgzf(
+            support.DATA / "Hmmer" / "text_23_hmmpfam_003.out"
+        )
+
     def test_hmmer2text_22_single_hmmsearch(self):
         """Test hmmer2-text raw string retrieval, single query, hmmsearch."""
         filename = support.DATA / "Hmmer" / "text_22_hmmsearch_001.out"

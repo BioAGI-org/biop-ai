@@ -1164,6 +1164,29 @@ class MalformedFileTests(unittest.TestCase):
                     self.assertEqual(index.get_raw(key), expected.get_raw(key))
                     self.assertEqual(index[key].seq, expected[key].seq)
 
+    def test_embl_multi_block_bgzf(self):
+        """EMBL record offsets in a BGZF file must come from tell().
+
+        The indexer used to take the next record's offset as tell() minus
+        the length of its ID line, which is not a valid virtual offset when
+        that line crosses a BGZF block boundary.
+        """
+        plain = support.DATA / "EMBL" / "epo_prt_selection.embl"
+        with open(plain, "rb") as handle:
+            data = handle.read()
+        path = os.path.join(self.temp_dir, "epo_prt_selection.embl.bgz")
+        with bgzf.BgzfWriter(path, "wb") as handle:
+            for i in range(0, len(data), 200):
+                handle.write(data[i : i + 200])
+                handle.flush()  # one BGZF block per 200 bytes
+        expected = SeqIO.index(plain, "embl")
+        self.addCleanup(expected.close)
+        index = SeqIO.index(path, "embl")
+        self.addCleanup(index.close)
+        self.assertEqual(list(index), list(expected))
+        for key in index:
+            self.assertEqual(index.get_raw(key), expected.get_raw(key))
+
     # PIR ----------------------------------------------------------------
 
     def test_pir_identifier_containing_spaces(self):

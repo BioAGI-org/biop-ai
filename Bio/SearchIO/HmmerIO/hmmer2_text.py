@@ -371,6 +371,7 @@ class Hmmer2TextIndexer(_BaseHmmerTextIndexer):
 
         # determine flag for hmmsearch
         is_hmmsearch = False
+        line_start = handle.tell()
         line = read_forward(handle)
         if line.startswith(b"hmmsearch"):
             is_hmmsearch = True
@@ -387,7 +388,7 @@ class Hmmer2TextIndexer(_BaseHmmerTextIndexer):
                 qresult_key = regx.group(1).strip()
                 # qresult start offset is the offset of this line
                 # (starts with the start mark)
-                start_offset = end_offset - len(line)
+                start_offset = line_start
             elif line.startswith(self.qresult_end):
                 if qresult_key is None:
                     raise ValueError("Found a '//' line before any 'Query' line")
@@ -401,7 +402,9 @@ class Hmmer2TextIndexer(_BaseHmmerTextIndexer):
                     yield qresult_key.decode(), start_offset, 0
                 break
 
-            line = read_forward(handle)
+            # tell() before readline(), as BGZF offsets are virtual
+            line_start = end_offset
+            line = handle.readline()
 
 
 # if not used as a module, run the doctest

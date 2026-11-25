@@ -531,7 +531,9 @@ class InfernalTextIndexer(SearchIndexer):
         qresult_key = None
 
         while True:
-            line = read_forward(handle)
+            # tell() before readline(), as BGZF offsets are virtual
+            line_start = handle.tell()
+            line = handle.readline()
             end_offset = handle.tell()
 
             if line.startswith(_DIV_QUERY_START.encode()):
@@ -541,7 +543,7 @@ class InfernalTextIndexer(SearchIndexer):
                 qresult_key = parts[1]
                 # qresult start offset is the offset of this line
                 # (starts with the start mark)
-                start_offset = end_offset - len(line)
+                start_offset = line_start
             elif line.startswith(_DIV_QUERY_END.encode()):
                 if qresult_key is None:
                     raise ValueError("Found a '//' line before any 'Query:' line")

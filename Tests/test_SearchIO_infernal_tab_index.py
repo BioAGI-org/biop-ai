@@ -20,6 +20,12 @@ FMT = "infernal-tab"
 class InfernalTabRawCases(CheckRaw):
     fmt = FMT
 
+    def test_multi_block_bgzf(self):
+        """Test get_raw on a BGZF copy with many blocks, as on the plain file."""
+        self.check_raw_multi_block_bgzf(
+            support.DATA / "Infernal" / "cmscan_115_IRES_5S_U2_Yeast.tbl"
+        )
+
     def test_infernal_tab_single(self):
         """Test infernal-tab raw string retrieval, cmsearch, single query (U2_Yeast)."""
         filename = support.DATA / "Infernal" / "cmsearch_114_U2_Yeast.tbl"

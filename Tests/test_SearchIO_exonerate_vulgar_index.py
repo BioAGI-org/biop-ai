@@ -17,6 +17,12 @@ class ExonerateVulgarRawCases(CheckRaw):
 
     fmt = "exonerate-vulgar"
 
+    def test_multi_block_bgzf(self):
+        """Test get_raw on a BGZF copy with many blocks, as on the plain file."""
+        self.check_raw_multi_block_bgzf(
+            support.DATA / "Exonerate" / "exn_22_q_multiple_vulgar.exn"
+        )
+
     def test_exn_22_o_vulgar_many_hits(self):
         """Test exonerate-vulgar raw string retrieval, query with many hits (exn_22_o_vulgar.exn)."""
         filename = support.DATA / "Exonerate" / "exn_22_o_vulgar.exn"

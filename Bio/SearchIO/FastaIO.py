@@ -655,13 +655,14 @@ class FastaM10Indexer(SearchIndexer):
         qresult_key = None
         query_mark = b">>>"
 
+        # BGZF offsets are virtual, so take each line's offset from tell()
+        # before readline() and add up lengths
+        line_start = start_offset
         line = handle.readline()
         if not line:
             # an empty file holds no query results
             return
         while True:
-            end_offset = handle.tell()
-
             if not line.startswith(b">>") and query_mark in line:
                 regx = _RE_ID_DESC_SEQLEN_IDX.match(line, line.find(query_mark))
                 if regx is None:
@@ -670,17 +671,20 @@ class FastaM10Indexer(SearchIndexer):
                         f" (or nt), found:\n{line!r}"
                     )
                 qresult_key = regx.group(1).decode()
-                start_offset = end_offset - len(line)
+                start_offset = line_start
+                length = 0
             # yield whenever we encounter a new query or at the end of the file
             if qresult_key is not None:
                 if not line:
-                    yield qresult_key, start_offset, end_offset - start_offset
+                    yield qresult_key, start_offset, length
                     break
+                length += len(line)
+                line_start = handle.tell()
                 line = handle.readline()
                 if not line.startswith(b">>") and query_mark in line:
-                    yield qresult_key, start_offset, end_offset - start_offset
-                    start_offset = end_offset
+                    yield qresult_key, start_offset, length
             else:
+                line_start = handle.tell()
                 line = handle.readline()
                 if not line:
                     raise ValueError(

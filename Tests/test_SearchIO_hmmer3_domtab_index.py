@@ -15,6 +15,12 @@ from search_tests_common import CheckRaw
 class HmmerDomtabRawCases(CheckRaw):
     fmt = "hmmscan3-domtab"
 
+    def test_multi_block_bgzf(self):
+        """Test get_raw on a BGZF copy with many blocks, as on the plain file."""
+        self.check_raw_multi_block_bgzf(
+            support.DATA / "Hmmer" / "domtab_30_hmmscan_001.out"
+        )
+
     def test_hmmerdomtab_30_multiple_first(self):
         """Test hmmscan-domtab raw string retrieval, HMMER 3.0, multiple queries, first (domtab_30_hmmscan_001.out)."""
         filename = support.DATA / "Hmmer" / "domtab_30_hmmscan_001.out"

@@ -430,12 +430,11 @@ class InfernalTabIndexer(SearchIndexer):
             start_offset = handle.tell()
             line = handle.readline()
 
-        # index the qresults
+        # index the qresults; BGZF offsets are virtual, so take each line's
+        # offset from tell() before readline() and add up lengths
+        line_start = start_offset
+        length = 0
         while True:
-            # get end offset here since we only know a qresult ends after
-            # encountering the next one
-            end_offset = handle.tell()
-
             if not line:
                 break
 
@@ -446,14 +445,16 @@ class InfernalTabIndexer(SearchIndexer):
             else:
                 curr_key = cols[self._query_id_idx]
                 if curr_key != qresult_key:
-                    adj_end = end_offset - len(line)
-                    yield (qresult_key.decode(), start_offset, adj_end - start_offset)
+                    yield (qresult_key.decode(), start_offset, length)
                     qresult_key = curr_key
-                    start_offset = adj_end
+                    start_offset = line_start
+                    length = 0
 
+            length += len(line)
+            line_start = handle.tell()
             line = handle.readline()
             if not line or line.startswith(b"#"):
-                yield (qresult_key.decode(), start_offset, end_offset - start_offset)
+                yield (qresult_key.decode(), start_offset, length)
                 break
 
     def get_raw(self, offset):

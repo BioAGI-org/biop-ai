@@ -570,6 +570,9 @@ class BlastTabIndexer(SearchIndexer):
         qid_mark = b"# Query: "
         # mark of the last line
         end_mark = b"# BLAST processed"
+        # BGZF offsets are virtual, so add up line lengths rather than
+        # subtracting offsets
+        length = 0
 
         while True:
             end_offset = handle.tell()
@@ -581,10 +584,12 @@ class BlastTabIndexer(SearchIndexer):
             elif line.startswith(qid_mark):
                 qresult_key = line[len(qid_mark) :].split()[0]
             elif line == query_mark or line.startswith(end_mark):
-                yield qresult_key, start_offset, end_offset - start_offset
+                yield qresult_key, start_offset, length
                 start_offset = end_offset
+                length = 0
             elif not line:
                 break
+            length += len(line)
 
     def _qresult_index(self):
         """Indexer for noncommented BLAST tabular files (PRIVATE)."""
@@ -593,6 +598,9 @@ class BlastTabIndexer(SearchIndexer):
         start_offset = 0
         qresult_key = None
         key_idx = self._key_idx
+        # BGZF offsets are virtual, so add up line lengths rather than
+        # subtracting offsets
+        length = 0
 
         while True:
             # get end offset here since we only know a qresult ends after
@@ -610,9 +618,11 @@ class BlastTabIndexer(SearchIndexer):
                     curr_key = b""
 
                 if curr_key != qresult_key:
-                    yield qresult_key, start_offset, end_offset - start_offset
+                    yield qresult_key, start_offset, length
                     qresult_key = curr_key
                     start_offset = end_offset
+                    length = 0
+            length += len(line)
 
             # break if we've reached EOF
             if not line:

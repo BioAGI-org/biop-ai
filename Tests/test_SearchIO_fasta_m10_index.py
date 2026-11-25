@@ -29,6 +29,10 @@ class FastaM10RawCases(CheckRaw):
 
     fmt = "fasta-m10"
 
+    def test_multi_block_bgzf(self):
+        """Test get_raw on a BGZF copy with many blocks, as on the plain file."""
+        self.check_raw_multi_block_bgzf(support.DATA / "Fasta" / "output002.m10")
+
     def test_output_001_many_hits(self):
         """Test fasta-m10 raw string retrieval, fasta35, query with many hits (output001.m10)."""
         filename = support.DATA / "Fasta" / "output001.m10"
