@@ -3027,6 +3027,14 @@ class TestJASPAR(unittest.TestCase):
             "A 1 2e0oops",
             "A [ 1 2foo ]",
             "1 2e0oops",
+            # A count after a word was silently dropped (issue #540).
+            "A 1 2 x 3",
+            "1 2 x 3",
+            "A [1 2] x 3",
+            # "[" and "|" separate counts too, so "[3" holds a count (#540).
+            "A 1 2 [3]",
+            "A [1 2] [3]",
+            "A 1 2 |3|",
         ):
             with self.subTest(row=row):
                 with self.assertRaisesRegex(ValueError, "Malformed count in row"):

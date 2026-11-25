@@ -357,9 +357,12 @@ def _read_pfm_four_rows(handle):
     row_pattern_without_nucleotide_letter = re.compile(rf"({number}.*)")
     # The counts are complete numbers, each ended by a space, a "]", a "#"
     # or the end of the line. Text after them is ignored, unless it starts
-    # like a number, as a malformed count such as "2e" or "2e0oops" does.
+    # like a number, as a malformed count such as "2e" or "2e0oops" does,
+    # or holds another count, as "1 2 x 3" does; otherwise the 3 would be
+    # silently dropped.
     counts_pattern = re.compile(rf"(?:{number}(?=[\s\]#]|$)\s*)*")
     number_start_pattern = re.compile(r"[-+.\deE]")
+    number_pattern = re.compile(number)
 
     motif_name = None
     nucleotide_counts = {}
@@ -396,7 +399,10 @@ def _read_pfm_four_rows(handle):
         if nucleotide in nucleotide_counts:
             raise ValueError(f"Second row for {nucleotide} in one motif: {line!r}")
         counts_match = counts_pattern.match(counts_str)
-        if number_start_pattern.match(counts_str, counts_match.end()):
+        rest = counts_str[counts_match.end() :].partition("#")[0]
+        if number_start_pattern.match(rest) or any(
+            number_pattern.fullmatch(word) for word in re.split(r"[\s\[\]|]+", rest)
+        ):
             raise ValueError(f"Malformed count in row: {line!r}")
         nucleotide_counts[nucleotide] = [
             float(current_nucleotide_count)
