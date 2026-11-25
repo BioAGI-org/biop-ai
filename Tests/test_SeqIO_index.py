@@ -757,10 +757,14 @@ class IndexDictTests(SeqRecordTestBaseClass, SeqIOTestBaseClass):
             filename = Path(temp_dir) / "corrupt.sff"
             filename.write_bytes(b"not an SFF file")
             with (
-                mock.patch("Bio.SeqIO.SffIO._sff_file_header", side_effect=error),
+                mock.patch(
+                    "Bio.SeqIO.SffIO._sff_file_header", side_effect=error
+                ) as header,
                 self.assertRaises(TypeError) as cm,
             ):
                 SeqIO.index(filename, "sff")
+            # The file is closed, so the temporary directory can be removed
+            self.assertTrue(header.call_args.args[0].closed)
         self.assertIs(cm.exception, error)
 
     if sqlite3:

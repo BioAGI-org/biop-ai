@@ -248,21 +248,27 @@ class _IndexedSeqFileDict(collections.abc.Mapping[str | Any, _RecordT_co]):
         else:
             offset_iter = random_access_proxy
         offsets: dict[Hashable, int] = {}
-        for key, offset, length in offset_iter:
-            # Note - we don't store the length because I want to minimise the
-            # memory requirements. With the SQLite backend the length is kept
-            # and is used to speed up the get_raw method (by about 3 times).
-            # The length should be provided by all the current backends except
-            # SFF where there is an existing Roche index we can reuse (very fast
-            # but lacks the record lengths)
-            # assert length or format in ["sff", "sff-trim"], \
-            #       "%s at offset %i given length %r (%s format %s)" \
-            #       % (key, offset, length, filename, format)
-            if key in offsets:
-                self._proxy._handle.close()
-                raise ValueError(f"Duplicate key '{key}'")
-            else:
-                offsets[key] = offset
+        try:
+            for key, offset, length in offset_iter:
+                # Note - we don't store the length because I want to minimise the
+                # memory requirements. With the SQLite backend the length is kept
+                # and is used to speed up the get_raw method (by about 3 times).
+                # The length should be provided by all the current backends except
+                # SFF where there is an existing Roche index we can reuse (very fast
+                # but lacks the record lengths)
+                # assert length or format in ["sff", "sff-trim"], \
+                #       "%s at offset %i given length %r (%s format %s)" \
+                #       % (key, offset, length, filename, format)
+                if key in offsets:
+                    raise ValueError(f"Duplicate key '{key}'")
+                else:
+                    offsets[key] = offset
+        except BaseException:
+            # Close the file now rather than leave it to garbage collection,
+            # which waits until the caller drops this exception and its
+            # traceback. Until then the file cannot be deleted on Windows.
+            self._proxy._handle.close()
+            raise
         self._offsets = offsets
 
     def __repr__(self) -> str:

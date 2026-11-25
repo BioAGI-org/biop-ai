@@ -321,6 +321,23 @@ class IndexedSeqFileDictTests(unittest.TestCase):
         index.close()
         self.assertTrue(proxy._handle.closed)
 
+    def test_failed_indexing_closes_the_proxy_handle(self):
+        """If the proxy fails part way through indexing, its handle is closed.
+
+        Otherwise the file stays open for as long as the caller keeps the
+        exception, and on Windows it cannot be deleted until then.
+        """
+
+        class FailingProxy(_StubProxy):
+            def __iter__(self):
+                yield ("Alpha", 0, 4)
+                raise ValueError("bad record")
+
+        proxy = FailingProxy([], {})
+        with self.assertRaisesRegex(ValueError, "bad record"):
+            File._IndexedSeqFileDict(proxy, None, "repr", "SeqRecord")
+        self.assertTrue(proxy._handle.closed)
+
 
 def _proxy_factory(fmt, filename=None):
     """Return a proxy for the file, or whether the format is supported.
