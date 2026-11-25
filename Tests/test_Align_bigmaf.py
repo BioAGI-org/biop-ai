@@ -13237,6 +13237,16 @@ class TestAlign_malformed_item(unittest.TestCase):
         self.check(b"x bad line", message)
         self.check(b"a score=1;x bad line", message)
 
+    def test_malformed_s_line(self):
+        # These used to raise AttributeError: a bad strand, a truncated
+        # line, and another line that starts with 's'.
+        for line in ("s hg19.chr1 0 3 . 10 AAA", "s hg19.chr1 0", "sx foo"):
+            with self.subTest(line=line):
+                self.check(
+                    b"a score=1;" + line.encode() + b";",
+                    f"Error parsing alignment - malformed 's' line:\n{line}",
+                )
+
     def test_i_q_line_not_after_s_line(self):
         # An 'i' or 'q' line annotates the 's' line before it. Without one,
         # these used to raise UnboundLocalError, and after an 'e' line for

@@ -253,7 +253,6 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
         # an 's' line.
         target = None
         j = -1
-        sequences = []
         while True:
             i = j + 1
             prefix = buffer[i : i + 1]
@@ -282,6 +281,12 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
                         )
             elif prefix == b"s":
                 m = re.match(rb"^s\s*\S*\s*\d*\s*\d*\s*[+-]\s*\d*\s*", buffer[i:])
+                if m is None:
+                    m = re.match(b"^[^;\0]*", buffer[i:])
+                    line = buffer[i : i + m.end()].tobytes().decode(errors="replace")
+                    raise ValueError(
+                        f"Error parsing alignment - malformed 's' line:\n{line}"
+                    )
                 j = i + m.span()[1]
                 line = buffer[i:j].tobytes()
                 words = line.split(None, 5)
