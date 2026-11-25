@@ -196,7 +196,7 @@ def parse_model(lines, results):
         # "lnL(ntime: 19  np: 22):  -2021.348300      +0.000000"
         if "lnL(ntime:" in line and line_floats:
             results["lnL"] = line_floats[0]
-            np_res = re.match(r"lnL\(ntime:\s+\d+\s+np:\s+(\d+)\)", line)
+            np_res = re.match(r"lnL\(ntime:\s*\d+\s+np:\s*(\d+)\)", line)
             if np_res is not None:
                 num_params = int(np_res.group(1))
                 # With np 0 the parameter list is an empty line, so there
