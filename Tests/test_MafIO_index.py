@@ -869,12 +869,15 @@ if sqlite3:
             # one reference position. They were added one at a time with str
             # +=, which copied the string each time: a gap run of 1,500,000
             # took minutes. Taking them as one slice of each row is fast.
-            gap = 1_500_000
+            # The gap is large enough that the quadratic code would take about
+            # an hour on a 2.2 GHz Xeon, far past the 60 s limit on any
+            # machine, while the linear code needs 1-2 s and ~130 MB.
+            gap = 10_000_000
             maf = os.path.join(self.tmpdir, "gap.maf")
             with open(maf, "w") as handle:
                 handle.write("##maf version=1\n\na score=0\n")
                 handle.write(f"s ref.chr1 0 2 + 100 A{'-' * gap}C\n")
-                handle.write(f"s sp1.chr1 0 {gap + 2} + 2000000 A{'G' * gap}C\n\n")
+                handle.write(f"s sp1.chr1 0 {gap + 2} + {gap + 2} A{'G' * gap}C\n\n")
             code = """\
 import sys
 from Bio.AlignIO.MafIO import MafIndex
