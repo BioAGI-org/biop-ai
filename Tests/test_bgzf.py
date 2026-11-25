@@ -640,6 +640,42 @@ class BgzfTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "^Truncated BGZF block"):
                         load(io.BytesIO(data[:cut]))
 
+    def test_raw_handle_with_short_reads(self):
+        """A raw handle may return fewer bytes than asked before end of file."""
+
+        class ShortReads(io.RawIOBase):
+            """Seekable raw handle returning at most 3 bytes per read."""
+
+            def __init__(self, data):
+                self.data = io.BytesIO(data)
+
+            def readable(self):
+                return True
+
+            def seekable(self):
+                return True
+
+            def seek(self, offset, whence=0):
+                return self.data.seek(offset, whence)
+
+            def tell(self):
+                return self.data.tell()
+
+            def readinto(self, buffer):
+                data = self.data.read(min(len(buffer), 3))
+                buffer[: len(data)] = data
+                return len(data)
+
+        filename = support.DATA / "GenBank" / "NC_000932.gb.bgz"
+        with open(filename, "rb") as handle:
+            data = handle.read()
+        with gzip.open(filename, "rb") as handle:
+            expected = handle.read()
+        blocks = list(bgzf.BgzfBlocks(io.BytesIO(data)))
+        self.assertEqual(list(bgzf.BgzfBlocks(ShortReads(data))), blocks)
+        with bgzf.BgzfReader(fileobj=ShortReads(data), mode="rb") as handle:
+            self.assertEqual(handle.read(len(expected) + 1), expected)
+
     def test_block_crc_or_size_mismatch(self):
         """A block whose CRC or data length is wrong is a ValueError.
 

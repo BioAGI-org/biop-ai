@@ -444,9 +444,28 @@ class _CorruptBlockError(ValueError, RuntimeError):
     """
 
 
+def _read_up_to(handle, size):
+    """Read size bytes from handle, or fewer only at end of file (PRIVATE).
+
+    A raw unbuffered handle may return fewer bytes than asked for before the
+    end of the file, so keep reading until a read returns nothing.
+    """
+    data = handle.read(size)
+    if not 0 < len(data) < size:
+        return data
+    # Gather the rest in a bytearray, as adding to bytes copies them each time.
+    data = bytearray(data)
+    while len(data) < size:
+        more = handle.read(size - len(data))
+        if not more:
+            break
+        data += more
+    return bytes(data)
+
+
 def _read_exact(handle, size):
     """Read exactly size bytes from handle, else raise ValueError (PRIVATE)."""
-    data = handle.read(size)
+    data = _read_up_to(handle, size)
     if len(data) != size:
         raise _TruncatedBlockError(
             f"Truncated BGZF block: expected {size} bytes, got {len(data)}"
@@ -460,7 +479,7 @@ def _load_bgzf_block(handle, text_mode=False):
     Returns a tuple (block size and data), or at end of file
     will raise StopIteration.
     """
-    magic = handle.read(4)
+    magic = _read_up_to(handle, 4)
     if not magic:
         # End of file - should we signal this differently now?
         # See https://www.python.org/dev/peps/pep-0479/
