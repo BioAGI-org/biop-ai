@@ -386,6 +386,40 @@ class SQLiteIndexTests(unittest.TestCase):
         finally:
             index.close()
 
+    def test_close_closes_the_index_file(self):
+        """close() closes the SQLite connection, not only the sequence files.
+
+        It used to leave the index file open, so on Windows it could not be
+        deleted after close(), for example by TemporaryDirectory cleanup.
+        """
+        index = SeqIO.index_db(
+            self.index_filename, support.DATA / "Fasta" / "f002", "fasta"
+        )
+        index.close()
+        with self.assertRaisesRegex(sqlite3.ProgrammingError, "closed database"):
+            list(index)
+
+    def test_close_with_a_partly_read_key_iterator(self):
+        """close() releases the index file even mid-way through iterating keys.
+
+        The iterator's SQLite cursor used to keep the file open and locked
+        after close(), while the index and the iterator were still referenced.
+        """
+        index = SeqIO.index_db(
+            self.index_filename, support.DATA / "Fasta" / "f002", "fasta"
+        )
+        keys = iter(index)
+        self.assertEqual(next(keys), "gi|1348912|gb|G26680|G26680")
+        index.close()
+        index.close()  # a second close() is harmless
+        con = sqlite3.dbapi2.connect(self.index_filename, timeout=0)
+        try:
+            con.execute("BEGIN EXCLUSIVE")  # "database is locked" if still open
+            con.rollback()
+        finally:
+            con.close()
+        self.assertIsNotNone(keys)  # keep the iterator referenced until here
+
     def test_str_of_populated_index(self):
         """A populated index_db prints its first key and the object type.
 
