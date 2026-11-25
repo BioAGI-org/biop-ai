@@ -311,7 +311,7 @@ except ValueError:
         # string held in a dict, which copies the whole string each time, so
         # the time grew with the square of the length: 3.4 s for 1.6 million
         # residues, over ten minutes for 16 million. It still parsed
-        # correctly, so time it in a child process, where the 60 second
+        # correctly, so time it in a child process, where the 20 second
         # timeout fails the test on the old code.
         filename = os.fspath(get_file("2uvo_hhsearch.hhr"))
         code = f"""\

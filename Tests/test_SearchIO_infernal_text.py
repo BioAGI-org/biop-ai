@@ -1136,7 +1136,7 @@ class CmsearchCases(unittest.TestCase):
         # lines to a string held in a dict, which copies the whole string
         # each time, so the time grew with the square of the length: 7 s for
         # 1.6 million residues, nine minutes for 8 million. It still parsed
-        # correctly, so time it in a child process, where the 60 second
+        # correctly, so time it in a child process, where the 20 second
         # timeout fails the test on the old code.
         filename = os.fspath(get_file("cmsearch_114_5S_Yeast.txt"))
         code = f"""\

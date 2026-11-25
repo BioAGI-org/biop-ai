@@ -1919,7 +1919,7 @@ for qresult in parse(sys.stdin, {FMT!r}):
         # lines to a string held in a dict, which copies the whole string
         # each time, so the time grew with the square of the length: eight
         # minutes for 8 million residues. It still parsed correctly, so time
-        # it in a child process, where the 60 second timeout fails the test on
+        # it in a child process, where the 20 second timeout fails the test on
         # the old code.
         filename = os.fspath(get_file("text_30_hmmscan_003.out"))
         code = f"""\

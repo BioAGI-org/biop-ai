@@ -156,7 +156,7 @@ class LongLineCases(unittest.TestCase):
         # with about the fourth power of the number of spaces to reject the
         # line, as in test_SearchIO_fasta_m10.py: with 2400 spaces, well over
         # 20 minutes. The indexer matches the line as bytes, so time that too
-        # in a child process, with the same 60 second timeout.
+        # in a child process, with the same 20 second timeout.
         filename = os.fspath(support.DATA / "Fasta" / "output001.m10")
         code = f"""\
 from io import BytesIO
