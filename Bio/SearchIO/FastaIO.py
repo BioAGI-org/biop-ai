@@ -528,10 +528,13 @@ class FastaM10Parser:
                     yield hit, strand
                     hsp_list = []
                 # try to get the hit id and desc, and handle cases without descs
+                hit_descr = line[2:].strip()
+                if not hit_descr:
+                    raise ValueError(f"Hit line with no identifier: {line!r}")
                 try:
-                    hit_id, hit_desc = line[2:].strip().split(" ", 1)
+                    hit_id, hit_desc = hit_descr.split(" ", 1)
                 except ValueError:
-                    hit_id = line[2:].strip().split(" ", 1)[0]
+                    hit_id = hit_descr
                     hit_desc = ""
                 # create the HSP object for Hit
                 frag = HSPFragment(hit_id, query_id)
