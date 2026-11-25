@@ -3321,6 +3321,12 @@ class Alignment:
         index in the alignment. Letters not included in the alignment are
         indicated by -1.
 
+        This requires the full length of each sequence. If the length of a
+        sequence is unknown, a ValueError is raised. This happens, for
+        example, for alignments read from a BED file (which stores a
+        placeholder length for the target) or from a SAM file without @SQ
+        header lines.
+
         For example,
 
         >>> from Bio import Align
