@@ -559,6 +559,24 @@ class AffyTest(unittest.TestCase):
                 ):
                     CelFile.read(io.BytesIO(bad), version=4)
 
+    def testAffy4PaddingCutShort(self):
+        # 15 bytes of padding follow the blob's b"\x04". The parser read them
+        # without checking, so with zero cells, a file cut off inside the
+        # padding parsed without an error (issue #525).
+        data = self.readV4Example(Rows=0, Cols=0, cellNo=0)
+        start = 24 + struct.unpack("<i", data[20:24])[0]
+        end = data.index(b"\x04", start) + 1
+        empty = data[: end + 15]
+        self.assertEqual(CelFile.read(io.BytesIO(empty)).intensities.shape, (0, 0))
+        for size in (0, 3, 14):
+            with self.subTest(size=size):
+                with self.assertRaisesRegex(
+                    CelFile.ParserError,
+                    f"^CEL version 4 file ends early: expected 15 bytes of "
+                    f"padding, found {size}$",
+                ):
+                    CelFile.read(io.BytesIO(empty[: end + size]), version=4)
+
     def testAffy4BadHeaderField(self):
         # A missing header field raised a bare KeyError, which escapes
         # "except ValueError", and a non-integer one a plain ValueError
