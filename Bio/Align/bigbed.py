@@ -955,6 +955,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
         # rest        zero-terminated string in tab-separated format
         formatter = struct.Struct(self.byteorder + "III")
         size = formatter.size
+        chromCount = len(self.targets)
         node = self.tree
         while True:
             try:
@@ -971,6 +972,12 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                             "with a truncated item"
                         )
                     chromId, chromStart, chromEnd = formatter.unpack(data[i:j])
+                    if chromId >= chromCount:
+                        raise ValueError(
+                            f"The item at {chromStart}-{chromEnd} has chromId "
+                            f"{chromId}, which is not in the chromosome index "
+                            f"(number of chromosomes: {chromCount})"
+                        )
                     i = data.index(0, j) + 1
                     rest = data[j:i]
                     yield (chromId, chromStart, chromEnd, rest, 0, len(rest))
