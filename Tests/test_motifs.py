@@ -2956,6 +2956,12 @@ class TestJASPAR(unittest.TestCase):
             self.assertEqual(record[0].counts["T"], [7.0, 8.0])
         record = motifs.parse(StringIO("A x\nC x\nG x\nT x\n"), "pfm-four-rows")
         self.assertEqual(len(record), 0)
+        # A letter and a digit with no separator is a header, not a row.
+        for header in ("T7 promoter", "A1 site", "G4 quadruplex", "C2H2-ZFs"):
+            with self.subTest(header=header):
+                record = motifs.parse(StringIO(header + "\n" + rows), "pfm-four-rows")
+                self.assertEqual(len(record), 1)
+                self.assertEqual(record[0].counts["T"], [7.0, 8.0])
         for text in ("A 1 2\nA 3 4\nC 1 2\nG 1 2\n", rows + "1 2\n"):
             with self.assertRaises(ValueError):
                 motifs.parse(StringIO(text), "pfm-four-rows")

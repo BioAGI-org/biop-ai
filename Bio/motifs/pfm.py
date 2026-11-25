@@ -341,13 +341,14 @@ def _read_pfm_four_rows(handle):
     # A bare ">" is a header too, of a motif with no name.
     name_pattern = re.compile(r"^>\s*(.*)\s*")
     # A row starts with a number, so a line such as "Gene ..." or "end" is
-    # not taken for a row.
+    # not taken for a row. A nucleotide letter must be followed by whitespace,
+    # "[" or "|", so a header such as "T7 promoter" is not a row either.
     # The dot is required inside the optional fraction, so that a run of
     # digits can be matched only one way; otherwise rejecting a long
     # malformed count takes time quadratic in its length.
     number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
     row_pattern_with_nucleotide_letter = re.compile(
-        rf"([ACGTacgt])[\s\[|]*({number}.*)"
+        rf"([ACGTacgt])[\s\[|]+({number}.*)"
     )
     row_pattern_without_nucleotide_letter = re.compile(rf"({number}.*)")
     # The counts are complete numbers, each ended by a space, a "]", a "#"
