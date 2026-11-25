@@ -129,6 +129,15 @@ class TestMauveIO(unittest.TestCase):
         self.assertEqual([r.id for r in alignment], ["b.fa/0-4", "a.fa/0-4"])
         self.assertEqual(iterator.ids, ["2", "1"])
 
+    def test_seq_count(self):
+        """A block whose record count differs from seq_count is an error."""
+        data = "> 1:1-4 + a.fa\nACGT\n> 2:1-4 + b.fa\nACGA\n=\n"
+        self.assertEqual(len(next(MauveIterator(StringIO(data), seq_count=2))), 2)
+        with self.assertRaisesRegex(
+            ValueError, "^Found 2 records in this alignment, told to expect 3$"
+        ):
+            next(MauveIterator(StringIO(data), seq_count=3))
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
