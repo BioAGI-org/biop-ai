@@ -6278,6 +6278,49 @@ class TestScoreDistribution(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "background frequency is zero"):
             ScoreDistribution(pssm=motif.pssm, background=motif.background)
 
+    def test_default_arguments(self):
+        """ScoreDistribution(motif=...) and (pssm=...) match pssm.distribution.
+
+        motif= called methods of the old Bio.Motif API, so it raised
+        AttributeError, and pssm= without a background raised TypeError, as
+        only pssm.distribution filled in the uniform default (#537).
+        """
+        motif = motifs.create([Seq("ACGT"), Seq("ACGA"), Seq("TCGT")])
+        motif.pseudocounts = 0.5
+        motif.background = {"A": 0.3, "C": 0.2, "G": 0.2, "T": 0.3}
+        pssm = motif.pssm
+        for distribution, expected in (
+            (ScoreDistribution(motif=motif), pssm.distribution(motif.background)),
+            (ScoreDistribution(pssm=pssm), pssm.distribution()),
+        ):
+            self.assertEqual(distribution.mo_density, expected.mo_density)
+            self.assertEqual(distribution.bg_density, expected.bg_density)
+            self.assertEqual(
+                distribution.threshold_fpr(0.01), expected.threshold_fpr(0.01)
+            )
+        # Equal counts with a uniform background make every score 0, a
+        # point mass at 0; the bins had zero width, so this divided by zero.
+        motif = motifs.create([Seq("ACGT"), Seq("CGTA"), Seq("GTAC"), Seq("TACG")])
+        distribution = ScoreDistribution(motif=motif, precision=100)
+        self.assertEqual(distribution.bg_density[0], 1)
+        self.assertEqual(distribution.mo_density[0], 1)
+        self.assertEqual(distribution.threshold_fpr(0.01), 0)
+        self.assertEqual(distribution.threshold_fnr(0.01), 0)
+        self.assertEqual(distribution.threshold_patser(), 0)
+        # A single bin (one column, precision 1) gave n_points - 1 == 0,
+        # although the scores span a nonzero interval. All the density is
+        # in that bin, the one for the lowest score.
+        motif = motifs.create([Seq("A"), Seq("A"), Seq("C"), Seq("G"), Seq("T")])
+        motif.pseudocounts = 0.5
+        distribution = ScoreDistribution(motif=motif, precision=1)
+        self.assertGreater(distribution.interval, 0)
+        self.assertEqual(distribution.bg_density, [1])
+        self.assertEqual(len(distribution.mo_density), 1)
+        self.assertAlmostEqual(distribution.mo_density[0], 1)
+        self.assertEqual(distribution.min_score, motif.pssm.min)
+        self.assertEqual(distribution.threshold_fpr(0.01), distribution.min_score)
+        self.assertEqual(distribution.threshold_fnr(0.01), distribution.min_score)
+
 
 # Run only while the GIL is off. A free-threaded build turns it back on when
 # an undeclared extension is imported, unless PYTHON_GIL=0 is set.

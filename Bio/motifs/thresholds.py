@@ -140,65 +140,73 @@ class ScoreDistribution:
     """
 
     def __init__(self, motif=None, precision=10**3, pssm=None, background=None):
-        """Initialize the class."""
+        """Initialize the class.
+
+        Without pssm, the motif's PSSM is used, with the motif's background
+        unless one is given. The background defaults to a uniform one.
+        """
         if pssm is None:
-            self.min_score = min(0.0, motif.min_score())
-            self.interval = max(0.0, motif.max_score()) - self.min_score
-            self.n_points = precision * motif.length
-            self.ic = motif.ic()
+            pssm = motif.pssm
+            if background is None:
+                background = motif.background
+        if background is None:
+            background = dict.fromkeys(pssm.alphabet, 1.0 / len(pssm.alphabet))
+        for letter in pssm.alphabet:
+            if not all(map(math.isfinite, pssm[letter])):
+                raise ValueError(
+                    "Cannot compute the score distribution of a matrix with "
+                    "an infinite or NaN value; a log-odds matrix has -inf "
+                    "wherever a count is zero, which pseudocounts avoid, and "
+                    "+inf or NaN wherever a background frequency is zero"
+                )
+        self.min_score = min(0.0, pssm.min)
+        self.interval = max(0.0, pssm.max) - self.min_score
+        self.n_points = precision * pssm.length
+        self.ic = pssm.mean(background)
+        # With every score 0 (or a single bin) all the density stays in bin 0
+        if self.interval == 0 or self.n_points == 1:
+            self.step = 0.0
         else:
-            for letter in pssm.alphabet:
-                if not all(map(math.isfinite, pssm[letter])):
-                    raise ValueError(
-                        "Cannot compute the score distribution of a matrix with "
-                        "an infinite or NaN value; a log-odds matrix has -inf "
-                        "wherever a count is zero, which pseudocounts avoid, and "
-                        "+inf or NaN wherever a background frequency is zero"
-                    )
-            self.min_score = min(0.0, pssm.min)
-            self.interval = max(0.0, pssm.max) - self.min_score
-            self.n_points = precision * pssm.length
-            self.ic = pssm.mean(background)
-        self.step = self.interval / (self.n_points - 1)
+            self.step = self.interval / (self.n_points - 1)
         self.mo_density = [0.0] * self.n_points
         self.mo_density[-self._index_diff(self.min_score)] = 1.0
         self.bg_density = [0.0] * self.n_points
         self.bg_density[-self._index_diff(self.min_score)] = 1.0
-        if pssm is None:
-            for lo, mo in zip(motif.log_odds(), motif.pwm()):
-                self.modify(lo, mo, motif.background)
-        else:
-            mo_density = _Bins.from_list(self.mo_density)
-            bg_density = _Bins.from_list(self.bg_density)
-            mismatched = False
-            for position in range(pssm.length):
-                shifts = []
-                mo_weights = []
-                bg_weights = []
-                lo = pssm[:, position]
-                for letter, score in lo.items():
-                    bg = background[letter]
-                    mo = pow(2, pssm[letter, position]) * bg
-                    shifts.append(self._index_diff(score))
-                    mo_weights.append(mo)
-                    bg_weights.append(bg)
-                mo_density = self._add_column(mo_density, shifts, mo_weights)
-                bg_density = self._add_column(bg_density, shifts, bg_weights)
-                if not math.isclose(math.fsum(mo_weights), 1, rel_tol=1e-3):
-                    mismatched = True
-            self.mo_density = mo_density.tolist()
-            self.bg_density = bg_density.tolist()
-            if mismatched:
-                # 2**score * background gives the motif's probabilities only
-                # for the background the PSSM was built with.
-                warnings.warn(
-                    "The background is not the one the PSSM was built with, so "
-                    "the motif score density does not add up to 1, and "
-                    "threshold_fnr and threshold_balanced will be wrong.",
-                    BiopythonWarning,
-                )
+        mo_density = _Bins.from_list(self.mo_density)
+        bg_density = _Bins.from_list(self.bg_density)
+        mismatched = False
+        for position in range(pssm.length):
+            shifts = []
+            mo_weights = []
+            bg_weights = []
+            lo = pssm[:, position]
+            for letter, score in lo.items():
+                bg = background[letter]
+                mo = pow(2, pssm[letter, position]) * bg
+                shifts.append(self._index_diff(score))
+                mo_weights.append(mo)
+                bg_weights.append(bg)
+            mo_density = self._add_column(mo_density, shifts, mo_weights)
+            bg_density = self._add_column(bg_density, shifts, bg_weights)
+            if not math.isclose(math.fsum(mo_weights), 1, rel_tol=1e-3):
+                mismatched = True
+        self.mo_density = mo_density.tolist()
+        self.bg_density = bg_density.tolist()
+        if mismatched:
+            # 2**score * background gives the motif's probabilities only
+            # for the background the PSSM was built with.
+            warnings.warn(
+                "The background is not the one the PSSM was built with, so "
+                "the motif score density does not add up to 1, and "
+                "threshold_fnr and threshold_balanced will be wrong.",
+                BiopythonWarning,
+            )
 
     def _index_diff(self, x, y=0.0):
+        if self.step == 0:
+            # Every score is 0, or there is a single bin, so all the density
+            # stays in bin 0.
+            return 0
         return int((x - y + 0.5 * self.step) // self.step)
 
     def _shift(self, new, density, d, weight):
