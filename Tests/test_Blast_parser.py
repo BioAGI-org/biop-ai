@@ -15432,6 +15432,134 @@ class TestBlastMalformedInput(unittest.TestCase):
                         f"BLAST request ABC123 has status {status} on the server",
                     )
 
+    def test_qblast_max_wait(self):
+        """qblast must give up on a search still running after max_wait seconds."""
+        page = b"<!DOCTYPE html><html>\n<!--QBlastInfoBegin\n\tStatus=WAITING\nQBlastInfoEnd\n-->"
+        responses = [io.BytesIO(b"RID = ABC123\nRTOE = 11\n")]
+        responses += [io.BufferedReader(io.BytesIO(page)) for i in range(20)]
+        responses.append(AssertionError("qblast still polling after 20 polls"))
+        # A simulated clock, so the test does not take 15 minutes.
+        clock = [1000.0]
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        with (
+            mock.patch.object(Blast, "urlopen", side_effect=responses) as urlopen,
+            mock.patch.object(Blast.qblast, "previous", 0),
+            mock.patch.object(Blast.time, "time", lambda: clock[0]),
+            mock.patch.object(Blast.time, "monotonic", lambda: clock[0]),
+            mock.patch.object(Blast.time, "sleep", sleep),
+            warnings.catch_warnings(record=True) as caught,
+        ):
+            warnings.simplefilter("always")
+            with self.assertRaises(TimeoutError) as cm:
+                Blast.qblast("blastn", "nt", "ACGT", max_wait=900)
+        self.assertEqual(
+            str(cm.exception), "BLAST request ABC123 did not finish within 900 seconds"
+        )
+        # The submit request, then a poll every minute from 0 to 840 seconds;
+        # at 900 seconds the time is up, so there is no further poll.
+        self.assertEqual(urlopen.call_count, 1 + 15)
+        self.assertEqual(clock[0], 1000.0 + 900)
+        # The warning after 10 minutes is given once, not on every poll.
+        self.assertEqual(
+            [str(warning.message) for warning in caught],
+            [
+                "BLAST request ABC123 is taking longer than 10 minutes, "
+                "consider re-issuing it"
+            ],
+        )
+
+    def test_qblast_max_wait_shorter_than_poll_interval(self):
+        """qblast must not poll again once max_wait seconds have passed."""
+        page = b"<!DOCTYPE html><html>\n<!--QBlastInfoBegin\n\tStatus=WAITING\nQBlastInfoEnd\n-->"
+        responses = [
+            io.BytesIO(b"RID = ABC123\nRTOE = 11\n"),
+            io.BufferedReader(io.BytesIO(page)),
+            # A poll after max_wait would get the results, too late.
+            io.BufferedReader(io.BytesIO(b"<?xml version='1.0'?>\n")),
+        ]
+        clock = [1000.0]
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        with (
+            mock.patch.object(Blast, "urlopen", side_effect=responses) as urlopen,
+            mock.patch.object(Blast.qblast, "previous", 0),
+            mock.patch.object(Blast.time, "time", lambda: clock[0]),
+            mock.patch.object(Blast.time, "monotonic", lambda: clock[0]),
+            mock.patch.object(Blast.time, "sleep", sleep),
+        ):
+            with self.assertRaises(TimeoutError) as cm:
+                Blast.qblast("blastn", "nt", "ACGT", max_wait=1)
+        self.assertEqual(
+            str(cm.exception), "BLAST request ABC123 did not finish within 1 seconds"
+        )
+        # The submit request and one poll; qblast sleeps 1 second, not the
+        # 60 seconds to the next poll.
+        self.assertEqual(urlopen.call_count, 2)
+        self.assertEqual(clock[0], 1000.0 + 1)
+
+    def test_qblast_max_wait_sleep_ends_early(self):
+        """qblast must not poll after max_wait if its sleep ends slightly early."""
+        page = b"<!DOCTYPE html><html>\n<!--QBlastInfoBegin\n\tStatus=WAITING\nQBlastInfoEnd\n-->"
+        responses = [
+            io.BytesIO(b"RID = ABC123\nRTOE = 11\n"),
+            io.BufferedReader(io.BytesIO(page)),
+            # A poll after max_wait would get the results, too late, and
+            # sooner than the NCBI allows.
+            io.BufferedReader(io.BytesIO(b"<?xml version='1.0'?>\n")),
+        ]
+        clock = [1000.0]
+
+        def sleep(seconds):
+            # A coarse clock: the sleep appears to end a millisecond early.
+            clock[0] += seconds - 0.001
+
+        with (
+            mock.patch.object(Blast, "urlopen", side_effect=responses) as urlopen,
+            mock.patch.object(Blast.qblast, "previous", 0),
+            mock.patch.object(Blast.time, "time", lambda: clock[0]),
+            mock.patch.object(Blast.time, "monotonic", lambda: clock[0]),
+            mock.patch.object(Blast.time, "sleep", sleep),
+        ):
+            with self.assertRaises(TimeoutError):
+                Blast.qblast("blastn", "nt", "ACGT", max_wait=1)
+        self.assertEqual(urlopen.call_count, 2)
+
+    def test_qblast_max_wait_does_not_delay_later_polls(self):
+        """A qblast call that timed out must not hold back the next call's poll."""
+        page = b"<!DOCTYPE html><html>\n<!--QBlastInfoBegin\n\tStatus=WAITING\nQBlastInfoEnd\n-->"
+        clock = [1000.0]
+        polls = []
+
+        def urlopen(request, timeout):
+            if b"CMD=Get" in request.data:
+                polls.append(clock[0])
+                return io.BufferedReader(io.BytesIO(page))
+            return io.BytesIO(b"RID = ABC123\nRTOE = 11\n")
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        with (
+            mock.patch.object(Blast, "urlopen", side_effect=urlopen),
+            mock.patch.object(Blast.qblast, "previous", 0),
+            mock.patch.object(Blast.time, "time", lambda: clock[0]),
+            mock.patch.object(Blast.time, "monotonic", lambda: clock[0]),
+            mock.patch.object(Blast.time, "sleep", sleep),
+        ):
+            for i in range(3):
+                with self.assertRaises(TimeoutError):
+                    Blast.qblast("blastn", "nt", "ACGT", max_wait=10)
+        # The first call polls at once, then times out at 1010 seconds. The
+        # second must wait until 20 seconds after that poll, and times out
+        # first, at 1020 seconds. The third call is then free to poll.
+        self.assertEqual(polls, [1000.0, 1020.0])
+        self.assertEqual(clock[0], 1030.0)
+
     def test_qblast_password_keeps_global_opener(self):
         """Using qblast with a password must not replace urllib's global opener."""
         with warnings.catch_warnings():

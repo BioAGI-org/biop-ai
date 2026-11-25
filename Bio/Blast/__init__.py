@@ -1078,6 +1078,7 @@ def qblast(
     username="blast",
     password=None,
     timeout=None,
+    max_wait=None,
 ):
     """BLAST search using NCBI's QBLAST server.
 
@@ -1117,6 +1118,11 @@ def qblast(
                       made in time raises urllib.error.URLError. Default
                       None, which uses socket.getdefaulttimeout() (no limit
                       unless set).
+     - max_wait       Total time in seconds to wait for the results. Once
+                      this has passed and the search is still running,
+                      raise TimeoutError; the message gives the RID, so the
+                      results can be fetched later. Default None, which
+                      waits until the search finishes.
 
     This function does no checking of the validity of the parameters
     and passes the values to the server as is.  More help is available at:
@@ -1256,25 +1262,44 @@ def qblast(
     # will take longer thus at least 70s with delay. Therefore,
     # start with 20s delay, thereafter once a minute.
     delay = 20  # seconds
-    start_time = time.time()
+    start_time = time.monotonic()
+    if max_wait is not None:
+        deadline = start_time + max_wait
+    warned = False
     while True:
         current = time.time()
         wait = qblast.previous + delay - current
+        if max_wait is not None:
+            timed_out = TimeoutError(
+                f"BLAST request {rid} did not finish within {max_wait} seconds"
+            )
+            remaining = deadline - time.monotonic()
+            if wait >= remaining:
+                # The next poll would come too late. Sleep for the time left
+                # and give up, rather than trust the clock to have passed the
+                # deadline after the sleep (a sleep can end slightly early).
+                if remaining > 0:
+                    time.sleep(remaining)
+                raise timed_out
         if wait > 0:
             time.sleep(wait)
-            qblast.previous = current + wait
-        else:
-            qblast.previous = current
+            current += wait
+        if max_wait is not None and time.monotonic() >= deadline:
+            raise timed_out
+        # Record the poll only when it is sent, so a call that timed out
+        # does not delay the next one.
+        qblast.previous = current
         # delay by at least 60 seconds only if running the request against the public NCBI API
         if delay < 60 and url_base == NCBI_BLAST_URL:
             # Wasn't a quick return, must wait at least a minute
             delay = 60
-        elapsed = time.time() - start_time
-        if elapsed >= 600:
+        elapsed = time.monotonic() - start_time
+        if elapsed >= 600 and not warned:
             warnings.warn(
                 f"BLAST request {rid} is taking longer than 10 minutes, consider re-issuing it",
                 BiopythonWarning,
             )
+            warned = True
         request = Request(url_base, message, {"User-Agent": "BiopythonClient"})
         stream = open_url(request, timeout=timeout)
         data = stream.peek()
