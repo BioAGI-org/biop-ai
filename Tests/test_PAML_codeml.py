@@ -196,6 +196,22 @@ class ModTest(unittest.TestCase):
         self.assertEqual(seen, [(cwd, True)])
         self.assertEqual(os.getcwd(), cwd)
 
+    def testRelPathsOnAnotherDrive(self):
+        # On Windows, os.path.relpath raises ValueError for a file on another
+        # drive than working_dir; such a path is written as an absolute one.
+        cml = codeml.Codeml(
+            alignment=self.align_file,
+            tree=self.tree_file,
+            out_file=self.out_file,
+            working_dir=self.working_dir,
+        )
+        error = ValueError("path is on mount 'C:', start on mount 'D:'")
+        with mock.patch.object(os.path, "relpath", side_effect=error):
+            cml._set_rel_paths()
+        self.assertEqual(cml._rel_alignment, os.path.abspath(self.align_file))
+        self.assertEqual(cml._rel_tree, os.path.abspath(self.tree_file))
+        self.assertEqual(cml._rel_out_file, os.path.abspath(self.out_file))
+
     def testOverlappingRuns(self):
         # Two runs in different threads, both inside the program at once,
         # each in its own working_dir (issue #569).

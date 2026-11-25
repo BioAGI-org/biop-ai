@@ -14,6 +14,7 @@ import os
 import os.path
 
 from . import _parse_baseml
+from ._paml import _relpath
 from ._paml import Paml
 
 
@@ -166,7 +167,7 @@ class Baseml(Paml):
         """
         Paml._set_rel_paths(self)
         if self.tree is not None:
-            self._rel_tree = os.path.relpath(self.tree, self.working_dir)
+            self._rel_tree = _relpath(self.tree, self.working_dir)
 
     def run(self, ctl_file=None, verbose=False, command="baseml", parse=True):
         """Run ``baseml`` using the current configuration.
