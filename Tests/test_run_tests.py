@@ -694,6 +694,29 @@ class ParallelProbeTests(unittest.TestCase):
                     self.assertEqual(len(set(workers)), 1, output)
 
 
+class CIWorkflowTests(unittest.TestCase):
+    def test_check_tests_waits_for_every_test_job(self):
+        # check_tests is the "All tests passed" gate that docs waits for, so
+        # it must need every test_* job in .github/workflows/ci.yml.
+        path = os.path.join(TESTS_DIR, os.pardir, ".github", "workflows", "ci.yml")
+        if not os.path.isfile(path):
+            self.skipTest("no .github/workflows/ci.yml, e.g. in an sdist")
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        # Job keys and needs may carry a trailing comment, and a job body may
+        # hold blank lines.
+        jobs = set(re.findall(r"^  (test_\w+): *(?:#.*)?$", text, re.MULTILINE))
+        self.assertIn("test_pypy", jobs)
+        needs = re.search(
+            r"^  check_tests: *(?:#.*)?\n(?:(?:    .*)?\n)*?"
+            r"    needs: \[([^\]]*)\] *(?:#.*)?$",
+            text,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(needs)
+        self.assertEqual(jobs, {job.strip() for job in needs.group(1).split(",")})
+
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     unittest.main(testRunner=runner)
