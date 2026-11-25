@@ -367,6 +367,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 )
             elif line == "//":
                 # Reached the end of the alignment.
+                if not aligned_sequences:
+                    raise ValueError("Found '//' before any sequence lines")
                 AlignmentIterator._check_blocks_complete(aligned_sequences, widths)
                 for feature, lengths in gc_widths.items():
                     # A #=GC line may come before or after the sequences of
