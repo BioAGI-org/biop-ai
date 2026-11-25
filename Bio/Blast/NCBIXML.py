@@ -510,6 +510,9 @@ class _XMLparser(ContentHandler):
         """
         self._tag = []
         self._value = ""
+        # Text pieces from characters(), joined into _value by the element
+        # handlers; adding each piece to _value would copy it every time.
+        self._chunks = []
         self._debug = debug
         self._debug_ignore_list = []
         self._method_name_level = 1
@@ -525,6 +528,8 @@ class _XMLparser(ContentHandler):
          - attr -- tag attributes
 
         """
+        self._value += "".join(self._chunks)
+        self._chunks = []
         self._tag.append(name)
 
         if len(self._tag) == 1:
@@ -562,7 +567,7 @@ class _XMLparser(ContentHandler):
          - ch -- characters read
 
         """
-        self._value += ch  # You don't ever get the whole string
+        self._chunks.append(ch)  # You don't ever get the whole string
 
     def endElement(self, name):
         """Found XML end tag.
@@ -571,6 +576,8 @@ class _XMLparser(ContentHandler):
          - name -- tag name
 
         """
+        self._value += "".join(self._chunks)
+        self._chunks = []
         # DON'T strip any white space, we may need it e.g. the hsp-midline
 
         # Try to call a method (defined in subclasses)
@@ -1292,7 +1299,7 @@ def parse(handle, debug=0):
         expat_parser = expat.ParserCreate()
         # Coalesce the character data within each block passed to Parse()
         # (for example around character or entity references) into fewer
-        # characters() calls, so its string concatenation stays cheap.
+        # characters() calls.
         expat_parser.buffer_text = True
         # BLAST XML never declares entities; nested ones could expand a
         # small file to megabytes of text ("billion laughs").
