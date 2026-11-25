@@ -983,6 +983,13 @@ class CmsearchCases(unittest.TestCase):
         qresults = list(parse(io.StringIO(text), FMT))
         self.assertEqual([q.id for q in qresults], ["IRES_HCV", "5S_rRNA", "U2"])
 
+    def test_cmsearch_query_line_without_id(self):
+        """Test that a 'Query:' line with no query ID raises ValueError."""
+        text = "# cmsearch :: search CM(s) against a sequence database\nQuery:\n//\n"
+        with self.assertRaises(ValueError) as cm:
+            list(parse(io.StringIO(text), FMT))
+        self.assertEqual(str(cm.exception), "'Query:' line has no query ID")
+
     def test_cmsearch_mq(self):
         """Test parsing infernal-text, cmsearch, multiple queries"""
         tab_file = get_file("cmsearch_114_IRES_5S_U2_Yeast.txt")

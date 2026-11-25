@@ -644,6 +644,12 @@ The ``QueryResult.iteritems`` method, named after the Python 2
 ``zip(qresult.iterhit_keys(), qresult.iterhits())`` or the ``items``
 property instead.
 
+Changed in biop-ai 1.89 without a deprecation period. The ``infernal-text``
+parser now raises ``ValueError`` on a ``//`` line that comes before any
+``Query:`` line. It used to skip that line and return the queries after it.
+``SearchIO.index`` raises the same ``ValueError`` there, where it used to
+raise ``UnboundLocalError``.
+
 Changed in biop-ai 1.89 without a deprecation period. The ``hhsuite2-text``
 and ``hhsuite3-text`` parsers now raise ``ValueError`` in two cases where
 they used to raise ``RuntimeError``: when a line after ``No N`` is not a hit

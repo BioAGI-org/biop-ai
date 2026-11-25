@@ -123,13 +123,18 @@ class InfernalTextParser(_BaseInfernalParser):
 
     def _parse_qresult(self):
         """Parse a Infernal query block (PRIVATE)."""
-        self._read_until(lambda line: line.startswith(_DIV_QUERY_START))
+        self._read_until(lambda line: line.startswith((_DIV_QUERY_START, _DIV_QUERY_END)))
+        if self.line.startswith(_DIV_QUERY_END):
+            raise ValueError("Found a '//' line before any 'Query:' line")
 
         while self.line:
             # create qresult for query id
             if self.line.startswith(_DIV_QUERY_START):
-                qid = self.line.strip().split()[1]
-                qlen = int(re.sub(_RE_NOT_NUMERIC, "", self.line.strip().split()[-1]))
+                parts = self.line.split()
+                if len(parts) < 2:
+                    raise ValueError("'Query:' line has no query ID")
+                qid = parts[1]
+                qlen = int(re.sub(_RE_NOT_NUMERIC, "", parts[-1]))
 
                 # store qresult attributes
                 qresult_attrs = {
@@ -516,17 +521,23 @@ class InfernalTextIndexer(SearchIndexer):
         handle = self._handle
         handle.seek(0)
         start_offset = handle.tell()
+        qresult_key = None
 
         while True:
             line = read_forward(handle)
             end_offset = handle.tell()
 
             if line.startswith(_DIV_QUERY_START.encode()):
-                qresult_key = line.strip().split()[1]
+                parts = line.split()
+                if len(parts) < 2:
+                    raise ValueError("'Query:' line has no query ID")
+                qresult_key = parts[1]
                 # qresult start offset is the offset of this line
                 # (starts with the start mark)
                 start_offset = end_offset - len(line)
             elif line.startswith(_DIV_QUERY_END.encode()):
+                if qresult_key is None:
+                    raise ValueError("Found a '//' line before any 'Query:' line")
                 yield qresult_key.decode(), start_offset, 0
                 start_offset = end_offset
             elif not line:
