@@ -2969,6 +2969,45 @@ int main(void)
                 self.assertEqual(clusterid1.tolist(), clusterid2.tolist())
                 np.testing.assert_allclose(celldata1, celldata2)
 
+    def test_somcluster_grid_too_large(self):
+        """Check a SOM grid of more than INT_MAX cells is rejected.
+
+        The C code counted the nxgrid * nygrid cells in an int, which
+        overflowed, so the table of cell pointers was never filled in.
+        """
+        if TestCluster.module != "Bio.Cluster":
+            self.skipTest("Pycluster does not check the grid size")
+        if sys.maxsize < 2**40:
+            self.skipTest("NumPy cannot describe a 16 GB array on 32-bit")
+        # 65536 * 32769 cells is more than INT_MAX. The strides make a
+        # C-contiguous view over a single double, so no memory is allocated;
+        # the rejected celldata is never read. If the check is lost, the C
+        # code goes on with an overflowed cell count and a buffer far larger
+        # than its memory, so run it in a child process.
+        code = """\
+import numpy as np
+from Bio.Cluster import _cluster
+
+nx, ny = 65536, 32769
+celldata = np.lib.stride_tricks.as_strided(
+    np.zeros(1), shape=(nx, ny, 1), strides=(ny * 8, 8, 8), writeable=False
+)
+assert celldata.flags.c_contiguous
+# data=None stops the call before any clustering if celldata passes.
+try:
+    _cluster.somcluster(
+        np.zeros((1, 2), np.intc), celldata, None, None, np.ones(1),
+        0, 0.02, 1, "e", 1,
+    )
+except RuntimeError as exception:
+    print(exception)
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, timeout=60
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "celldata array too large\n", result.stderr)
+
     def test_wrong_size_raises_value_error(self):
         """Check a weight or celldata of the wrong size raises ValueError.
 
