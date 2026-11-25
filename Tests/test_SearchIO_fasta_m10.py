@@ -3387,6 +3387,25 @@ class TruncatedCases(unittest.TestCase):
             list(parse(StringIO("".join(lines)), FMT))
         self.assertEqual(str(cm.exception), "Unexpected line: '; bogus line\\n'")
 
+    def test_hit_line_with_no_identifier(self):
+        """Test a bare '>>' hit line, which has no hit identifier."""
+        # In output002.m10, line 95 is the first '>>' hit line and line 117
+        # is that hit's aligned-sequence line. With both blanked, the parser
+        # used to return a Hit whose id was ''.
+        with open(get_file("output002.m10")) as handle:
+            lines = handle.readlines()
+        self.assertTrue(lines[94].startswith(">>gi|162139799|ref|NP_309634.2| "))
+        self.assertEqual(lines[116], ">gi|162139799|ref|NP_309634.2| ..\n")
+        lines[94] = ">>\n"
+        for aligned in (lines[116], "> ..\n"):
+            lines[116] = aligned
+            with self.subTest(aligned=aligned):
+                with self.assertRaises(ValueError) as cm:
+                    list(parse(StringIO("".join(lines)), FMT))
+                self.assertEqual(
+                    str(cm.exception), "Hit line with no identifier: '>>\\n'"
+                )
+
     def test_hit_block_before_first_query_line(self):
         """Test a '>>>' hit block that comes before any query line."""
         # In output001.m10, lines 1 to 7 are the preamble, line 8 is the first
@@ -3485,6 +3504,15 @@ class TruncatedCases(unittest.TestCase):
             with self.subTest(lines=n, via="index"):
                 with self.assertRaisesRegex(ValueError, message):
                     look_up(text, "gi|10955263|ref|NP_052604.1|")
+        # a bare '>>' hit line straight before the end marker
+        text = "".join(lines[:94]) + ">>\n>>><<<\n"
+        message = "^Hit line with no identifier: '>>\\\\n'$"
+        with self.subTest(lines="bare '>>'", via="parse"):
+            with self.assertRaisesRegex(ValueError, message):
+                list(parse(StringIO(text), FMT))
+        with self.subTest(lines="bare '>>'", via="index"):
+            with self.assertRaisesRegex(ValueError, message):
+                look_up(text, "gi|10955263|ref|NP_052604.1|")
 
 
 class LongLineCases(unittest.TestCase):
