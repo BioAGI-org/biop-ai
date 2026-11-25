@@ -659,6 +659,11 @@ celldata_converter(PyObject* argument, void* pointer)
         PyErr_SetString(PyExc_ValueError, "celldata array is empty");
         goto exit;
     }
+    if (nx > INT_MAX / ny) {
+        /* the number of grid cells nx * ny is counted in an int below */
+        PyErr_SetString(PyExc_RuntimeError, "celldata array too large");
+        goto exit;
+    }
     if (view->itemsize != sizeof(double)) {
         PyErr_SetString(PyExc_RuntimeError,
                         "celldata array has incorrect data type");
