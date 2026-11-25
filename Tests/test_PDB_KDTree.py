@@ -11,6 +11,8 @@
 
 """Unit tests for those parts of the Bio.PDB module using Bio.PDB.kdtrees."""
 
+import inspect
+import platform
 import sys
 import threading
 import unittest
@@ -127,6 +129,21 @@ class KDTreeTest(unittest.TestCase):
             kdtrees.KDTree(coords, nonsense=1)
         kdt = kdtrees.KDTree(coordinates=coords, bucket_size=2)
         self.assertEqual(len(kdt.search(coords[0], 1e-6)), 1)
+
+    @unittest.skipIf(
+        platform.python_implementation() == "PyPy",
+        "PyPy gives C extension methods no __text_signature__",
+    )
+    def test_KDTree_method_signatures(self):
+        """The search methods report their positional-only signatures."""
+        kdt = kdtrees.KDTree(random((10, 3)) * 10)
+        for method, expected in (
+            (kdt.search, "(center, radius, /)"),
+            (kdt.neighbor_search, "(radius, /)"),
+            (kdt.neighbor_simple_search, "(radius, /)"),
+        ):
+            with self.subTest(method=method.__name__):
+                self.assertEqual(str(inspect.signature(method)), expected)
 
     def test_KDTree_point_search(self):
         """Test searching all points within a certain radius of center.
