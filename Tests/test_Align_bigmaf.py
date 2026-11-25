@@ -13196,10 +13196,14 @@ class TestAlign_malformed_first_block(unittest.TestCase):
             data = bytearray(stream.read())
         # The offset of the R tree index is at byte 24 of the file header.
         # Set the item count in the index header (byte 8), and the count of
-        # the root leaf (byte 2 of the node after the 48-byte header), to 0.
+        # the root leaf (byte 2 of the node after the 48-byte header), to 0,
+        # and so the item count of the file, which starts the data section
+        # (its offset is at byte 16 of the file header).
         (index_offset,) = struct.unpack_from("<Q", data, 24)
         struct.pack_into("<Q", data, index_offset + 8, 0)
         struct.pack_into("<H", data, index_offset + 48 + 2, 0)
+        (data_offset,) = struct.unpack_from("<Q", data, 16)
+        struct.pack_into("<Q", data, data_offset, 0)
         with self.assertRaises(ValueError) as cm:
             Align.parse(EndOfFileGuard(bytes(data)), "bigmaf")
         self.assertEqual(str(cm.exception), "The R tree index has no data blocks")
