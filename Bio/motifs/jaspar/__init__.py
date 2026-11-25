@@ -293,7 +293,9 @@ def _read_jaspar(handle):
     # whitespace inside the brackets, which split() drops: "\s*(.*)\s*"
     # would backtrack cubically over a long run of it with no "]".
     row_pat_long = re.compile(r"\s*([ACGT])\s*\[(?:(.*)\])?")
-    row_pat_short = re.compile(r"\s*(.+)\s*")
+    # A row without a letter must start with a number. Any other non-blank
+    # line is an error, rather than being read as a row of counts.
+    row_pat_short = re.compile(r"[-+]?\.?\d")
 
     identifier = None
     name = None
@@ -307,34 +309,38 @@ def _read_jaspar(handle):
         row_match_short = row_pat_short.match(line)
 
         if head_match:
+            if row_count or identifier is not None:
+                raise ValueError(f"Motif has only {row_count} of its 4 rows")
             identifier = head_match.group(1)
             if head_match.group(3):
                 name = head_match.group(3)
             else:
                 name = identifier
-        elif row_match_long:
+            continue
+        if row_match_long:
             (letter, counts_str) = row_match_long.group(1, 2)
             if counts_str is None:
                 raise ValueError(f"JASPAR matrix row for {letter} has no closing ']'")
-            words = counts_str.split()
-            counts[letter] = [float(x) for x in words]
-            row_count += 1
-            if row_count == 4:
-                record.append(Motif(identifier, name, alphabet=alphabet, counts=counts))
-                identifier = None
-                name = None
-                counts = {}
-                row_count = 0
         elif row_match_short:
-            words = row_match_short.group(1).split()
-            counts[nucleotides[row_count]] = [float(x) for x in words]
-            row_count += 1
-            if row_count == 4:
-                record.append(Motif(identifier, name, alphabet=alphabet, counts=counts))
-                identifier = None
-                name = None
-                counts = {}
-                row_count = 0
+            letter = nucleotides[row_count]
+            counts_str = line
+        elif line:
+            raise ValueError(f"Not a JASPAR header or matrix row: {line!r}")
+        else:
+            continue
+        if letter in counts:
+            raise ValueError(f"Second row for {letter} in one motif: {line!r}")
+        counts[letter] = [float(x) for x in counts_str.split()]
+        row_count += 1
+        if row_count == 4:
+            record.append(Motif(identifier, name, alphabet=alphabet, counts=counts))
+            identifier = None
+            name = None
+            counts = {}
+            row_count = 0
+
+    if row_count or identifier is not None:
+        raise ValueError(f"Last motif has only {row_count} of its 4 rows")
 
     return record
 
