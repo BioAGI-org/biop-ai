@@ -254,7 +254,11 @@ the 'fasta-pearson' format, as it explicitly indicates which lines are comments.
         else:
             line = None
         self._line = line
-        sequence = "".join(lines).encode().translate(None, b" \t\r\n")
+        text = "".join(lines)
+        # Seq stores bytes, so a non-ASCII letter would become several bytes.
+        if not text.isascii():
+            raise ValueError("Non-ASCII characters are not allowed in the sequence.")
+        sequence = text.encode("ascii").translate(None, b" \t\r\n")
         try:
             first_word = title.split(None, 1)[0]
         except IndexError:

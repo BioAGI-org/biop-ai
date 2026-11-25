@@ -255,6 +255,13 @@ class TestFastaWithComments(unittest.TestCase):
             ValueError, SeqIO.read, support.DATA / "Fasta" / "aster_blast.pro", "fasta"
         )
 
+    def test_non_ascii_sequence(self):
+        """Test non-ASCII sequence letters raise ValueError in every variant."""
+        for fmt in ("fasta", "fasta-2line", "fasta-blast", "fasta-pearson"):
+            with self.subTest(fmt=fmt):
+                with self.assertRaises(ValueError):
+                    SeqIO.read(StringIO(">x\nAé\n"), fmt)
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
