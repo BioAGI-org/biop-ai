@@ -1392,6 +1392,48 @@ Root:  16
         self.assertEqual(data.comment, "[&p]")
         self.assertEqual(data.branchlength, 0.1)
 
+    def test_empty_tree_string(self):
+        """An empty tree, with or without ';' or spaces, has only its root."""
+        for text in ("", ";", "   ", " ; "):
+            with self.subTest(text=text):
+                tree = Trees.Tree(text)
+                self.assertEqual(len(tree.chain), 1)
+                self.assertEqual(tree.node(tree.root).succ, [])
+
+    def test_NexusComments_parentheses(self):
+        """Accept ( and ) inside a comment on a leaf, a clade or the root."""
+        A = ("A", 0.1, None, "[&x=(1)]")
+        root = (None, 0.0, None, None)
+        for text, nodes in [
+            ("(A:0.1[&x=(1)],B);", [root, A, ("B", 0.0, None, None)]),
+            ("(A[&x=(1)]:0.1,B);", [root, A, ("B", 0.0, None, None)]),
+            (
+                "((A,B)[&x=(1)]:0.1,C);",
+                [
+                    root,
+                    (None, 0.1, None, "[&x=(1)]"),
+                    ("C", 0.0, None, None),
+                    ("A", 0.0, None, None),
+                    ("B", 0.0, None, None),
+                ],
+            ),
+            (
+                "(A,B)[&x=(1)];",
+                [
+                    (None, 0.0, None, "[&x=(1)]"),
+                    ("A", 0.0, None, None),
+                    ("B", 0.0, None, None),
+                ],
+            ),
+            # a tree of one leaf is read as "(A)"; it raised IndexError
+            ("A:0.1[&x=(1)];", [root, A]),
+            ("A;", [root, ("A", 0.0, None, None)]),
+        ]:
+            with self.subTest(text=text):
+                self.assertEqual(self._get_flat_nodes(Trees.Tree(text)), nodes)
+        with self.assertRaisesRegex(Trees.TreeError, "Parentheses do not match"):
+            Trees.Tree("(A[&x=(1)](B),C);")
+
     def test_NexusComments_many_per_node(self):
         """Strip a million comments from one node in linear time.
 
