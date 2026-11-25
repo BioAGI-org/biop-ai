@@ -338,7 +338,8 @@ def _read_pfm_four_rows(handle):
     """
     record = Record()
 
-    name_pattern = re.compile(r"^>\s*(.+)\s*")
+    # A bare ">" is a header too, of a motif with no name.
+    name_pattern = re.compile(r"^>\s*(.*)\s*")
     # A row starts with a number, so a line such as "Gene ..." or "end" is
     # not taken for a row.
     # The dot is required inside the optional fraction, so that a run of
@@ -375,6 +376,8 @@ def _read_pfm_four_rows(handle):
         )
 
         if name_match:
+            if row_count or motif_name is not None:
+                raise ValueError(f"Motif has only {row_count} of its 4 rows")
             motif_name = name_match.group(1)
             continue
         if row_match_with_nucleotide_letter:
@@ -406,7 +409,7 @@ def _read_pfm_four_rows(handle):
             nucleotide_counts = {}
             row_count = 0
 
-    if row_count:
+    if row_count or motif_name is not None:
         raise ValueError(f"Last motif has only {row_count} of its 4 rows")
 
     return record

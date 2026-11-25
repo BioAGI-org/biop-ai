@@ -2960,6 +2960,39 @@ class TestJASPAR(unittest.TestCase):
             with self.assertRaises(ValueError):
                 motifs.parse(StringIO(text), "pfm-four-rows")
 
+    def test_pfm_four_rows_short_motif_before_header(self):
+        """A motif not complete at the next header raises ValueError."""
+        rows = "A 1 1\nC 1 1\nG 1 1\nT 1 1\n"
+        for text in (
+            ">m1\n1 2\n3 4\n>m2\n5 6\n7 8\n",
+            ">m1\nA 1 2\nC 3 4\n>m2\nG 5 6\nT 7 8\n",
+            ">m1\nA 1 2\nC 3 4\n>m2\nA 5 6\nC 7 8\nG 1 1\nT 1 1\n",
+            # A fifth row in m1 starts a motif that is open at the m2 header.
+            ">m1\n" + rows + "T 9 9\n>m2\n" + rows + ">m3\n" + rows,
+            # A header with no rows at all before the next one.
+            ">m1\n>m2\n" + rows,
+            ">m1\n" + rows + ">m2\n>m3\n" + rows,
+            # A header with no name is a header too.
+            ">m1\n1 2\n3 4\n>\n5 6\n7 8\n",
+        ):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(ValueError, "Motif has only . of its 4"):
+                    motifs.parse(StringIO(text), "pfm-four-rows")
+
+    def test_pfm_four_rows_short_last_motif(self):
+        """A motif not complete at the end of the file raises ValueError."""
+        rows = "A 1 1\nC 1 1\nG 1 1\nT 1 1\n"
+        for text, message in (
+            (">m1\n" + rows + ">m2\nA 1 1\n", r"^Last motif has only 1 of its 4 rows$"),
+            # A header with no rows was dropped, or gave an empty result.
+            (">m1\n" + rows + ">m2\n", r"^Last motif has only 0 of its 4 rows$"),
+            (">m1\n", r"^Last motif has only 0 of its 4 rows$"),
+            (">m1\n" + rows + ">\n", r"^Last motif has only 0 of its 4 rows$"),
+        ):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(ValueError, message):
+                    motifs.parse(StringIO(text), "pfm-four-rows")
+
     def test_pfm_four_rows_malformed_count(self):
         """A malformed count raises ValueError naming its row (issue #422)."""
         rows = "C 3 4\nG 5 6\nT 7 8\n"
