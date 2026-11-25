@@ -15175,6 +15175,18 @@ class TestBlastErrors(unittest.TestCase):
 class TestBlastMalformedInput(unittest.TestCase):
     """Malformed input raises ValueError, also under python -O."""
 
+    def setUp(self):
+        # Tests here that mock time.sleep would move qblast.previous into the
+        # future, and so delay a real search run later in the same process.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", BiopythonDeprecationWarning)
+            from Bio.Blast import NCBIWWW
+
+        for qblast in (Blast.qblast, NCBIWWW.qblast):
+            patcher = mock.patch.object(qblast, "previous", 0)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def check_parse_error(self, filename, old, new, message):
         """Parse a test file with old replaced by new, and check the error."""
         path = support.DATA / "Blast" / filename
@@ -15468,7 +15480,6 @@ class TestBlastMalformedInput(unittest.TestCase):
 
         with (
             mock.patch.object(Blast, "urlopen", side_effect=responses) as urlopen,
-            mock.patch.object(Blast.qblast, "previous", 0),
             mock.patch.object(Blast.time, "time", lambda: clock[0]),
             mock.patch.object(Blast.time, "monotonic", lambda: clock[0]),
             mock.patch.object(Blast.time, "sleep", sleep),
@@ -15509,7 +15520,6 @@ class TestBlastMalformedInput(unittest.TestCase):
 
         with (
             mock.patch.object(Blast, "urlopen", side_effect=responses) as urlopen,
-            mock.patch.object(Blast.qblast, "previous", 0),
             mock.patch.object(Blast.time, "time", lambda: clock[0]),
             mock.patch.object(Blast.time, "monotonic", lambda: clock[0]),
             mock.patch.object(Blast.time, "sleep", sleep),
@@ -15542,7 +15552,6 @@ class TestBlastMalformedInput(unittest.TestCase):
 
         with (
             mock.patch.object(Blast, "urlopen", side_effect=responses) as urlopen,
-            mock.patch.object(Blast.qblast, "previous", 0),
             mock.patch.object(Blast.time, "time", lambda: clock[0]),
             mock.patch.object(Blast.time, "monotonic", lambda: clock[0]),
             mock.patch.object(Blast.time, "sleep", sleep),
@@ -15568,7 +15577,6 @@ class TestBlastMalformedInput(unittest.TestCase):
 
         with (
             mock.patch.object(Blast, "urlopen", side_effect=urlopen),
-            mock.patch.object(Blast.qblast, "previous", 0),
             mock.patch.object(Blast.time, "time", lambda: clock[0]),
             mock.patch.object(Blast.time, "monotonic", lambda: clock[0]),
             mock.patch.object(Blast.time, "sleep", sleep),
