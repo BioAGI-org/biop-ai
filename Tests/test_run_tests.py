@@ -701,14 +701,18 @@ class ParallelProbeTests(unittest.TestCase):
 
 
 class CIWorkflowTests(unittest.TestCase):
-    def test_check_tests_waits_for_every_test_job(self):
-        # check_tests is the "All tests passed" gate that docs waits for, so
-        # it must need every test_* job in .github/workflows/ci.yml.
+    def read_ci_yml(self):
+        """Return the text of .github/workflows/ci.yml, or skip without it."""
         path = os.path.join(TESTS_DIR, os.pardir, ".github", "workflows", "ci.yml")
         if not os.path.isfile(path):
             self.skipTest("no .github/workflows/ci.yml, e.g. in an sdist")
         with open(path, encoding="utf-8") as handle:
-            text = handle.read()
+            return handle.read()
+
+    def test_check_tests_waits_for_every_test_job(self):
+        # check_tests is the "All tests passed" gate that docs waits for, so
+        # it must need every test_* job in .github/workflows/ci.yml.
+        text = self.read_ci_yml()
         # Job keys and needs may carry a trailing comment, and a job body may
         # hold blank lines.
         jobs = set(re.findall(r"^  (test_\w+): *(?:#.*)?$", text, re.MULTILINE))
@@ -725,11 +729,7 @@ class CIWorkflowTests(unittest.TestCase):
     def test_macos_and_windows_install_graphics_dependencies(self):
         # Without reportlab and Pillow every Bio.Graphics and KGML rendering
         # test skips, and expected_skips.txt allows that, so nothing warns.
-        path = os.path.join(TESTS_DIR, os.pardir, ".github", "workflows", "ci.yml")
-        if not os.path.isfile(path):
-            self.skipTest("no .github/workflows/ci.yml, e.g. in an sdist")
-        with open(path, encoding="utf-8") as handle:
-            text = handle.read()
+        text = self.read_ci_yml()
         for job in ("test_macos", "test_windows"):
             with self.subTest(job=job):
                 body = re.search(
@@ -750,6 +750,23 @@ class CIWorkflowTests(unittest.TestCase):
                 }
                 self.assertIn("reportlab", packages)
                 self.assertIn("pillow", packages)
+
+    def test_test_jobs_fail_on_test_failures(self):
+        # The Windows test step was continue-on-error as a stopgap, and while
+        # it was, 29 to 41 failing tests per run were reported as success.
+        text = self.read_ci_yml()
+        jobs = re.findall(
+            r"^  (test_\w+): *(?:#.*)?\n((?:(?:    .*)?\n)*)", text, re.MULTILINE
+        )
+        self.assertIn("test_windows", [job for job, body in jobs])
+        for job, body in jobs:
+            with self.subTest(job=job):
+                # Any value but false (true, or an expression) lets the job
+                # or a step fail without failing the run.
+                self.assertNotRegex(
+                    body,
+                    re.compile(r"^ +(?:- +)?continue-on-error:(?! *false\b)", re.M),
+                )
 
 
 if __name__ == "__main__":
