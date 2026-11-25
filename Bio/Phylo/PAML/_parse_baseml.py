@@ -9,6 +9,9 @@
 
 import re
 
+# A line of numbers only, such as the SEs; codeml prints them the same way
+from ._parse_codeml import numbers_row_re
+
 line_floats_re = re.compile(r"-?(?<!\d)\d+\.\d+")
 
 
@@ -65,29 +68,51 @@ def parse_parameters(lines, results, num_params):
 
 def parse_parameter_list(lines, parameters, num_params):
     """Parse the parameters list, which is just an unlabeled list of numeric values."""
-    for line_num in range(len(lines)):
-        line = lines[line_num]
+    branch_labels_re = re.compile(r"\s*\d+\.\.\d+(?:\s+\d+\.\.\d+)*\s*$")
+    param_list_flag = False
+    SEs_flag = False
+    for line in lines:
         # Find all floating point numbers in this line
         line_floats_res = line_floats_re.findall(line)
         line_floats = [float(val) for val in line_floats_res]
+        # The parameter list is the first line after the lnL line other
+        # than the branch labels ("6..7     7..8 ..."). Only that line is
+        # a candidate, even if it does not have num_params numbers.
+        param_list_row = False
+        if param_list_flag and line.strip() and not branch_labels_re.match(line):
+            param_list_flag = False
+            param_list_row = len(line_floats) == num_params
+        # The SEs are the first non-blank line after "SEs for parameters:",
+        # if it is a row of numbers (a nan or inf there is not counted in
+        # line_floats). Any other line is left for the checks below.
+        SEs_row = False
+        if SEs_flag and line.strip():
+            SEs_flag = False
+            SEs_row = numbers_row_re.match(line) is not None
+        if "lnL(ntime:" in line:
+            # With np 0 the parameter list is an empty line, so there is
+            # no row to wait for.
+            param_list_flag = num_params > 0
         # Get parameter list. This can be useful for specifying starting
         # parameters in another run by copying the list of parameters
         # to a file called in.baseml. Since the parameters must be in
         # a fixed order and format, copying and pasting to the file is
         # best. For this reason, they are grabbed here just as a long
-        # string and not as individual numbers.
-        if len(line_floats) == num_params:
+        # string and not as individual numbers. Only the line after the
+        # lnL line is the list; the base frequencies before it and the
+        # "rate:" and "freq:" lines after it can have num_params numbers too.
+        elif param_list_row:
             parameters["parameter list"] = line.strip()
-            # Find SEs. The same format as parameters above is maintained
-            # since there is a correspondence between the SE format and
-            # the parameter format.
-            # Example match:
-            # "SEs for parameters:
-            # -1.00000 -1.00000 -1.00000 801727.63247 730462.67590 -1.00000
-            if "SEs for parameters:" in lines[line_num + 1]:
-                SEs_line = lines[line_num + 2]
-                parameters["SEs"] = SEs_line.strip()
-            break
+        # Find SEs. The same format as parameters above is maintained
+        # since there is a correspondence between the SE format and
+        # the parameter format.
+        # Example match:
+        # "SEs for parameters:
+        # -1.00000 -1.00000 -1.00000 801727.63247 730462.67590 -1.00000
+        elif "SEs for parameters:" in line:
+            SEs_flag = True
+        elif SEs_row:
+            parameters["SEs"] = line.strip()
     return parameters
 
 
