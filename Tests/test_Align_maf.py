@@ -13448,6 +13448,25 @@ AlignmentCounts object with
             str(cm.exception), "sequence size is incorrect (found 219, expected 319)"
         )
 
+    def test_reading_i_q_line_not_after_s_line(self):
+        """Test that an 'i' or 'q' line must follow an 's' line."""
+        # Without an 's' line before them, these used to raise
+        # UnboundLocalError. After an 'e' line for the same sequence, they
+        # annotated the record of the 'e' line.
+        s_line = "s hg18.chr1 0 3 + 100 ACG\n"
+        e_line = "e hg18.chr1 10 5 + 200 I\n"
+        for before in ("", e_line, s_line + e_line):
+            for line in ("i hg18.chr1 C 0 C 0\n", "q hg18.chr1 999\n"):
+                with self.subTest(before=before, line=line):
+                    data = f"##maf version=1\n\na score=1\n{before}{line}{s_line}\n"
+                    with self.assertRaises(ValueError) as cm:
+                        next(Align.parse(StringIO(data), "maf"))
+                    self.assertEqual(
+                        str(cm.exception),
+                        f"Found '{line[0]}' line that does not follow an 's' "
+                        f"line:\n{line}",
+                    )
+
     def test_reading_length_coords_mismatch(self):
         """Test parsing inconsistent MAF file length_coords_mismatch.maf."""
         path = support.DATA / "MAF" / "length_coords_mismatch.maf"

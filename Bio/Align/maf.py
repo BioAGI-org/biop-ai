@@ -360,6 +360,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             else:
                 raise ValueError("Unknown annotation variable '%s'" % key)
 
+        target = None  # the record of the preceding 's' line
         for line in stream:
             if line.startswith("#"):
                 continue
@@ -383,6 +384,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 aligned_sequences.append(text.encode())
                 seq = Seq(None, length=srcSize)
                 record = SeqRecord(seq, id=src, name="", description="")
+                target = record
                 records.append(record)
                 starts.append(start)
                 sizes.append(size)
@@ -393,9 +395,13 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     raise ValueError(
                         f"Expected 6 fields in 'i' line, found {len(words)}:\n{line}"
                     )
-                if words[1] != src:  # from the previous "s" line
+                if target is None:
                     raise ValueError(
-                        f"Expected 'i' line for {src} (the preceding 's' line), "
+                        f"Found 'i' line that does not follow an 's' line:\n{line}"
+                    )
+                if words[1] != target.id:
+                    raise ValueError(
+                        f"Expected 'i' line for {target.id} (the preceding 's' line), "
                         f"found {words[1]}:\n{line}"
                     )
                 leftStatus = words[2]
@@ -409,10 +415,10 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                             f"{', '.join(AlignmentIterator.status_characters)} "
                             f"in 'i' line, found '{status}':\n{line}"
                         )
-                record.annotations["leftStatus"] = leftStatus
-                record.annotations["leftCount"] = leftCount
-                record.annotations["rightStatus"] = rightStatus
-                record.annotations["rightCount"] = rightCount
+                target.annotations["leftStatus"] = leftStatus
+                target.annotations["leftCount"] = leftCount
+                target.annotations["rightStatus"] = rightStatus
+                target.annotations["rightCount"] = rightCount
             elif line.startswith("e"):
                 words = line[1:].split()
                 if len(words) != 6:
@@ -434,6 +440,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     )
                 sequence = Seq(None, length=srcSize)
                 record = SeqRecord(sequence, id=src, name="", description="")
+                target = None
                 end = start + size
                 if strand == "+":
                     segment = (start, end)
@@ -451,13 +458,17 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     raise ValueError(
                         f"Expected 3 fields in 'q' line, found {len(words)}:\n{line}"
                     )
-                if words[1] != src:  # from the previous "s" line
+                if target is None:
                     raise ValueError(
-                        f"Expected 'q' line for {src} (the preceding 's' line), "
+                        f"Found 'q' line that does not follow an 's' line:\n{line}"
+                    )
+                if words[1] != target.id:
+                    raise ValueError(
+                        f"Expected 'q' line for {target.id} (the preceding 's' line), "
                         f"found {words[1]}:\n{line}"
                     )
                 value = words[2].replace("-", "")
-                record.annotations["quality"] = value
+                target.annotations["quality"] = value
             elif not line.strip():
                 # reached the end of the alignment, but keep reading until we
                 # find the next alignment
