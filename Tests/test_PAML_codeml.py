@@ -6,11 +6,14 @@
 """Tests for PAML codeml module."""
 
 import itertools
+import ntpath
 import os
 import os.path
+import pathlib
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -18,6 +21,7 @@ import support
 
 import Bio
 from Bio.Phylo.PAML import codeml
+from Bio.Phylo.PAML._paml import _windows_command
 from Bio.Phylo.PAML._paml import PamlError
 from Bio.Phylo.PAML._parse_codeml import parse_model
 
@@ -155,7 +159,7 @@ class ModTest(unittest.TestCase):
         )
 
     def testRunRestoresCwdOnError(self):
-        # run() changes to working_dir; it must change back if it raises.
+        # run() must leave the process working directory alone if it raises.
         cwd = os.getcwd()
         self.addCleanup(os.chdir, cwd)
         self.cml.alignment = self.align_file
@@ -169,28 +173,263 @@ class ModTest(unittest.TestCase):
             self.cml.run(ctl_file="nonexistent")
         self.assertEqual(os.getcwd(), cwd)
 
-    def testRunRestoresCwdOnInterruptAfterChdir(self):
-        # A KeyboardInterrupt just after the change to working_dir must not
-        # leave the process there.
+    def testRunKeepsProcessCwd(self):
+        # The working directory is shared by all threads, so run() must not
+        # change it; the program is run in working_dir instead (issue #569).
         cwd = os.getcwd()
         self.addCleanup(os.chdir, cwd)
         self.cml.alignment = self.align_file
         self.cml.tree = self.tree_file
         self.cml.out_file = self.out_file
         self.cml.working_dir = self.working_dir
-        real_chdir = os.chdir
-        calls = []
+        seen = []
 
-        def chdir_then_interrupt(path):
-            real_chdir(path)
-            calls.append(path)
-            if len(calls) == 1:
-                raise KeyboardInterrupt
+        def fake_call(args, **kwargs):
+            ctl = os.path.join(kwargs.get("cwd", ""), args[1])
+            seen.append((os.getcwd(), os.path.isfile(ctl)))
+            return 0
 
-        with mock.patch("os.chdir", chdir_then_interrupt):
-            with self.assertRaises(KeyboardInterrupt):
-                self.cml.run(command="no_such_paml_binary")
+        with mock.patch.object(os, "chdir") as chdir:
+            with mock.patch.object(subprocess, "call", fake_call):
+                self.cml.run(parse=False)
+        chdir.assert_not_called()
+        self.assertEqual(seen, [(cwd, True)])
         self.assertEqual(os.getcwd(), cwd)
+
+    def testOverlappingRuns(self):
+        # Two runs in different threads, both inside the program at once,
+        # each in its own working_dir (issue #569).
+        cwd = os.getcwd()
+        self.addCleanup(os.chdir, cwd)
+        barrier = threading.Barrier(2, timeout=30)
+        seen = {}
+        errors = []
+
+        def fake_call(args, cwd=None, **kwargs):
+            barrier.wait()  # both runs have written their control file
+            where = os.getcwd() if cwd is None else cwd
+            seen[where] = (os.getcwd(), os.path.isfile(os.path.join(where, args[1])))
+            barrier.wait()  # neither run has returned yet
+            return 0
+
+        def run(working_dir):
+            cml = codeml.Codeml(
+                alignment=self.align_file,
+                tree=self.tree_file,
+                out_file=os.path.join(working_dir, "out.txt"),
+                working_dir=working_dir,
+            )
+            try:
+                cml.run(parse=False)
+            except BaseException as err:
+                barrier.abort()
+                errors.append(err)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dirs = [os.path.join(tmp, "a"), os.path.join(tmp, "b")]
+            threads = [threading.Thread(target=run, args=(d,)) for d in dirs]
+            with mock.patch.object(subprocess, "call", fake_call):
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join()
+            self.assertEqual(errors, [])
+            self.assertEqual(seen, dict.fromkeys(dirs, (cwd, True)))
+        self.assertEqual(os.getcwd(), cwd)
+
+    def testRunSubclassWriteCtlFile(self):
+        # A subclass may override write_ctl_file() with no arguments; run()
+        # must still use it, and the file must end up in working_dir.
+        class MyCodeml(codeml.Codeml):
+            def write_ctl_file(self):
+                super().write_ctl_file()
+                with open(self.ctl_file, "a") as handle:
+                    handle.write("* written by MyCodeml\n")
+
+        cml = MyCodeml(
+            alignment=self.align_file,
+            tree=self.tree_file,
+            out_file=self.out_file,
+            working_dir=self.working_dir,
+        )
+        seen = []
+
+        def fake_call(args, cwd=None, **kwargs):
+            with open(os.path.join(cwd, args[1])) as handle:
+                seen.append(handle.read().endswith("* written by MyCodeml\n"))
+            return 0
+
+        with mock.patch.object(subprocess, "call", fake_call):
+            cml.run(parse=False)
+        self.assertEqual(seen, [True])
+        self.assertEqual(cml.ctl_file, "codeml.ctl")
+        self.assertFalse(os.path.exists("codeml.ctl"))
+
+    def testRunCtlFileThroughSymlink(self):
+        # A relative control file name is resolved by the file system, as
+        # PAML resolves it, so "link/.." goes to the parent of link's target.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        work = os.path.join(tmp.name, "work")
+        target = os.path.join(tmp.name, "real", "sub")
+        os.makedirs(work)
+        os.makedirs(target)
+        try:
+            os.symlink(target, os.path.join(work, "link"))
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot make a symbolic link here")
+        new_name = os.path.join("link", os.pardir, "mine.ctl")
+
+        class MyCodeml(codeml.Codeml):
+            def write_ctl_file(self):
+                self.ctl_file = new_name
+                super().write_ctl_file()
+
+        seen = []
+
+        def fake_call(args, cwd=None, **kwargs):
+            seen.append(os.path.isfile(os.path.join(cwd, args[1])))
+            return 0
+
+        cml = MyCodeml(
+            alignment=self.align_file,
+            tree=self.tree_file,
+            out_file=self.out_file,
+            working_dir=work,
+        )
+        with mock.patch.object(subprocess, "call", fake_call):
+            cml.run(parse=False)
+        self.assertEqual(seen, [True])
+        self.assertTrue(os.path.isfile(os.path.join(tmp.name, "real", "mine.ctl")))
+        self.assertFalse(os.path.exists(os.path.join(work, "mine.ctl")))
+
+    def testRunSubclassChoosesCtlFile(self):
+        # A subclass's write_ctl_file() may set ctl_file to another file;
+        # run() must run PAML on that one and keep the new name. A relative
+        # name is taken relative to working_dir, as when run() changed to
+        # it, so a file of that name in the caller's directory is left alone.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        # Registered last so it runs first: Windows cannot remove the
+        # current directory
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(tmp.name)
+        with open("mine.ctl", "w") as handle:
+            handle.write("caller's file\n")
+
+        class MyCodeml(codeml.Codeml):
+            def write_ctl_file(self):
+                self.ctl_file = new_name
+                super().write_ctl_file()
+
+        seen = []
+
+        def fake_call(args, cwd=None, **kwargs):
+            seen.append(os.path.isfile(os.path.join(cwd, args[1])))
+            return 0
+
+        for new_name in [os.path.join(self.working_dir, "mine.ctl"), "mine.ctl"]:
+            with self.subTest(new_name=new_name):
+                cml = MyCodeml(
+                    alignment=self.align_file,
+                    tree=self.tree_file,
+                    out_file=self.out_file,
+                    working_dir=self.working_dir,
+                )
+                seen.clear()
+                os.makedirs(self.working_dir, exist_ok=True)
+                ctl_path = os.path.join(self.working_dir, "mine.ctl")
+                if os.path.exists(ctl_path):
+                    os.remove(ctl_path)
+                with mock.patch.object(subprocess, "call", fake_call):
+                    cml.run(parse=False)
+                self.assertEqual(seen, [True])
+                self.assertEqual(cml.ctl_file, new_name)
+                self.assertTrue(os.path.isfile(ctl_path))
+                with open("mine.ctl") as handle:
+                    self.assertEqual(handle.read(), "caller's file\n")
+
+    def testWindowsCommand(self):
+        # On Windows a relative program path and a bare name found in
+        # working_dir are taken relative to working_dir, as when run()
+        # changed to it; other bare names are left for the PATH search.
+        wd = "C:\\work"
+
+        def isfile(path):
+            return path == "C:\\work\\codeml.exe"
+
+        with mock.patch.object(ntpath, "isfile", isfile):
+            for command, expected in [
+                (".\\codeml.exe", "C:\\work\\.\\codeml.exe"),
+                ("bin\\codeml.exe", "C:\\work\\bin\\codeml.exe"),
+                ("D:\\paml\\codeml.exe", "D:\\paml\\codeml.exe"),
+                ("codeml", "C:\\work\\codeml.exe"),
+                ("codeml.exe", "C:\\work\\codeml.exe"),
+                ("baseml", "baseml"),
+                (pathlib.PureWindowsPath("codeml"), "C:\\work\\codeml.exe"),
+                (b"codeml", "C:\\work\\codeml.exe"),
+            ]:
+                with self.subTest(command=command):
+                    self.assertEqual(
+                        _windows_command(command, wd, path=ntpath), expected
+                    )
+            self.assertEqual(
+                _windows_command("codeml", b"C:\\work", path=ntpath),
+                "C:\\work\\codeml.exe",
+            )
+
+    def testWindowsCommandPath(self):
+        # A bare name is looked up in working_dir, then on PATH, and given
+        # to Windows as a path, so that Windows does not look for it in the
+        # directory of the calling process (here C:\caller) first. A name
+        # found in neither (evolver) is left as it is, so Windows may still
+        # run the copy in the directory of the calling process. A PATH
+        # entry may be in double quotes.
+        files = {
+            "C:\\caller\\codeml.exe",
+            "C:\\work\\codeml.exe",
+            "C:\\bin\\codeml.exe",
+            "C:\\caller\\baseml.exe",
+            "C:\\bin\\baseml.exe",
+            "C:\\work\\tools\\yn00.exe",
+            "C:\\caller\\evolver.exe",
+            "C:\\Program Files\\PAML\\mcmctree.exe",
+        }
+        path_env = 'C:\\bin;tools;"C:\\Program Files\\PAML"'
+        with mock.patch.object(ntpath, "isfile", files.__contains__):
+            with mock.patch.dict(os.environ, {"PATH": path_env}):
+                for command, expected in [
+                    ("codeml", "C:\\work\\codeml.exe"),
+                    ("baseml", "C:\\bin\\baseml.exe"),
+                    ("yn00", "C:\\work\\tools\\yn00.exe"),
+                    ("evolver", "evolver"),
+                    ("mcmctree", "C:\\Program Files\\PAML\\mcmctree.exe"),
+                ]:
+                    with self.subTest(command=command):
+                        self.assertEqual(
+                            _windows_command(command, "C:\\work", path=ntpath),
+                            expected,
+                        )
+
+    def testRunWindowsCommand(self):
+        # run() passes the command resolved against working_dir on Windows.
+        os.makedirs(self.working_dir, exist_ok=True)
+        with open(os.path.join(self.working_dir, "codeml.exe"), "w"):
+            pass
+        self.cml.alignment = self.align_file
+        self.cml.tree = self.tree_file
+        self.cml.out_file = self.out_file
+        self.cml.working_dir = self.working_dir
+        seen = []
+
+        def fake_call(args, **kwargs):
+            seen.append(args[0])
+            return 0
+
+        with mock.patch.object(subprocess, "call", fake_call):
+            with mock.patch.object(os, "name", "nt"):
+                self.cml.run(parse=False)
+        self.assertEqual(seen, [os.path.join(self.working_dir, "codeml.exe")])
 
     def testCtlFileValidOnRead(self):
         self.assertRaises(

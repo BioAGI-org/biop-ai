@@ -18,8 +18,61 @@ class PamlError(EnvironmentError):
     """
 
 
+def _windows_command(command, working_dir, path=os.path):
+    r"""Return the program Windows would run from working_dir (PRIVATE).
+
+    Windows looks for a relative program path such as ``.\codeml.exe``
+    in the current directory of the calling process, not in the cwd given
+    to subprocess, and looks there for a bare name such as ``codeml``
+    before it searches PATH. run() used to change to working_dir, so make
+    such a command relative to working_dir instead, and look a bare name
+    up in working_dir and then on PATH here, so that Windows does not look
+    in the directory of the calling process first. A bare name found in
+    neither is left as it is, so Windows may still find it in the
+    directory of the calling process.
+
+    The lookup order is working_dir, then each PATH entry in turn. Unlike
+    CreateProcessW, it does not first search the directory of the Python
+    executable or the Windows system directories.
+    """
+    command = os.fsdecode(command)
+    working_dir = os.fsdecode(working_dir)
+    if path.isabs(command):
+        return command
+    if path.dirname(command):
+        return path.join(working_dir, command)
+    # Windows adds .exe to a program name without an extension
+    name = command if path.splitext(command)[1] else command + ".exe"
+    # A relative PATH entry was taken relative to working_dir, too. Windows
+    # allows an entry in double quotes, such as "C:\Program Files\PAML".
+    for folder in ["", *os.environ.get("PATH", "").split(path.pathsep)]:
+        program = path.join(working_dir, folder.strip('"'), name)
+        if path.isfile(program):
+            return program
+    return command
+
+
 class Paml:
     """Base class for wrapping PAML commands."""
+
+    _ctl_dir = None  # set by run() while write_ctl_file() runs
+
+    @property
+    def ctl_file(self):
+        """Control file that write_ctl_file() writes.
+
+        While run() calls write_ctl_file(), a relative path is taken
+        relative to working_dir.
+        """
+        if self._ctl_dir is None:
+            return self._ctl_file
+        # Not os.path.abspath, which would take "link/.." away before the
+        # file system follows a symbolic link named link.
+        return os.path.join(self._ctl_dir, self._ctl_file)
+
+    @ctl_file.setter
+    def ctl_file(self, value):
+        self._ctl_file = value
 
     def __init__(self, alignment=None, working_dir=None, out_file=None):
         """Initialize the class."""
@@ -100,34 +153,35 @@ class Paml:
             raise ValueError("Output file not specified.")
         if self.working_dir is None:
             raise ValueError("Working directory not specified.")
-        # Get the current working directory
-        cwd = os.getcwd()
-        # Move to the desired working directory
-        if not os.path.exists(self.working_dir):
-            os.mkdir(self.working_dir)
-        # Change back even if something below raises, including a
-        # KeyboardInterrupt that comes just after the change
-        try:
-            os.chdir(self.working_dir)
-            # If no external control file was specified...
-            if ctl_file is None:
-                # Dynamically build a control file
+        # Work relative to working_dir without changing the working directory
+        # of the whole process, which other threads share
+        wd = self.working_dir
+        if not os.path.exists(wd):
+            os.mkdir(wd)
+        # If no external control file was specified...
+        if ctl_file is None:
+            # Dynamically build a control file. write_ctl_file() writes to
+            # self.ctl_file, so take a relative one, including one that a
+            # subclass's write_ctl_file() chooses, relative to working_dir
+            # while it runs, as when run() changed to working_dir.
+            self._ctl_dir = wd
+            try:
                 self.write_ctl_file()
-                ctl_file = self.ctl_file
-            else:
-                if not os.path.exists(ctl_file):
-                    raise FileNotFoundError(
-                        "The specified control file does not exist."
-                    )
-            if verbose:
-                result_code = subprocess.call([command, ctl_file])
-            else:
-                with open(os.devnull) as dn:
-                    result_code = subprocess.call(
-                        [command, ctl_file], stdout=dn, stderr=dn
-                    )
-        finally:
-            os.chdir(cwd)
+            finally:
+                del self._ctl_dir
+            ctl_file = self.ctl_file
+        elif not os.path.exists(os.path.join(wd, ctl_file)):
+            raise FileNotFoundError("The specified control file does not exist.")
+        program = command
+        if os.name == "nt":
+            program = _windows_command(command, wd)
+        if verbose:
+            result_code = subprocess.call([program, ctl_file], cwd=wd)
+        else:
+            with open(os.devnull) as dn:
+                result_code = subprocess.call(
+                    [program, ctl_file], cwd=wd, stdout=dn, stderr=dn
+                )
         if result_code > 0:
             # If the program fails for any reason
             raise PamlError(
