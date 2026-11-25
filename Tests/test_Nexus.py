@@ -2605,6 +2605,18 @@ print(json.dumps([nexus.unaltered_taxlabels, nexus.taxlabels, list(nexus.matrix)
         nexus.add_sequence("a", "A")
         self.assertEqual(nexus.taxlabels, ["a", "a.copy1", "a.copy"])
 
+    def test_add_sequence_empty_first(self):
+        """add_sequence takes an empty sequence as the first one."""
+        # With no matrix yet and nothing to pad, this raised TypeError.
+        nexus = Nexus.Nexus()
+        nexus.add_sequence("a", "")
+        self.assertEqual(nexus.matrix, {"a": Seq("")})
+        self.assertEqual(nexus.ntax, 1)
+        self.assertEqual(nexus.nchar, 0)
+        self.assertEqual(nexus.taxlabels, ["a"])
+        nexus.add_sequence("b", "AC")
+        self.assertEqual(nexus.matrix, {"a": Seq("--"), "b": Seq("AC")})
+
 
 class TestWideClade(unittest.TestCase):
     """A clade with many children parses in linear time.

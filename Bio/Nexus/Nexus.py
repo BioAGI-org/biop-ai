@@ -2123,6 +2123,10 @@ class Nexus:
         else:
             unique_name = name
 
+        if self.matrix is None:
+            # A new Nexus() has no matrix until insert_gap makes one, which
+            # it does not do for an empty first sequence.
+            self.matrix = {}
         if unique_name in self.matrix:
             raise ValueError(
                 "ERROR. There is a discrepancy between taxlabels "
