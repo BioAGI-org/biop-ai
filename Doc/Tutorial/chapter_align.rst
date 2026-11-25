@@ -578,6 +578,11 @@ alignment are indicated by -1:
     array([ 0,  1,  3,  4,  5, -1, -1]),
     array([0, 1, 2, 3, 4, 5])]
 
+As ``inverse_indices`` needs the full length of each sequence, it raises a
+``ValueError`` if the length of a sequence is unknown; this is the case for
+alignments read from a BED file, or from a SAM file without ``@SQ`` header
+lines.
+
 .. _`paragraph:alignment_counts`:
 
 Counting identities, mismatches, and gaps
