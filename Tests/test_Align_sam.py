@@ -7664,6 +7664,25 @@ AlignmentCounts object with
 
 
 class TestAlign_sambam(unittest.TestCase):
+    def test_inverse_indices_without_sq_header(self):
+        """Test inverse_indices when no @SQ header gives the target length."""
+        stream = StringIO(
+            "r1\t0\tchr1\t5\t60\t4M\t*\t0\t0\tACGT\t*\n"
+            "r2\t0\tchr1\t1\t60\t4I\t*\t0\t0\tACGT\t*\n"
+        )
+        alignments = list(Align.parse(stream, "sam"))
+        for alignment in alignments:
+            with self.subTest(query=alignment.query.id):
+                with self.assertRaisesRegex(
+                    ValueError, "length of a sequence is unknown"
+                ):
+                    alignment.inverse_indices
+        alignment = alignments[0]
+        alignment.sequences[0] = Seq(None, length=10)
+        inverse_indices = alignment.inverse_indices
+        self.assertEqual(inverse_indices[0].tolist(), [-1] * 4 + [0, 1, 2, 3, -1, -1])
+        self.assertEqual(inverse_indices[1].tolist(), [0, 1, 2, 3])
+
     def test_ex1(self):
         with Align.parse(support.DATA / "SamBam" / "ex1.sam", "sam") as alignments:
             self.check_ex1(alignments)
