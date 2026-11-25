@@ -606,6 +606,41 @@ for quote in "['":
             self.fail("Newick parser took over 60 s on 65 characters")
         self.assertEqual(result.stdout, "1\n1\n", result.stderr)
 
+    def test_newick_many_unclosed_comments(self):
+        """Reject many unclosed comments quickly."""
+        # Each '[' with no ']' after it once scanned to the end of the text,
+        # so 100,000 of them took quadratic time, over 10 minutes. Run in a
+        # child process, so that a regression fails, not hangs.
+        code = r"""
+from io import StringIO
+from Bio import Phylo
+from Bio.Phylo.NewickIO import NewickError
+try:
+    Phylo.read(StringIO("(" + "a[" * 100000), "newick")
+except NewickError as e:
+    print(e)
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("Newick parser took over 60 s on 100,000 unclosed comments")
+        self.assertEqual(
+            result.stdout, "Mismatch, 1 open vs 0 close parentheses.\n", result.stderr
+        )
+
 
 class TreeTests(unittest.TestCase):
     """Tests for methods on BaseTree.Tree objects."""

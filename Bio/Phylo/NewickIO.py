@@ -49,7 +49,30 @@ tokens = [
     (r"\n", "newline"),
 ]
 tokenizer = re.compile(f"({'|'.join(token[0] for token in tokens)})")
+_tokenizer_no_comment = re.compile(
+    f"({'|'.join(token for token, name in tokens if name != 'comment')})"
+)
 token_dict = {name: re.compile(token) for token, name in tokens}
+
+
+def _tokenize(text):
+    """Yield the token matches that re.finditer(tokenizer, text) gives (PRIVATE).
+
+    A '[' starts a comment only if some ']' follows it. With finditer, each
+    '[' after the last ']' scanned to the end of the text before failing, so
+    many of them took quadratic time. Past the last ']', use a tokenizer
+    without the comment pattern: it finds the same tokens in linear time.
+    """
+    last_close = text.rfind("]")
+    pos = 0
+    while pos <= last_close:
+        match = tokenizer.match(text, pos)
+        if match:
+            yield match
+            pos = match.end()
+        else:
+            pos += 1
+    yield from _tokenizer_no_comment.finditer(text, pos)
 
 
 # ---------------------------------------------------------
@@ -179,7 +202,7 @@ class Parser:
 
     def _parse_tree(self, text):
         """Parse the text representation into an Tree object (PRIVATE)."""
-        tokens = re.finditer(tokenizer, text.strip())
+        tokens = _tokenize(text.strip())
 
         new_clade = self.new_clade
         root_clade = new_clade()
