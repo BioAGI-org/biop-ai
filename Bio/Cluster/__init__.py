@@ -788,9 +788,11 @@ class Record:
         self.uniqid = line[0]
         self.expid = []
         cols = {0: "GENEID"}
-        for word in line[1:]:
+        for i, word in enumerate(line[1:], 1):
             if word in ("NAME", "GWEIGHT", "GORDER"):
-                cols[line.index(word)] = word
+                if word in cols.values():
+                    raise ValueError("Header has more than one %s column" % word)
+                cols[i] = word
             else:
                 self.expid.append(word)
         expcols = [i for i in range(n) if i not in cols]

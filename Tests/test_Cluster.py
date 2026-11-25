@@ -4987,6 +4987,50 @@ record.save({self.jobname!r}, *{list(solutions)!r})
             "G1\tn1\t1.000000\t3.0\t2.0\t1.0\n",
         )
 
+    def test_read_first_header_cell_is_special_name(self):
+        """Check a first header cell of NAME or GWEIGHT does not move that column.
+
+        Cluster.read looked up each NAME, GWEIGHT or GORDER column with
+        line.index, which found the first header cell instead, so the gene
+        IDs were lost and the real column was read as a sample.
+        """
+        from Bio.Cluster import read
+
+        text = "NAME\tNAME\tS1\tS2\ng1\talpha\t1.0\t2.0\ng2\tbeta\t3.0\t4.0\n"
+        record = read(io.StringIO(text))
+        self.assertEqual(record.uniqid, "NAME")
+        self.assertEqual(record.geneid, ["g1", "g2"])
+        self.assertEqual(record.genename, ["alpha", "beta"])
+        self.assertEqual(record.expid, ["S1", "S2"])
+        self.assertEqual(record.data.tolist(), [[1.0, 2.0], [3.0, 4.0]])
+        text = "GWEIGHT\tNAME\tGWEIGHT\tS1\ng1\talpha\t0.5\t1.0\ng2\tbeta\t2.0\t3.0\n"
+        record = read(io.StringIO(text))
+        self.assertEqual(record.uniqid, "GWEIGHT")
+        self.assertEqual(record.geneid, ["g1", "g2"])
+        self.assertEqual(record.genename, ["alpha", "beta"])
+        self.assertEqual(record.gweight.tolist(), [0.5, 2.0])
+        self.assertEqual(record.expid, ["S1"])
+        self.assertEqual(record.data.tolist(), [[1.0], [3.0]])
+
+    def test_read_repeated_special_column(self):
+        """Check a header with two NAME, GWEIGHT or GORDER columns is refused.
+
+        The repeated column used to be left out of the header columns and read
+        as an unlabelled sample column, so the record no longer matched the
+        file.  A first header cell of the same name is the gene ID label, not
+        a repeat.
+        """
+        from Bio.Cluster import read
+
+        for word, value in (("NAME", "a"), ("GWEIGHT", "1.0"), ("GORDER", "1.0")):
+            text = f"UID\t{word}\t{word}\tS1\ng1\t{value}\t{value}\t1.0\n"
+            with self.assertRaisesRegex(ValueError, f"more than one {word} column"):
+                read(io.StringIO(text))
+            text = f"{word}\t{word}\tS1\ng1\t{value}\t1.0\n"
+            record = read(io.StringIO(text))
+            self.assertEqual(record.geneid, ["g1"])
+            self.assertEqual(record.expid, ["S1"])
+
 
 if __name__ == "__main__":
     TestCluster.module = "Bio.Cluster"
