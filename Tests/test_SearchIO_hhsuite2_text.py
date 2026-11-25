@@ -127,6 +127,17 @@ class HhsuiteCases(unittest.TestCase):
         with self.assertRaises(ValueError):
             next(qresults)
 
+    def test_2uvo_no_query_line(self):
+        """Raise ValueError if the header has no named Query line."""
+        with open(get_file("2uvo_hhsearch.hhr")) as handle:
+            lines = handle.readlines()
+        self.assertTrue(lines[0].startswith("Query "))
+        for first in ("", "Query\n", "Query  \n"):
+            with self.subTest(first=first):
+                text = first + "".join(lines[1:])
+                with self.assertRaisesRegex(ValueError, "^No 'Query' line"):
+                    next(parse(StringIO(text), FMT))
+
     def test_2uvo_emptytable(self):
         """Parsing 4uvo with empty results table."""
         txt_file = get_file("2uvo_hhblits_emptytable.hhr")
