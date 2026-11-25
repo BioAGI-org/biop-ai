@@ -15597,6 +15597,27 @@ class TestBlastMalformedInput(unittest.TestCase):
                 )
                 self.assertIs(urllib.request._opener, previous)
 
+    def test_ncbiwww_qblast_timeout(self):
+        """The deprecated NCBIWWW.qblast must pass timeout to every request."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", BiopythonDeprecationWarning)
+            from Bio.Blast import NCBIWWW
+
+        responses = [
+            io.BytesIO(b"RID = ABC123\nRTOE = 11\n"),
+            io.BufferedReader(io.BytesIO(b"<?xml version='1.0'?>\n")),
+        ]
+        with (
+            mock.patch.object(NCBIWWW, "urlopen", side_effect=responses) as urlopen,
+            mock.patch("time.sleep"),
+        ):
+            NCBIWWW.qblast("blastn", "nt", "ACGT", timeout=0.5)
+        # Both the submit and the poll request use the timeout.
+        self.assertEqual(
+            [call.kwargs for call in urlopen.call_args_list],
+            [{"timeout": 0.5}, {"timeout": 0.5}],
+        )
+
     def run_qblast_with_timeout(self, serve):
         """Run qblast with timeout=0.5 in a child process against serve.
 
