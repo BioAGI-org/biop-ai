@@ -859,10 +859,12 @@ class Nexus:
         # the later occurrences will override the previous ones.
         block = self.structured[-1]
         for line in block.commandlines:
-            try:
-                getattr(self, "_" + line.command)(line.options)
-            except AttributeError:
-                raise NexusError(f"Unknown command: {line.command} ") from None
+            # look the handler up first, so that an AttributeError raised
+            # inside a known handler is not reported as an unknown command
+            handler = getattr(self, "_" + line.command, None)
+            if handler is None:
+                raise NexusError(f"Unknown command: {line.command} ")
+            handler(line.options)
 
     def _title(self, options):
         pass

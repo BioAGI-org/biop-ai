@@ -1844,6 +1844,19 @@ end;
                     next(AlignmentIterator(StringIO(text)))
 
 
+class TestCommandDispatch(unittest.TestCase):
+    def test_error_in_known_command_is_not_unknown_command(self):
+        """An AttributeError inside a known command's handler reaches the caller."""
+        text = "#NEXUS\nbegin data;\n%s;\nend;\n"
+        bug = AttributeError("bug in _title")
+        with mock.patch.object(Nexus.Nexus, "_title", side_effect=bug):
+            with self.assertRaises(AttributeError) as cm:
+                Nexus.Nexus(text % "title x")
+        self.assertIs(cm.exception, bug)
+        with self.assertRaisesRegex(Nexus.NexusError, "^Unknown command: nosuch "):
+            Nexus.Nexus(text % "nosuch")
+
+
 class TestUnclosedQuote(unittest.TestCase):
     """A quoted word that runs to the end of the text raises NexusError.
 
