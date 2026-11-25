@@ -27,6 +27,8 @@ NODECOMMENT_END = "]"
 _re_block_delimiters = re.compile(
     rf"({re.escape(NODECOMMENT_START)}|{re.escape(NODECOMMENT_END)}|[(),])"
 )
+# a [&...] comment, which ends at the first ] after its [&
+_re_node_comment = re.compile(r"\[&[^\]]*\]")
 
 
 class TreeError(ValueError):
@@ -76,12 +78,15 @@ class Tree(Nodes.Chain):
         self.name = name
         root = Nodes.Node(data())
         self.root = self.add(root)
-        if tree:  # use the tree we have
+        if tree:
             # if Tree is called from outside Nexus parser, we need to get rid of linebreaks, etc
             tree = tree.strip().replace("\n", "").replace("\r", "")
             # there's discrepancy whether newick allows semicolons et the end
             tree = tree.rstrip(";")
+        if tree:  # use the tree we have
             subtree_info, base_info = self._parse(tree)
+            if isinstance(subtree_info, str):  # a tree of one leaf, as "(A)"
+                subtree_info, base_info = [[subtree_info, base_info]], [None]
             root.data = self._add_nodedata(root.data, [[], base_info])
             self._add_subtree(parent_id=root.id, tree=subtree_info)
 
@@ -125,7 +130,8 @@ class Tree(Nodes.Chain):
 
         if not tree.startswith("(", start, end):
             tree = tree[start:end].strip()
-            if "(" in tree or ")" in tree:
+            bare = _re_node_comment.sub("", tree)
+            if "(" in bare or ")" in bare:
                 raise TreeError("Parentheses do not match in (sub)tree: " + tree)
             # a leaf
             # check if there's a colon, or a special comment, or both  after the taxon name
@@ -154,7 +160,8 @@ class Tree(Nodes.Chain):
         else:
             close = closing[start]
             text = tree[close + 1 : end].strip()
-            if "(" in text or ")" in text:
+            bare = _re_node_comment.sub("", text)
+            if "(" in bare or ")" in bare:
                 raise TreeError(
                     "Parentheses do not match in (sub)tree: " + tree[start:end]
                 )
