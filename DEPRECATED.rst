@@ -670,7 +670,9 @@ which includes header-only files and files with an empty hit table. They
 also raise ``ValueError``, not ``TypeError``, for a hit block with no Q or T
 sequence rows, and not ``IndexError``, for a ``Match_columns`` line with no
 value. Code catching ``RuntimeError`` from these parsers should catch
-``ValueError`` instead.
+``ValueError`` instead. They also raise ``ValueError`` when the header has
+no ``Query`` line with a name, where they used to return a ``QueryResult``
+whose ``id`` was ``None``.
 
 Bio.SeqRecord
 -------------

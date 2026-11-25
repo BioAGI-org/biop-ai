@@ -94,14 +94,16 @@ class Hhsuite2TextParser:
         meta = {}
         while self.line:
             regx = re.search(_RE_QUERY, self.line)
-            if regx:
-                self.query_id = regx.group(1)
+            if regx and regx.group(1).strip():
+                self.query_id = regx.group(1).strip()
             if self.line.startswith("Match_columns"):
                 fields = self.line.split()
                 if len(fields) < 2:
                     raise ValueError(f"No value in Match_columns line '{self.line}'")
                 self.seq_len = int(fields[1])
             self.line = self.handle.readline().strip()
+        if self.query_id is None:
+            raise ValueError("No 'Query' line in HHsuite header")
         return meta
 
     def _parse_hit_block(self):
