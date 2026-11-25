@@ -1988,6 +1988,27 @@ class TestCommandDispatch(unittest.TestCase):
         with self.assertRaisesRegex(Nexus.NexusError, "^Unknown command: nosuch "):
             Nexus.Nexus(text % "nosuch")
 
+    def test_format_without_datatype(self):
+        """Malformed input that used to be "Unknown command" is still NexusError."""
+        # These raised AttributeError inside _format or _matrix, which the
+        # dispatcher turned into NexusError("Unknown command: ..."); once it
+        # stopped doing that, they must not reach the caller as AttributeError.
+        data = "#NEXUS\nbegin data;\ndimensions ntax=1 nchar=2;\n%s\nend;\n"
+        for command, message in [
+            ("format datatype;", "No value given for datatype"),
+            ("format symbols;", "No value given for symbols"),
+            ("format missing=? gap=-;", "first format command must give the datatype"),
+            ("matrix\na AC\n;", "giving the datatype must come before matrix"),
+        ]:
+            with self.subTest(command=command):
+                with self.assertRaisesRegex(Nexus.NexusError, message):
+                    Nexus.Nexus(data % command)
+        # a later format command may leave the datatype out
+        nexus = Nexus.Nexus(
+            data % "format datatype=dna;\nformat interleave;\nmatrix\na AC\n;"
+        )
+        self.assertEqual(nexus.matrix, {"a": Seq("AC")})
+
 
 class TestUnclosedQuote(unittest.TestCase):
     """A quoted word that runs to the end of the text raises NexusError.

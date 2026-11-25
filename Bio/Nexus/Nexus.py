@@ -887,6 +887,9 @@ class Nexus:
         # we first need to test respectcase, then symbols (which depends on respectcase)
         # then datatype (which, if standard, depends on symbols and respectcase in order to generate
         # dicts for ambiguous values
+        for key in ("symbols", "datatype"):
+            if key in options and options[key] is None:
+                raise NexusError(f"No value given for {key} in format command.")
         if "respectcase" in options:
             self.respectcase = True
         # adjust symbols to for respectcase
@@ -943,6 +946,10 @@ class Nexus:
             for k, v in rev.items():
                 key = sorted(c for c in k)
                 self.rev_ambiguous_values["".join(key)] = v
+        if not hasattr(self, "rev_ambiguous_values"):
+            # the tables for the datatype are made only once a format
+            # command has named it
+            raise NexusError("The first format command must give the datatype.")
         # overwrite symbols for datatype rna,dna,nucleotide
         if self.datatype in ["dna", "nucleotide"]:
             self.symbols = IUPACData.ambiguous_dna_letters
@@ -1103,6 +1110,10 @@ class Nexus:
         """Create a matrix for NEXUS object (PRIVATE)."""
         if not self.ntax or not self.nchar:
             raise NexusError("Dimensions must be specified before matrix!")
+        if not hasattr(self, "rev_ambiguous_values"):
+            raise NexusError(
+                "A format command giving the datatype must come before matrix."
+            )
         self.matrix = {}
         self._drop_add_skip()
         taxcount = 0
