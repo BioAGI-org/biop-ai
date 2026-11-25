@@ -762,6 +762,11 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             stream.seek(offset)
 
         formatter = _RTreeFormatter(byteorder).formatter_header
+        # The full data index always records 1 item per slot; only the zoom
+        # level indices record the real count. A file without zoom levels
+        # (as bedToBigBed writes for empty input) gives no count, so search
+        # then reads every item in a data block.
+        self.itemsPerSlot = None
         for zoomLevel in zoomList:
             indexOffset = zoomLevel.indexOffset
             seek(indexOffset, formatter.size, "zoom level index")
