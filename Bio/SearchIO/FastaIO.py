@@ -561,6 +561,8 @@ class FastaM10Parser:
                 # and HSPs, so we check the attribute names to determine
                 # whether it belongs to a Hit or HSP
                 regx = re.search(_RE_ATTR, line.strip())
+                if regx is None:
+                    raise ValueError("Unexpected line: %r" % line)
                 name = regx.group(1)
                 value = regx.group(2)
 
