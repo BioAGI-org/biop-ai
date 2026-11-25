@@ -392,8 +392,9 @@ class Hmmer3TextParser:
             # regx = re.search(_HRE_VALIDATE, self.line)
             # assert hsp.bitscore == float(regx.group(1))
             # assert hsp.evalue_cond == float(regx.group(2))
-            hmmseq = ""
-            aliseq = ""
+            hmmseq = []
+            aliseq = []
+            hmmlen = alilen = 0
             annot = {}
             aln_prefix_len = None
             self.line = self.handle.readline()
@@ -423,16 +424,18 @@ class Hmmer3TextParser:
                             f"\n{self.line!r}"
                         )
                     # the first hit/query self.line we encounter is the hmmseq
-                    if len(hmmseq) == len(aliseq):
-                        hmmseq += regx.group(2)
-                    # and for subsequent self.lines, len(hmmseq) is either
-                    # > or == len(aliseq)
-                    elif len(hmmseq) > len(aliseq):
-                        aliseq += regx.group(2)
-                    if len(hmmseq) < len(aliseq):
+                    if hmmlen == alilen:
+                        hmmseq.append(regx.group(2))
+                        hmmlen += len(regx.group(2))
+                    # and for subsequent self.lines, hmmlen is either
+                    # > or == alilen
+                    elif hmmlen > alilen:
+                        aliseq.append(regx.group(2))
+                        alilen += len(regx.group(2))
+                    if hmmlen < alilen:
                         raise ValueError(
                             "Aligned sequence is longer than the model sequence"
-                            f" above it ({len(aliseq)} > {len(hmmseq)}):"
+                            f" above it ({alilen} > {hmmlen}):"
                             f"\n{self.line!r}"
                         )
                 # check for start of new domain
@@ -441,7 +444,9 @@ class Hmmer3TextParser:
                     or self.line.startswith(">>")
                     or self.line.startswith("Internal pipeline")
                 ):
-                    frag.aln_annotation = annot
+                    frag.aln_annotation = {k: "".join(v) for k, v in annot.items()}
+                    hmmseq = "".join(hmmseq)
+                    aliseq = "".join(aliseq)
                     if self._meta.get("program") == "hmmscan":
                         frag.hit = hmmseq
                         frag.query = aliseq
@@ -449,22 +454,14 @@ class Hmmer3TextParser:
                         frag.hit = aliseq
                         frag.query = hmmseq
                     dom_counter += 1
-                    hmmseq = ""
-                    aliseq = ""
-                    annot = {}
-                    aln_prefix_len = None
                     break
                 # check if it's an annotation line and parse it
-                # len(hmmseq) is only != len(aliseq) when the cursor is parsing
+                # hmmlen is only != alilen when the cursor is parsing
                 # the similarity character.
-                elif len(hmmseq) == len(aliseq):
+                elif hmmlen == alilen:
                     regx = re.search(_HRE_ANNOT_LINE, self.line)
                     if regx:
-                        annot_name = regx.group(3)
-                        if annot_name in annot:
-                            annot[annot_name] += regx.group(2)
-                        else:
-                            annot[annot_name] = regx.group(2)
+                        annot.setdefault(regx.group(3), []).append(regx.group(2))
                 # otherwise, assume we are seeing the similarity string (the string
                 # between the two alignments). We do that by checking if we have
                 # defined the aln_prefix_len variable, which is the length of string
@@ -476,10 +473,7 @@ class Hmmer3TextParser:
                     similarity = (
                         self.line[aln_prefix_len:].removesuffix("\n").removesuffix("\r")
                     )
-                    if "similarity" not in annot:
-                        annot["similarity"] = similarity
-                    else:
-                        annot["similarity"] += similarity
+                    annot.setdefault("similarity", []).append(similarity)
 
                 self.line = self.handle.readline()
 
