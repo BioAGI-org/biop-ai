@@ -3151,6 +3151,31 @@ class TestCluster(unittest.TestCase):
         self.assertAlmostEqual(matrix[2][0], 8.61571429, places=3)
         self.assertAlmostEqual(matrix[2][1], 21.24428571, places=3)
 
+    def test_spearman_masked_weights(self):
+        """Check a masked value gives the same Spearman distance as no value.
+
+        spearman packed the unmasked values together but read the weights by
+        packed position, so after a masked value each weight was applied to
+        the wrong value.
+        """
+        if TestCluster.module == "Bio.Cluster":
+            from Bio.Cluster import distancematrix
+        elif TestCluster.module == "Pycluster":
+            from Pycluster import distancematrix
+
+        data = np.array([[9.0, 1.0, 2.0, 3.0, 4.0], [9.0, 4.0, 1.0, 2.0, 3.0]])
+        weight = np.array([10.0, 1.0, 1.0, 1.0, 1.0])
+        mask = np.ones(data.shape, np.intc)
+        mask[0, 0] = 0
+        expected = distancematrix(data[:, 1:], weight=weight[1:], dist="s")
+        self.assertAlmostEqual(expected[1][0], 1.2)
+        matrix = distancematrix(data, mask=mask, weight=weight, dist="s")
+        self.assertAlmostEqual(matrix[1][0], 1.2)
+        matrix = distancematrix(
+            data.T, mask=mask.T, weight=weight, dist="s", transpose=True
+        )
+        self.assertAlmostEqual(matrix[1][0], 1.2)
+
     def test_kmedoids_one_dimensional_distances(self):
         """Check kmedoids gives the same result for a 1-D distance matrix.
 
