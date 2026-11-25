@@ -10,6 +10,9 @@
 import re
 
 line_floats_re = re.compile(r"-?(?<!\d)\d+\.\d+")
+# A line of numbers only, such as the SEs, which can include nan or inf
+_number = r"[-+]?(?:\d+(?:\.\d*)?(?:[eE][-+]?\d+)?|\.\d+|nan|inf(?:inity)?)"
+numbers_row_re = re.compile(rf"\s*{_number}(?:\s+{_number})*\s*$", re.IGNORECASE)
 
 
 def parse_basics(lines, results):
@@ -191,6 +194,13 @@ def parse_model(lines, results):
         if param_list_flag and line.strip() and not branch_labels_re.match(line):
             param_list_flag = False
             param_list_row = len(line_floats) == num_params
+        # The SEs are the first non-blank line after "SEs for parameters:",
+        # if it is a row of numbers (a nan or inf there is not counted in
+        # line_floats). Any other line is left for the checks below.
+        SEs_row = False
+        if SEs_flag and line.strip():
+            SEs_flag = False
+            SEs_row = numbers_row_re.match(line) is not None
         # Find lnL values.
         # Example match (lnL = -2021.348300):
         # "lnL(ntime: 19  np: 22):  -2021.348300      +0.000000"
@@ -220,9 +230,8 @@ def parse_model(lines, results):
         # -1.00000 -1.00000 -1.00000 801727.63247 730462.67590 -1.00000
         elif "SEs for parameters:" in line:
             SEs_flag = True
-        elif SEs_flag and len(line_floats) == num_params:
+        elif SEs_row:
             parameters["SEs"] = line.strip()
-            SEs_flag = False
         # Find tree lengths.
         # Example match: "tree length =   1.71931"
         elif "tree length =" in line and line_floats:

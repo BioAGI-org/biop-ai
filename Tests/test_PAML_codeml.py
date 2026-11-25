@@ -646,6 +646,65 @@ SEs for parameters:
         self.assertEqual(params["SEs"], "0.01000  0.02000  0.03000")
         self.assertEqual(results["tree"], "(1: 0.10000, 2: 0.20000, 3: 0.30000);")
 
+    def testParseSEsWithNan(self):
+        """The line after "SEs for parameters:" is the SEs, even with a nan.
+
+        With a nan in the row it has fewer than np numbers. The SEs flag
+        then stayed set, and the tree was taken as the SEs.
+        """
+        lines = """\
+lnL(ntime:  3  np:  3):   -100.000000      +0.000000
+   4..1     4..2     4..3
+  0.10000  0.20000  0.30000
+SEs for parameters:
+  0.01000      nan  0.03000
+
+(1: 0.10000, 2: 0.20000, 3: 0.30000);
+""".splitlines(
+            True
+        )
+        results = parse_model(lines, {})
+        params = results["parameters"]
+        self.assertEqual(params["parameter list"], "0.10000  0.20000  0.30000")
+        self.assertEqual(params["SEs"], "0.01000      nan  0.03000")
+        self.assertEqual(results["tree"], "(1: 0.10000, 2: 0.20000, 3: 0.30000);")
+
+    def testParseSEsAfterBlankLine(self):
+        """A blank line after "SEs for parameters:" is skipped."""
+        lines = """\
+lnL(ntime:  3  np:  3):   -100.000000      +0.000000
+   4..1     4..2     4..3
+  0.10000  0.20000  0.30000
+SEs for parameters:
+
+  0.01000  0.02000  0.03000
+
+(1: 0.10000, 2: 0.20000, 3: 0.30000);
+""".splitlines(
+            True
+        )
+        results = parse_model(lines, {})
+        self.assertEqual(results["parameters"]["SEs"], "0.01000  0.02000  0.03000")
+        self.assertEqual(results["tree"], "(1: 0.10000, 2: 0.20000, 3: 0.30000);")
+
+    def testParseSEsMissing(self):
+        """A line after "SEs for parameters:" that is not numbers is not SEs.
+
+        Without an SEs row, the tree that follows stays the tree.
+        """
+        lines = """\
+lnL(ntime:  3  np:  3):   -100.000000      +0.000000
+   4..1     4..2     4..3
+  0.10000  0.20000  0.30000
+SEs for parameters:
+(1: 0.10000, 2: 0.20000, 3: 0.30000);
+""".splitlines(
+            True
+        )
+        results = parse_model(lines, {})
+        self.assertNotIn("SEs", results["parameters"])
+        self.assertEqual(results["tree"], "(1: 0.10000, 2: 0.20000, 3: 0.30000);")
+
     def testParseParameterListNoParameters(self):
         """With np 0, no later line is taken as the parameter list.
 
