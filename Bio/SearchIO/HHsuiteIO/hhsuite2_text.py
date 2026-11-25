@@ -117,11 +117,11 @@ class Hhsuite2TextParser:
             "evalue": None,
             "hit_start": None,
             "hit_end": None,
-            "hit_seq": "",
+            "hit_seq": [],
             "prob": None,
             "query_start": None,
             "query_end": None,
-            "query_seq": "",
+            "query_seq": [],
             "score": None,
         }
         self.line = self.handle.readline()
@@ -188,14 +188,14 @@ class Hhsuite2TextParser:
                 return
             match = re.match(_RE_MATCH_BLOCK_QUERY_SEQ, self.line)
             if match and match_is_valid(match):
-                hit_match_data["query_seq"] += match.group(3).strip()
+                hit_match_data["query_seq"].append(match.group(3).strip())
                 if hit_match_data["query_start"] is None:
                     hit_match_data["query_start"] = int(match.group(2))
                 hit_match_data["query_end"] = int(match.group(4))
             else:
                 match = re.match(_RE_MATCH_BLOCK_HIT_SEQ, self.line)
                 if match and match_is_valid(match):
-                    hit_match_data["hit_seq"] += match.group(3).strip()
+                    hit_match_data["hit_seq"].append(match.group(3).strip())
                     if hit_match_data["hit_start"] is None:
                         hit_match_data["hit_start"] = int(match.group(2))
                     hit_match_data["hit_end"] = int(match.group(4))
@@ -217,8 +217,8 @@ class Hhsuite2TextParser:
             frag.query_end = block["query_end"]
             frag.hit_start = block["hit_start"] - 1
             frag.hit_end = block["hit_end"]
-            frag.hit = block["hit_seq"]
-            frag.query = block["query_seq"]
+            frag.hit = "".join(block["hit_seq"])
+            frag.query = "".join(block["query_seq"])
 
             hsp = HSP([frag])
             hsp.hit_id = hit_id

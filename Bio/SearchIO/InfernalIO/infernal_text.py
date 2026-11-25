@@ -384,12 +384,12 @@ class InfernalTextParser(_BaseInfernalParser):
     ):
         """Parse a Infernal HSP alignment block (PRIVATE)."""
         frag_list = []
-        model_seq = ""
-        hit_seq = ""
+        model_seq = []
+        hit_seq = []
         if model == "cm":
-            annot = {"NC": "", "CS": "", "similarity": "", "PP": ""}
+            annot = {"NC": [], "CS": [], "similarity": [], "PP": []}
         else:
-            annot = {"CS": "", "similarity": "", "PP": ""}
+            annot = {"CS": [], "similarity": [], "PP": []}
         while True:
             # we've reached the end of the alignment section
             if (
@@ -397,6 +397,9 @@ class InfernalTextParser(_BaseInfernalParser):
                 or self.line.startswith(_DIV_HITS_END_CM)
                 or self.line.startswith(_DIV_HITS_END_HMM)
             ):
+                model_seq = "".join(model_seq)
+                hit_seq = "".join(hit_seq)
+                annot = {k: "".join(v) for k, v in annot.items()}
                 # Process local end in infernal hit alignment. Local end are
                 # large insertion or deletion indicated by *[NN]* where N is
                 # the number of model positions are deleted or the number of
@@ -486,14 +489,14 @@ class InfernalTextParser(_BaseInfernalParser):
             blklen = len(pp_line.split()[0])
             blkend = len(pp_line) - len(" PP")
             blkstart = blkend - blklen
-            model_seq += lines[1 + offset][blkstart:blkend]
-            hit_seq += lines[3 + offset][blkstart:blkend]
+            model_seq.append(lines[1 + offset][blkstart:blkend])
+            hit_seq.append(lines[3 + offset][blkstart:blkend])
             # NC line is specific to cm model searches
             if model == "cm":
-                annot["NC"] += lines[0][blkstart:blkend]
-            annot["CS"] += lines[0 + offset][blkstart:blkend]
-            annot["similarity"] += lines[2 + offset][blkstart:blkend]
-            annot["PP"] += lines[4 + offset][blkstart:blkend]
+                annot["NC"].append(lines[0][blkstart:blkend])
+            annot["CS"].append(lines[0 + offset][blkstart:blkend])
+            annot["similarity"].append(lines[2 + offset][blkstart:blkend])
+            annot["PP"].append(lines[4 + offset][blkstart:blkend])
 
     def _local_aln_gap_size(self, cur_aln_idx, seq):
         """Calculate the gap size between the local alignments (PRIVATE)."""

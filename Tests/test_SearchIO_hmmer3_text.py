@@ -12,6 +12,7 @@ import unittest
 from io import StringIO
 
 import support
+from search_tests_common import run_python
 
 import Bio
 from Bio.SearchIO import parse
@@ -1899,6 +1900,30 @@ for qresult in parse(sys.stdin, {FMT!r}):
             )
             # hmm db path also contains space
             assert qresult.target == expected_db_target
+
+    def test_long_alignment(self):
+        """Parse a domain alignment of 8 million residues in 82-column blocks."""
+        # The parser used to add each block of the CS, PP and similarity
+        # lines to a string held in a dict, which copies the whole string
+        # each time, so the time grew with the square of the length: eight
+        # minutes for 8 million residues. It still parsed correctly, so time
+        # it in a child process, where the 60 second timeout fails the test on
+        # the old code.
+        filename = os.fspath(get_file("text_30_hmmscan_003.out"))
+        code = f"""\
+from io import StringIO
+from Bio.SearchIO import read
+with open({filename!r}) as handle:
+    lines = handle.readlines()
+# the first alignment block of the one domain, repeated
+text = "".join(lines[:29] + lines[29:35] * 100_000 + lines[41:])
+hsp = read(StringIO(text), {FMT!r})[0][0]
+print(len(hsp.query), len(hsp.hit), *map(len, hsp.aln_annotation.values()))
+"""
+        result = run_python(code)
+        self.assertEqual(
+            result.stdout, "8200000 8200000 8200000 8200000 8200000\n", result.stderr
+        )
 
 
 class HmmersearchCases(unittest.TestCase):

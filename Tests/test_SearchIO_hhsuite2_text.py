@@ -12,6 +12,7 @@ import unittest
 from io import StringIO
 
 import support
+from search_tests_common import run_python
 
 import Bio
 from Bio.SearchIO import parse
@@ -292,6 +293,28 @@ except ValueError:
             ValueError, "^Unexpected content in HIT_BLOCK_DESC line'>>>"
         ):
             next(qresults)
+
+    def test_long_alignment(self):
+        """Parse an alignment of 16 million residues in 80-residue blocks."""
+        # The parser used to add each block of the aligned query and hit to a
+        # string held in a dict, which copies the whole string each time, so
+        # the time grew with the square of the length: 3.4 s for 1.6 million
+        # residues, over ten minutes for 16 million. It still parsed
+        # correctly, so time it in a child process, where the 60 second
+        # timeout fails the test on the old code.
+        filename = os.fspath(get_file("2uvo_hhsearch.hhr"))
+        code = f"""\
+from io import StringIO
+from Bio.SearchIO import read
+with open({filename!r}) as handle:
+    lines = handle.readlines()
+# hit 1 alone: its first block, then the Q and T rows of its second block
+block = lines[56] + lines[60] + "\\n"
+hsp = read(StringIO("".join(lines[:56]) + block * 200_000), {FMT!r})[0][0]
+print(len(hsp.query), len(hsp.hit))
+"""
+        result = run_python(code)
+        self.assertEqual(result.stdout, "16000080 16000080\n", result.stderr)
 
     def test_malformed_raises_value_error(self):
         """Raise ValueError, not another exception, on malformed input."""

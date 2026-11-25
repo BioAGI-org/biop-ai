@@ -9,9 +9,11 @@
 
 import io
 import itertools
+import os
 import unittest
 
 import support
+from search_tests_common import run_python
 
 from Bio.SearchIO import parse
 
@@ -1127,6 +1129,33 @@ class CmsearchCases(unittest.TestCase):
         # test if we've properly finished iteration
         self.assertRaises(StopIteration, next, qresults)
         self.assertEqual(3, count)
+
+    def test_cmsearch_long_alignment(self):
+        """Parse an alignment of 8 million residues in 80-column blocks."""
+        # The parser used to add each block of the NC, CS, similarity and PP
+        # lines to a string held in a dict, which copies the whole string
+        # each time, so the time grew with the square of the length: 7 s for
+        # 1.6 million residues, nine minutes for 8 million. It still parsed
+        # correctly, so time it in a child process, where the 60 second
+        # timeout fails the test on the old code.
+        filename = os.fspath(get_file("cmsearch_114_5S_Yeast.txt"))
+        code = f"""\
+from io import StringIO
+from Bio.SearchIO import read
+with open({filename!r}) as handle:
+    lines = handle.readlines()
+# hit 1 alone, with the first of its two blocks repeated
+end = next(i for i, line in enumerate(lines) if line.startswith("Internal"))
+text = "".join(lines[:32] + lines[32:39] * 100_000 + lines[39:46] + lines[end:])
+hsp = read(StringIO(text), {FMT!r})[0][0]
+print(len(hsp.query), len(hsp.hit), *map(len, hsp.aln_annotation.values()))
+"""
+        result = run_python(code)
+        self.assertEqual(
+            result.stdout,
+            "8000041 8000041 8000041 8000041 8000041 8000041\n",
+            result.stderr,
+        )
 
 
 if __name__ == "__main__":
