@@ -4,6 +4,7 @@
 <!-- This is a mock file mimicking a qblast response for our mock tests -->
 
 <BlastOutput>
+ <BlastOutput_program>blastp</BlastOutput_program>
  <BlastOutput_query-ID>Query_59049</BlastOutput_query-ID>
 <BlastOutput_param>
     <Parameters>
