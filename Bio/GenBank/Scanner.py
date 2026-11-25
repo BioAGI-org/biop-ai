@@ -330,6 +330,10 @@ class InsdcScanner:
                 feature_location = "".join(location_lines)
 
             qualifiers = []
+            # Continuation lines of an unquoted value, joined onto
+            # qualifiers[-1] once. Adding each line to the value string
+            # took quadratic time.
+            extra = []
 
             for line_number, line in enumerate(iterator):
                 # check for extra wrapping of the location closing parentheses
@@ -337,6 +341,10 @@ class InsdcScanner:
                     feature_location += line.strip()
                 elif line[0] == "/":
                     # New qualifier
+                    if extra:
+                        k, v = qualifiers[-1]
+                        qualifiers[-1] = (k, "\n".join([v, *extra]))
+                        extra = []
                     i = line.find("=")
                     key = line[1:i]  # does not work if i==-1
                     value = line[i + 1 :]  # we ignore 'value' if i==-1
@@ -382,7 +390,10 @@ class InsdcScanner:
                     # if debug : print("Unquoted Cont %s:%s" % (key, line))
                     if qualifiers[-1][1] is None:
                         raise StopIteration
-                    qualifiers[-1] = (key, qualifiers[-1][1] + "\n" + line)
+                    extra.append(line)
+            if extra:
+                k, v = qualifiers[-1]
+                qualifiers[-1] = (k, "\n".join([v, *extra]))
             return feature_key, feature_location, qualifiers
         except StopIteration:
             # Bummer
