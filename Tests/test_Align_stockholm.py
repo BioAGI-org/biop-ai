@@ -8142,6 +8142,32 @@ A ACGT
                 with self.assertRaisesRegex(ValueError, message):
                     Align.read(stream, "stockholm")
 
+    def test_bare_or_tab_separated_markup(self):
+        """Read tab-separated markup lines, and reject a markup tag on its own."""
+        for tag in ("#=GF", "#=GC", "#=GS", "#=GR"):
+            with self.subTest(tag=tag):
+                stream = StringIO(f"# STOCKHOLM 1.0\nA ACGT\n{tag}\n//\n")
+                with self.assertRaisesRegex(ValueError, f"^Expected '{tag} <"):
+                    Align.read(stream, "stockholm")
+        stream = StringIO(
+            "# STOCKHOLM 1.0\n"
+            "#=GF\tID\tfoo\n"
+            "#=GS\tA\tAC\tX1\n"
+            "A ACGT\n"
+            "#=GR\tA\tSS\t<..>\n"
+            "#=GC\tSS_cons\t<<>>\n"
+            "//\n"
+        )
+        alignment = Align.read(stream, "stockholm")
+        self.assertEqual(alignment.annotations, {"identifier": "foo"})
+        self.assertEqual(alignment.sequences[0].annotations, {"accession": "X1"})
+        self.assertEqual(
+            alignment.sequences[0].letter_annotations, {"secondary structure": "<..>"}
+        )
+        self.assertEqual(
+            alignment.column_annotations, {"consensus secondary structure": "<<>>"}
+        )
+
     def test_gs_between_sequence_and_gr(self):
         """Accept a #=GS line for another sequence between a sequence and its #=GR."""
         stream = StringIO(
