@@ -3964,11 +3964,12 @@ class TestClusterRNGSeed(unittest.TestCase):
         # the sequence that rand() returns.
         import ctypes
 
+        # CDLL(None) raises TypeError on Windows, which has no such libc.
         try:
             libc = ctypes.CDLL(None)
             libc.srand(42)
             expected = [libc.rand() for _ in range(5)]
-        except (OSError, AttributeError):
+        except (OSError, AttributeError, TypeError):
             self.skipTest("cannot call the C library's rand() on this platform")
 
         from Bio.Cluster import kcluster

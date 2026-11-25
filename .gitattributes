@@ -17,6 +17,17 @@ Tests/Quality/example.fastq binary
 Tests/Quality/example_dos.fastq binary
 Tests/Blast/wnts.xml binary
 
+# Tests read these files as bytes and look for, or edit, text ending in
+# "\n", which a Windows checkout with CRLF line endings would not have.
+
+Tests/Blast/xml_2226_blastn_002.xml eol=lf
+Tests/Blast/xml_2226_blastp_001.xml eol=lf
+Tests/Blast/xml_2226_blastp_004.xml eol=lf
+Tests/Exonerate/exn_22_m_est2genome.exn eol=lf
+Tests/Fasta/output001.m10 eol=lf
+Tests/Infernal/cmsearch_114_IRES_5S_U2_Yeast.txt eol=lf
+Tests/SwissProt/multi_ex.xml eol=lf
+
 # This pickle file has to be using Unix new lines otherwise at
 # least Python 3.4's C pickle parser fails with exception:
 # _pickle.UnpicklingError: the STRING opcode argument must be quoted

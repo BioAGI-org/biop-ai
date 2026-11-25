@@ -562,14 +562,6 @@ jobs:
         python "$env:GITHUB_WORKSPACE/Tests/run_tests.py" --offline -v test_free_threading
 
     - name: Run test suite
-      # Not a gate yet. Every Windows leg fails 22 to 33 tests on main: index
-      # files still open when their temporary directory is removed, Blast XML
-      # test files checked out with CRLF line endings, and a few others. The
-      # previous two-line step hid this, because PowerShell reports only the
-      # last command's exit status, which was that of `coverage xml`. A failure
-      # here now marks the step as failed without failing the job. Remove this
-      # once those tests pass on Windows.
-      continue-on-error: true
       working-directory: ${{ runner.temp }}
       run: |
         python -m pytest "$env:GITHUB_WORKSPACE/Tests" --offline -n auto --dist loadfile --cov --cov-config "$env:GITHUB_WORKSPACE/pyproject.toml" --cov-report "xml:$env:GITHUB_WORKSPACE/Tests/coverage.xml"
