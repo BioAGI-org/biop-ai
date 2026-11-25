@@ -8032,6 +8032,34 @@ class TestDeclarations(unittest.TestCase):
             )
 
 
+class TestAlign_undeclared_fields(unittest.TestCase):
+    """Items with more fields than the file header declares."""
+
+    def test_bed4_declared_as_bed3(self):
+        with open(support.DATA / "Blat" / "bed4.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        # fieldCount and definedFieldCount are at byte 32 of the file header.
+        # Declare 3 fields, all standard; the items still carry a name.
+        struct.pack_into("<HH", data, 32, 3, 3)
+        with self.assertRaisesRegex(
+            ValueError,
+            "^The bigBed item at 1000-5000 has 4 fields, but the header declares 3$",
+        ):
+            list(Align.parse(BytesIO(data), "bigbed"))
+
+    def test_bed6_declared_with_one_custom_field(self):
+        with open(support.DATA / "Blat" / "bed6.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        # Declare 4 fields, the last one custom; the items carry 6. The two
+        # extra values used to be dropped silently.
+        struct.pack_into("<HH", data, 32, 4, 3)
+        with self.assertRaisesRegex(
+            ValueError,
+            "^The bigBed item at 1000-5000 has 6 fields, but the header declares 4$",
+        ):
+            list(Align.parse(BytesIO(data), "bigbed"))
+
+
 class SeekGuard(BytesIO):
     """A binary stream that fails the test if seeked on and on."""
 

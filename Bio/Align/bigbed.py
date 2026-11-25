@@ -817,8 +817,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             name = fields[i].name
             if name != names[i]:
                 raise ValueError(f"Expected field name '{names[i]}'; found '{name}'")
-        if fieldCount > definedFieldCount:
-            self._custom_fields = []
+        self._custom_fields = []
         for i in range(definedFieldCount, fieldCount):
             field_name = fields[i].name
             field_type = fields[i].as_type
@@ -1139,6 +1138,12 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             )
         alignment = Alignment(records, coordinates)
         if len(words) > self.bedN - 3:
+            fieldCount = self.bedN + len(self._custom_fields)
+            if len(words) + 3 > fieldCount:
+                raise ValueError(
+                    f"The bigBed item at {chromStart}-{chromEnd} has {len(words) + 3} "
+                    f"fields, but the header declares {fieldCount}"
+                )
             alignment.annotations = {}
             for word, custom_field in zip(words[self.bedN - 3 :], self._custom_fields):
                 name, converter = custom_field
