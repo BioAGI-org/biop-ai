@@ -18,6 +18,7 @@ import unittest
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
+from xml.parsers import expat
 
 try:
     import numpy as np
@@ -4475,8 +4476,11 @@ class TestMEME(unittest.TestCase):
         path = support.DATA / "motifs" / "meme.INO_up800.classic.oops.xml"
         with open(path) as stream:
             data = stream.read()
-        with self.assertRaisesRegex(ValueError, "Improper MEME XML input file"):
+        with self.assertRaisesRegex(
+            ValueError, r"Improper MEME XML input file: .*line \d+, column \d+"
+        ) as cm:
             motifs.parse(StringIO(data[: len(data) // 2]), "meme")
+        self.assertIsInstance(cm.exception.__cause__, expat.ExpatError)
 
     def test_minimal_meme_parser(self):
         """Parse motifs/minimal_test.meme file."""
@@ -5484,8 +5488,11 @@ class TestMAST(unittest.TestCase):
         """Test that truncated MAST XML raises ValueError."""
         with open(support.DATA / "motifs" / "mast.crp0.de.oops.txt.xml") as stream:
             data = stream.read()
-        with self.assertRaisesRegex(ValueError, "Improper MAST XML input file"):
+        with self.assertRaisesRegex(
+            ValueError, r"Improper MAST XML input file: .*line \d+, column \d+"
+        ) as cm:
             motifs.parse(StringIO(data[: len(data) // 2]), "MAST")
+        self.assertIsInstance(cm.exception.__cause__, expat.ExpatError)
 
 
 class TestTransfac(unittest.TestCase):

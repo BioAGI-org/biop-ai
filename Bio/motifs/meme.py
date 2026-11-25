@@ -50,10 +50,8 @@ def read(handle):
     record = Record()
     try:
         xml_tree = ET.parse(handle, parser=_XMLParser())
-    except expat.ExpatError:
-        raise ValueError(
-            "Improper MEME XML input file. XML root tag should start with <MEME version= ..."
-        )
+    except expat.ExpatError as e:
+        raise ValueError(f"Improper MEME XML input file: {e}") from e
     __read_metadata(record, xml_tree)
     __read_alphabet(record, xml_tree)
     sequence_id_name_map = __get_sequence_id_name_map(xml_tree)
