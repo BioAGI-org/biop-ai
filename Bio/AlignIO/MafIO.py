@@ -33,6 +33,7 @@ For an inclusive end coordinate, we need to use ``end = start + size - 1``.
 A 1-column wide alignment would have ``start == end``.
 """
 
+import operator
 import os
 from itertools import islice
 
@@ -599,14 +600,31 @@ class MafIndex:
         # search for every exon
         for exonstart, exonend in zip(starts, ends):
             try:
-                possible_bins = ", ".join(
-                    map(str, self._region2bin(exonstart, exonend))
-                )
+                qstart = operator.index(exonstart)
+                qend = operator.index(exonend) - 1
             except TypeError:
                 raise TypeError(
                     "Exon coordinates must be integers "
                     "(start=%d, end=%d)" % (exonstart, exonend)
                 ) from None
+
+            # SQLite integers are signed 64-bit, so sqlite3 cannot bind a
+            # value outside that range. Every coordinate in the index is
+            # inside it, so a query wholly outside it matches nothing, and
+            # one that sticks out can be cut back without changing the hits.
+            if qstart > 2**63 - 1 or qend < -(2**63):
+                continue
+            qstart, qend = max(qstart, -(2**63)), min(qend, 2**63 - 1)
+            # The bins of a query of 2**29 bases or more, the span of the
+            # largest UCSC bin, are not listed: there is one per 128 kb of
+            # the query, too many to hold in memory for a very wide query.
+            # The bins only narrow the rows that the overlap test below
+            # checks, so it finds the same blocks without them.
+            if qend + 1 - qstart >= 2**29:
+                bin_test = ""
+            else:
+                possible_bins = ", ".join(map(str, self._region2bin(qstart, qend + 1)))
+                bin_test = "bin IN (%s) AND " % possible_bins
 
             # https://www.sqlite.org/lang_expr.html
             # -----
@@ -629,10 +647,9 @@ class MafIndex:
 
             result = con.execute(
                 "SELECT DISTINCT start, end, offset FROM offset_data "
-                "WHERE bin IN (%s) "
-                "AND (end BETWEEN ? AND ? OR ? BETWEEN start AND end) "
-                "ORDER BY start, end, offset ASC;" % possible_bins,
-                (int(exonstart), int(exonend) - 1, int(exonend) - 1),
+                "WHERE %s(end BETWEEN ? AND ? OR ? BETWEEN start AND end) "
+                "ORDER BY start, end, offset ASC;" % bin_test,
+                (qstart, qend, qend),
             )
 
             rows = result.fetchall()

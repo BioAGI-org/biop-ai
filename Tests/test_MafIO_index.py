@@ -19,6 +19,7 @@ import sys
 import tempfile
 import unittest
 import warnings
+from unittest import mock
 
 import support
 from seq_tests_common import SeqRecordTestBaseClass
@@ -391,6 +392,52 @@ if sqlite3:
 
             self.assertEqual(list(self.idx.search([1], [2])), [])
             self.assertEqual(list(self.idx.search([Odd(1)], [2])), [])
+
+        def test_coordinates_beyond_sqlite_integer_range(self):
+            """Coordinates past 2**63 - 1 find no blocks instead of raising."""
+            self.assertEqual(list(self.idx.search([2**63], [2**63 + 1])), [])
+            self.assertEqual(list(self.idx.search([2**63 - 1], [2**63 + 1])), [])
+
+        def test_wide_coordinates_beyond_sqlite_integer_range(self):
+            """Wide queries, also those past 2**63 - 1, do not list their bins."""
+            # A query has one bin per 128 kb at the finest level, so listing
+            # the bins of a query of 2**60 bases would exhaust memory. Count
+            # the bases whose bins are listed instead of running out of it.
+            region2bin = MafIndex._region2bin
+            listed = []
+
+            def counting_region2bin(start, end):
+                listed.append(end - start)
+                if end - start > 2**30:
+                    raise AssertionError(f"listed the bins of {end - start} bases")
+                return region2bin(start, end)
+
+            def starts_of(starts, ends):
+                return [
+                    [r.annotations["start"] for r in a]
+                    for a in self.idx.search(starts, ends)
+                ]
+
+            with mock.patch.object(
+                MafIndex, "_region2bin", staticmethod(counting_region2bin)
+            ):
+                # Every block of the file, which spans about 3 Mb.
+                every = starts_of([0], [10**8])
+                self.assertEqual(len(every), 48)
+                for start, end, expected in (
+                    (2**63, 2**63 + 2**60, []),
+                    (-(2**63) - 2**60, -(2**63), []),
+                    (0, 2**63 + 2**60, every),
+                    (-(2**63) - 2**60, 10**8, every),
+                    (-(2**63) - 2**60, 2**63 + 2**60, every),
+                    # Inside SQLite's range, but too wide to list the bins.
+                    (0, 2**63, every),
+                    (-(2**63), 10**8, every),
+                    (0, sys.maxsize, every),
+                ):
+                    with self.subTest(start=start, end=end):
+                        self.assertEqual(starts_of([start], [end]), expected)
+            self.assertEqual(listed, [10**8])
 
         def test_correct_retrieval_1(self):
             """Correct retrieval of Cnksr3 in mouse."""
