@@ -1895,6 +1895,9 @@ class GenBankScanner(InsdcScanner):
                     comment_list = []
                     structured_comment_dict = defaultdict(dict)
                     structured_comment_key = self._structured_comment_key(data)
+                    # The field a continuation line adds to; set only by a
+                    # field line of the current block.
+                    field = None
                     if structured_comment_key is not None:
                         if self.debug > 1:
                             print("Found Structured Comment")
@@ -1909,6 +1912,7 @@ class GenBankScanner(InsdcScanner):
                                 structured_comment_key = self._structured_comment_key(
                                     data
                                 )
+                                field = None
                                 if structured_comment_key is None:
                                     comment_list.append(data)
                             elif (
@@ -1916,9 +1920,12 @@ class GenBankScanner(InsdcScanner):
                                 and self.STRUCTURED_COMMENT_DELIM.strip() in data
                             ):
                                 field, value = self._split_structured_comment(data)
+                                # A list of the value's lines, joined after the
+                                # loop: adding to a string here takes quadratic
+                                # time when a value runs over many lines.
                                 structured_comment_dict[structured_comment_key][
                                     field
-                                ] = value
+                                ] = [value]
                                 if self.debug > 2:
                                     print(
                                         "Structured Comment continuation [" + data + "]"
@@ -1928,10 +1935,9 @@ class GenBankScanner(InsdcScanner):
                                 and self.STRUCTURED_COMMENT_END not in data
                             ):
                                 # Don't die on a malformed comment, just warn and carry on
-                                if (
-                                    structured_comment_key
-                                    not in structured_comment_dict
-                                ):
+                                # (also when a reopened block has no field line
+                                # yet: do not add to a field from an earlier block)
+                                if field is None:
                                     warnings.warn(
                                         f"Structured comment not parsed on malformed header line: {line}",
                                         BiopythonParserWarning,
@@ -1939,12 +1945,9 @@ class GenBankScanner(InsdcScanner):
                                     continue
 
                                 # The current structured comment has a multiline value
-                                previous_value_line = structured_comment_dict[
-                                    structured_comment_key
-                                ][field]
                                 structured_comment_dict[structured_comment_key][
                                     field
-                                ] = (previous_value_line + " " + line.strip())
+                                ].append(line.strip())
                             elif self.STRUCTURED_COMMENT_END in data:
                                 # End of structured comment
                                 structured_comment_key = None
@@ -1958,6 +1961,9 @@ class GenBankScanner(InsdcScanner):
                     if comment_list:
                         consumer.comment(comment_list)
                     if structured_comment_dict:
+                        for fields in structured_comment_dict.values():
+                            for field, value in fields.items():
+                                fields[field] = " ".join(value)
                         consumer.structured_comment(structured_comment_dict)
                     del comment_list, structured_comment_key, structured_comment_dict
                 elif line_type in consumer_dict:
