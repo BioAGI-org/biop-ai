@@ -1790,6 +1790,31 @@ end;
         with self.assertRaisesRegex(Nexus.NexusError, "^Missing label for 1 "):
             Nexus.Nexus(text)
 
+    def test_charpartition_quoted_subset_names_round_trip(self):
+        # append_sets must quote charpartition subset names that contain
+        # spaces or commas, so the written file reads back the same
+        # (BioAGI-org/biop-ai#547).
+        data = """#NEXUS
+begin data;
+dimensions ntax=2 nchar=6;
+format datatype=dna missing=? gap=-;
+matrix
+a ACGTAC
+b ACGTAC
+;
+end;
+"""
+        nexus = Nexus.Nexus(
+            data
+            + "begin sets;\n"
+            + "charpartition part = 'gene one': 1-3, 'gene, two': 4-6;\n"
+            + "end;\n"
+        )
+        expected = {"part": {"gene one": [0, 1, 2], "gene, two": [3, 4, 5]}}
+        self.assertEqual(nexus.charpartitions, expected)
+        again = Nexus.Nexus(data + nexus.append_sets())
+        self.assertEqual(again.charpartitions, expected)
+
 
 class TestStandardDatatype(unittest.TestCase):
     """Matrices with datatype=standard, such as morphological characters.
