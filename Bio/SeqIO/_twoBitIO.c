@@ -272,7 +272,7 @@ extract(const unsigned char* bytes, Py_ssize_t byteSize,
 
     if (byteSize != byteEnd - byteStart) {
         PyErr_Format(PyExc_RuntimeError,
-                     "unexpected number of bytes %u (expected %u)",
+                     "unexpected number of bytes %zd (expected %zd)",
                      byteSize, byteEnd - byteStart);
         return -1;
     }
