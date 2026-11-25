@@ -406,6 +406,51 @@ class AffyTest(unittest.TestCase):
                     ):
                         CelFile.read(io.StringIO(bad))
 
+    def testAffy3MalformedLine(self):
+        # Short or non-numeric lines in a version 3 file used to raise a bare
+        # IndexError, which "except ValueError" misses, or a ValueError with
+        # only Python's own message (issue #523).
+        with open(self.affy3) as f:
+            data = f.read()
+        datheader = data[
+            data.index("DatHeader=") : data.index("\n", 1 + data.index("DatHeader="))
+        ]
+        cases = [
+            # IndexError
+            ("  4\t  4\t168.0\t24.1\t 25\n", "  4\n", "INTENSITY"),
+            ("  4\t  4\t168.0\t24.1\t 25\n", "  4\t  4\t168.0\n", "INTENSITY"),
+            ("4 2\n", "4\n", "MASKS"),
+            ("1 3\n", "1\n", "OUTLIERS"),
+            ("3 2 21775.0\n", "3 2\n", "MODIFIED"),
+            (datheader, datheader[: datheader.index("CLS=3684") + 8], "HEADER"),
+            # ValueError from Python, not ParserError
+            (
+                "  4\t  4\t168.0\t24.1\t 25\n",
+                "  x\t  4\t168.0\t24.1\t 25\n",
+                "INTENSITY",
+            ),
+            ("GridCornerUL=206 129\n", "GridCornerUL=206\n", "HEADER"),
+            ("Cols=5\n", "Cols=x\n", "HEADER"),
+            ("Cols=5\n", "Cols 5\n", "HEADER"),
+            ("Percentile:75;", "Percentile;", "HEADER"),
+            ("Percentile:75;", "Percentile:x;", "HEADER"),
+        ]
+        for old, new, section in cases:
+            with self.subTest(new=new):
+                self.assertEqual(data.count(old), 1)
+                with self.assertRaisesRegex(
+                    CelFile.ParserError,
+                    f"^CEL version 3 file has a malformed line in its {section} ",
+                ):
+                    CelFile.read(io.StringIO(data.replace(old, new)))
+        # These were raised as ValueError, not ParserError, by the parser itself
+        bad = data.replace("Percentile:75;", "Percentile:75;Spam:1;")
+        with self.assertRaisesRegex(CelFile.ParserError, "^Unexpected tag"):
+            CelFile.read(io.StringIO(bad))
+        bad = data.replace("CLS=3684 RWS", "CLS=3684RWS")
+        with self.assertRaisesRegex(CelFile.ParserError, "^Field does not start"):
+            CelFile.read(io.StringIO(bad))
+
     @unittest.skipIf(tracemalloc is None, "tracemalloc is not available")
     def testAffy3SizeBeyondCellsMemory(self):
         # The 3 kB example file declaring 2000 by 2000 cells made the old
