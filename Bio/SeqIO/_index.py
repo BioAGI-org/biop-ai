@@ -76,15 +76,20 @@ class SffRandomAccess(SeqFileRandomAccess):
     def __init__(self, filename, format):
         """Initialize the class."""
         SeqFileRandomAccess.__init__(self, filename, format)
-        (
-            header_length,
-            self.index_offset,
-            self.index_length,
-            number_of_reads,
-            self.number_of_flows_per_read,
-            self.flow_chars,
-            self.key_sequence,
-        ) = SeqIO.SffIO._sff_file_header(self._handle)
+        try:
+            (
+                header_length,
+                self.index_offset,
+                self.index_length,
+                number_of_reads,
+                self.number_of_flows_per_read,
+                self.flow_chars,
+                self.key_sequence,
+            ) = SeqIO.SffIO._sff_file_header(self._handle)
+        except BaseException:
+            # Close the file now, so that it can be deleted even on Windows
+            self._handle.close()
+            raise
         # Now on to the reads...
         self.read_flow_fmt = ">%iH" % self.number_of_flows_per_read
         self.read_flow_size = struct.calcsize(self.read_flow_fmt)
