@@ -297,6 +297,16 @@ class GeneTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "^DBLINKS ids before any database"):
             next(Gene.parse(StringIO(text)))
 
+    def test_round_trip(self):
+        """str() of a parsed record parses back to the same record."""
+        with open(support.DATA / "KEGG" / "gene.sample") as handle:
+            records = list(Gene.parse(handle))
+        self.assertEqual(len(records), 2)
+        for record in records:
+            reparsed = next(Gene.parse(StringIO(str(record) + "\n")))
+            self.assertEqual(vars(reparsed), vars(record))
+        self.assertEqual(str(Gene.Record()), "///")
+
 
 class MapTests(unittest.TestCase):
     """Bio.KEGG.Map tests."""

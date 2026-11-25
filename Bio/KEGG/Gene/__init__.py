@@ -52,7 +52,17 @@ class Record:
 
     def __str__(self):
         """Return a string representation of this Record."""
-        return self._entry() + self._name() + self._dblinks() + "///"
+        return (
+            self._entry()
+            + self._name()
+            + self._definition()
+            + self._orthology()
+            + self._organism()
+            + self._position()
+            + self._motif()
+            + self._dblinks()
+            + "///"
+        )
 
     def _entry(self):
         return _write_kegg("ENTRY", [self.entry])
@@ -63,7 +73,27 @@ class Record:
         )
 
     def _definition(self):
+        # Not wrapped: parse() reads DEFINITION and MOTIF from a single line.
         return _write_kegg("DEFINITION", [self.definition])
+
+    def _orthology(self):
+        return _write_kegg(
+            "ORTHOLOGY", [f"{id}  {name}" for id, name in self.orthology]
+        )
+
+    def _organism(self):
+        # The default is "" but parse() stores an (id, name) tuple.
+        return _write_kegg(
+            "ORGANISM", ["  ".join(self.organism)] if self.organism else []
+        )
+
+    def _position(self):
+        return _write_kegg("POSITION", [self.position])
+
+    def _motif(self):
+        return _write_kegg(
+            "MOTIF", [f"{db}: {' '.join(ids)}" for db, ids in self.motif]
+        )
 
     def _dblinks(self):
         s = []
