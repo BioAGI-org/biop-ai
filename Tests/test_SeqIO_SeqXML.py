@@ -189,6 +189,39 @@ class TestReadHeader(unittest.TestCase):
         self.assertEqual(records.sourceVersion, "56")
         self.assertEqual(records.seqXMLversion, "0.4")
 
+    def test_source_attribute_does_not_close_caller_handle(self):
+        """The header source attribute must not make SeqIO close our handle."""
+        data = (support.DATA / "SeqXML" / "protein_example.xml").read_bytes()
+        handle = BytesIO(data)
+        with SeqIO.parse(handle, "seqxml") as records:
+            self.assertEqual(records.source, "Ensembl")
+            self.assertEqual(len(list(records)), 5)
+        self.assertFalse(handle.closed)
+        # A file SeqIO opened from a path is still closed on exit
+        path = support.DATA / "SeqXML" / "protein_example.xml"
+        with SeqIO.parse(path, "seqxml") as records:
+            stream = records.stream
+        self.assertTrue(stream.closed)
+
+    def test_subclass_without_base_init_closes_its_stream(self):
+        """Close a stream a subclass opened itself, without our __init__."""
+        from Bio.SeqIO.Interfaces import SequenceIterator
+
+        class OwnInit(SequenceIterator):
+            modes = "b"
+
+            def __init__(self, source):
+                self.source = source
+                self.stream = open(source, "rb")
+
+            def __next__(self):
+                raise StopIteration
+
+        path = support.DATA / "SeqXML" / "protein_example.xml"
+        with OwnInit(path) as records:
+            stream = records.stream
+        self.assertTrue(stream.closed)
+
 
 class TestReadAndWrite(unittest.TestCase):
     def test_read_write_rna(self):
