@@ -644,6 +644,18 @@ The ``QueryResult.iteritems`` method, named after the Python 2
 ``zip(qresult.iterhit_keys(), qresult.iterhits())`` or the ``items``
 property instead.
 
+Changed in biop-ai 1.89 without a deprecation period. The ``fasta-m10``
+parser now raises ``ValueError`` when the file ends before the ``>>><<<``
+line that follows the alignments of its last query. It used to return that
+query, with no hits if the file was cut before them. FASTA 34, 35 and 36
+write this line, so complete files parse as before. ``SearchIO.index`` and
+``SearchIO.index_db`` now raise the same error when you look up that query.
+For the same reason, ``get_raw`` on a ``fasta-m10`` index from
+``SearchIO.index`` now returns the last query of the file as it ends in the
+file. It used to add a second ``>>><<<`` line after it. ``get_raw`` on an
+index from ``SearchIO.index_db`` never added that line, so this change does
+not affect it.
+
 Changed in biop-ai 1.89 without a deprecation period. The ``infernal-text``
 parser now raises ``ValueError`` on a ``//`` line that comes before any
 ``Query:`` line. It used to skip that line and return the queries after it.
