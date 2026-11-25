@@ -5,6 +5,7 @@
 
 """Tests for SearchIO writing."""
 
+import io
 import os
 import unittest
 
@@ -53,6 +54,16 @@ class BlastXmlWriteCases(WriteCases):
         """Test blast-xml writing from blast-xml, BLAST 2.2.26+, multiple queries (xml_2226_blastp_001.xml)."""
         source = support.DATA / "Blast" / "xml_2226_blastp_001.xml"
         self.parse_write_and_compare(source, self.fmt, self.out, self.fmt)
+
+    def test_write_version_without_number(self):
+        """Test blast-xml round trip keeps a version with no x.y.z number."""
+        source = support.DATA / "Blast" / "xml_2226_blastp_004.xml"
+        qresult = SearchIO.read(source, self.fmt)
+        qresult.version = "BLASTP"
+        handle = io.StringIO()
+        SearchIO.write(qresult, handle, self.fmt)
+        handle.seek(0)
+        self.assertEqual(SearchIO.read(handle, self.fmt).version, "BLASTP")
 
 
 class BlastTabWriteCases(WriteCases):
