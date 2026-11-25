@@ -8,6 +8,7 @@
 
 """Tests for SearchIO InfernalIO infernal-text indexing"""
 
+import io
 import unittest
 from unittest import mock
 
@@ -577,6 +578,31 @@ class TruncatedCases(unittest.TestCase):
         self.assertEqual(
             index.get_raw(key), data[: data.index(b"Query:")] + data[start:end]
         )
+
+
+class MalformedCases(unittest.TestCase):
+    """A malformed query raises ValueError when the file is parsed or indexed."""
+
+    def test_malformed_query(self):
+        """Test a 'Query:' line with no ID, and a '//' with no Query."""
+        header = b"# cmsearch :: search CM(s) against a sequence database\n"
+        cases = (
+            (header + b"Query:\n//\n", "'Query:' line has no query ID"),
+            (header + b"//\n", "Found a '//' line before any 'Query:' line"),
+        )
+        for data, message in cases:
+            with self.subTest(data=data, via="parse"):
+                with self.assertRaises(ValueError) as cm:
+                    list(SearchIO.parse(io.StringIO(data.decode()), "infernal-text"))
+                self.assertEqual(str(cm.exception), message)
+            with self.subTest(data=data, via="index"):
+                with mock.patch(
+                    "Bio.SearchIO._index._open_for_random_access",
+                    return_value=io.BytesIO(data),
+                ):
+                    with self.assertRaises(ValueError) as cm:
+                        SearchIO.index("test.txt", "infernal-text")
+                self.assertEqual(str(cm.exception), message)
 
 
 if __name__ == "__main__":
