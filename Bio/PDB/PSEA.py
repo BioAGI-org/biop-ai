@@ -103,17 +103,19 @@ def psea(pname):
     return ss
 
 
+_PSEA_TO_HEC = {"a": "H", "b": "E", "c": "C"}
+
+
 def psea2HEC(pseq):
     """Translate PSEA secondary structure string into HEC."""
     seq = []
     for ss in pseq:
-        if ss == "a":
-            n = "H"
-        elif ss == "b":
-            n = "E"
-        elif ss == "c":
-            n = "C"
-        seq.append(n)
+        try:
+            seq.append(_PSEA_TO_HEC[ss])
+        except KeyError:
+            raise ValueError(
+                f"Unexpected P-SEA secondary structure symbol {ss!r}"
+            ) from None
     return seq
 
 

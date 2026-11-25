@@ -14,7 +14,6 @@ from subprocess import getoutput
 
 import support
 
-from Bio import MissingExternalDependencyError
 from Bio.PDB import PDBParser
 from Bio.PDB.PSEA import PSEA
 from Bio.PDB.PSEA import psea
@@ -24,13 +23,18 @@ from Bio.PDB.PSEA import run_psea
 os.environ["LANG"] = "C"
 
 
-cmd_output = getoutput("psea -h")
-if not cmd_output.startswith("o---"):
-    raise MissingExternalDependencyError(
-        "Download and install psea from "
-        "ftp://ftp.lmcp.jussieu.fr/pub/sincris/software/protein/p-sea/. "
-        "Make sure that psea is on path"
-    )
+# Only the tests that run the psea program need it, so they skip without it.
+have_psea = getoutput("psea -h").startswith("o---")
+
+
+def require_psea(test):
+    """Skip the test unless the psea program is on the path."""
+    if not have_psea:
+        test.skipTest(
+            "Download and install psea from "
+            "ftp://ftp.lmcp.jussieu.fr/pub/sincris/software/protein/p-sea/. "
+            "Make sure that psea is on path"
+        )
 
 
 def run_in_temp_dir(test):
@@ -48,6 +52,7 @@ def run_in_temp_dir(test):
 
 class TestPDBPSEA(unittest.TestCase):
     def setUp(self):
+        require_psea(self)
         run_in_temp_dir(self)
 
     def test_run_psea_verbose(self):
@@ -125,8 +130,23 @@ class TestPDBPSEA(unittest.TestCase):
             self.assertEqual(handle.read(), "mine\n")
 
 
+class TestPsea2HEC(unittest.TestCase):
+    """psea2HEC, which needs no psea program."""
+
+    def test_valid_symbols(self):
+        self.assertEqual(psea2HEC("abc"), ["H", "E", "C"])
+
+    def test_unknown_symbol(self):
+        """A symbol other than a, b or c is an error, wherever it is."""
+        for pseq in ("Xab", "aXc", "ab c"):
+            with self.subTest(pseq=pseq):
+                with self.assertRaisesRegex(ValueError, "symbol"):
+                    psea2HEC(pseq)
+
+
 class TestPSEA(unittest.TestCase):
     def setUp(self):
+        require_psea(self)
         run_in_temp_dir(self)
 
     def test_get_seq(self):

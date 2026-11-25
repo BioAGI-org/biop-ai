@@ -55,7 +55,6 @@ test_KGML_graphics                          # Please install ReportLab if you wa
 test_KGML_graphics_online                   # Install reportlab if you want to use Bio.Graphics.
 test_PAML_tools                             # Install PAML if you want to use the Bio.Phylo.PAML wrapper.
 test_PDB_PDBList                            # internet not available
-test_PDB_PSEA                               # Download and install psea from ftp://ftp.lmcp.jussieu.fr/pub/sincris/software/protein/p-sea/. Make sure that psea is on path
 test_PDB_alphafold_db                       # internet not available
 test_PDB_internal_coords                    # Install mmtf to use Bio.PDB.mmtf (e.g. pip install mmtf-python)
 test_Phylo_CDAO                             # Install RDFlib if you want to use the CDAO tree format.
