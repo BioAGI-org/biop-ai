@@ -8,6 +8,7 @@
 import io
 import os
 import sys
+import tempfile
 import unittest
 from subprocess import getoutput
 
@@ -32,15 +33,22 @@ if not cmd_output.startswith("o---"):
     )
 
 
-def remove_sea_files():
-    for file in os.listdir():
-        if file.endswith(".sea"):
-            os.remove(file)
+def run_in_temp_dir(test):
+    """Run the test in a new temporary directory, removed afterwards.
+
+    run_psea writes its output to the working directory, so this keeps the
+    tests away from any .sea files already in the directory they start in.
+    """
+    tmpdir = tempfile.TemporaryDirectory()
+    # Cleanups run last first: change back, then remove the directory.
+    test.addCleanup(tmpdir.cleanup)
+    test.addCleanup(os.chdir, os.getcwd())
+    os.chdir(tmpdir.name)
 
 
 class TestPDBPSEA(unittest.TestCase):
-    def tearDown(self):
-        remove_sea_files()
+    def setUp(self):
+        run_in_temp_dir(self)
 
     def test_run_psea_verbose(self):
         captured_ouput = io.StringIO()
@@ -102,10 +110,24 @@ class TestPDBPSEA(unittest.TestCase):
         self.assertTrue(os.path.exists(psae_run))
         self.assertTrue(psae_run.endswith(".sea"))
 
+    def test_keeps_existing_sea_files(self):
+        """Running a test leaves the .sea files in the directory alone."""
+        with open("unrelated.sea", "w") as handle:
+            handle.write("keep\n")
+        with open("1A8O.sea", "w") as handle:
+            handle.write("mine\n")
+        result = unittest.TestResult()
+        TestPDBPSEA("test_run_psea_quiet").run(result)
+        self.assertTrue(result.wasSuccessful(), result.failures + result.errors)
+        with open("unrelated.sea") as handle:
+            self.assertEqual(handle.read(), "keep\n")
+        with open("1A8O.sea") as handle:
+            self.assertEqual(handle.read(), "mine\n")
+
 
 class TestPSEA(unittest.TestCase):
-    def tearDown(self):
-        remove_sea_files()
+    def setUp(self):
+        run_in_temp_dir(self)
 
     def test_get_seq(self):
         p = PDBParser()
