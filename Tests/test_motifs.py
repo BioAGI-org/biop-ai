@@ -6284,6 +6284,24 @@ class TestScoreDistribution(unittest.TestCase):
         with self.assertWarnsRegex(BiopythonWarning, "background"):
             unknown.distribution()
 
+    def test_mismatched_background_warning_location(self):
+        """The background warning names the caller's line, not thresholds.py.
+
+        It named Bio/motifs/thresholds.py, so the default filter showed it
+        only once per process, whichever call had the wrong background.
+        """
+        motif = motifs.create([Seq("ACGT"), Seq("ACGA"), Seq("TCGT")])
+        motif.pseudocounts = 0.5
+        pssm = motif.pssm
+        background = {"A": 0.4, "C": 0.1, "G": 0.1, "T": 0.4}
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pssm.distribution(background, precision=100)
+            ScoreDistribution(pssm=pssm, background=background, precision=100)
+        self.assertEqual(len(caught), 2)
+        for warning in caught:
+            self.assertEqual(warning.filename, __file__)
+
     def test_stored_background(self):
         """The PSSM keeps its background, as the default and to check against.
 
