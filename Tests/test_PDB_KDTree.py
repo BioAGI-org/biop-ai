@@ -11,6 +11,7 @@
 
 """Unit tests for those parts of the Bio.PDB module using Bio.PDB.kdtrees."""
 
+import sys
 import threading
 import unittest
 
@@ -167,6 +168,16 @@ class KDTreeTest(unittest.TestCase):
         self.assertEqual([repr(p) for p in points], ["0: 0.0", "1: 1.0"])
         neighbors = kdt.neighbor_search(2.0)
         self.assertEqual([repr(n) for n in neighbors], ["(0, 1): 1.0"])
+
+    def test_KDTree_large_index(self):
+        """Point and Neighbor accept any Py_ssize_t index, not just a C int."""
+        big = sys.maxsize
+        point = kdtrees.Point(big, 1.0)
+        self.assertEqual(point.index, big)
+        self.assertEqual(repr(point), f"{big}: 1.0")
+        neighbor = kdtrees.Neighbor(big - 1, big, 1.0)
+        self.assertEqual((neighbor.index1, neighbor.index2), (big - 1, big))
+        self.assertEqual(repr(neighbor), f"({big - 1}, {big}): 1.0")
 
     def test_KDTree_neighbor_search_simple(self):
         """Test all fixed radius neighbor search.
