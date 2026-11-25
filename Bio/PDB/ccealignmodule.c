@@ -682,9 +682,27 @@ findPath(
                 int gapBestIndex = -1;
 
                 //
-                // Check all possible gaps from here
+                // Check all possible gaps from here. Gap g moves jA or jB
+                // on by (g + 1) / 2, so a gap longer than the room left in
+                // both structures runs off the end of S: stop before it.
+                // Every candidate moves both jA and jB on by at least
+                // fragmentSize, so if either structure has no room left,
+                // there is no candidate at all.
                 //
-                for (int g = 0; g < (gapMax * 2) + 1; g++) {
+                const int roomA = lenA - fragmentSize -
+                    (curPath[curPathLength - 1].pA + fragmentSize);
+                const int roomB = lenB - fragmentSize -
+                    (curPath[curPathLength - 1].pB + fragmentSize);
+
+                if (roomA < 0 || roomB < 0)
+                    break;
+
+                int gapLimit = (roomA > roomB) ? roomA : roomB;
+
+                if (gapLimit > gapMax)
+                    gapLimit = gapMax;
+
+                for (int g = 0; g < (gapLimit * 2) + 1; g++) {
                     if (checkSignals(&work, 1, save) < 0) {
                         PyMem_RawFree(curPath);
                         goto error;
