@@ -7542,6 +7542,20 @@ table bed
             names = [alignment.query.id for alignment in selected_alignments]
             self.assertEqual(names, ["name3"])
 
+    def test_search_all(self):
+        """Search with no chromosome returns every alignment."""
+        # This used to raise UnboundLocalError, also for bigMaf and bigPsl
+        # files, which inherit search from bigbed.AlignmentIterator.
+        with Align.parse(self.path, "bigbed") as alignments:
+            names = [alignment.query.id for alignment in alignments.search()]
+        self.assertEqual(names, [f"name{i}" for i in range(1, 9)])
+        path = support.DATA / "MAF" / "ucsc_test.bb"
+        with Align.parse(path, "bigmaf") as alignments:
+            expected = [format(alignment, "maf") for alignment in alignments]
+            found = [format(alignment, "maf") for alignment in alignments.search()]
+        self.assertEqual(len(found), 3)
+        self.assertEqual(found, expected)
+
     def test_three_iterators(self):
         """Create three iterators and use them concurrently."""
         with Align.parse(self.path, "bigbed") as alignments1:
