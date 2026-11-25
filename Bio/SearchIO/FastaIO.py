@@ -157,6 +157,18 @@ _STATE_HIT_BLOCK = 2
 _STATE_CONS_BLOCK = 3
 
 
+def _ends_query(line):
+    """Return True if a line ends the alignments of a query (PRIVATE).
+
+    That is an end marker, '>>><<<' or '>>>///', or the next query line,
+    such as '  2>>>ID DESCRIPTION - LENGTH aa'. A '>>' hit line is neither,
+    even if its description holds '>>>'.
+    """
+    return line.strip() in (">>><<<", ">>>///") or (
+        not line.startswith(">>") and ">>>" in line
+    )
+
+
 def _set_qresult_hits(qresult, hit_rows=()):
     """Append Hits without alignments into QueryResults (PRIVATE)."""
     for hit_row in hit_rows:
@@ -363,6 +375,7 @@ class FastaM10Parser:
         """Parse query result (PRIVATE)."""
         # initial qresult value
         qresult = None
+        query_ended = False
         hit_rows = []
         # state values
         state_QRES_NEW = 1
@@ -404,6 +417,13 @@ class FastaM10Parser:
                             "File ended before the first query line"
                             " '>>>ID DESCRIPTION - LENGTH aa'"
                         )
+                    # FASTA 34 and 35 have no '>>>///', but every complete
+                    # file has '>>><<<' after the alignments of its last query
+                    if not line and not query_ended:
+                        raise ValueError(
+                            "File ended before the '>>><<<' end marker"
+                            f" of query {qresult.id!r}"
+                        )
                     yield _set_qresult_hits(qresult, hit_rows)
                     break
 
@@ -421,6 +441,7 @@ class FastaM10Parser:
                     seq_len = regx.group(3)
                     desc = regx.group(2).rstrip(" ")
                     qresult = QueryResult(id=query_id)
+                    query_ended = False
                     qresult.seq_len = int(seq_len)
                     # get target from the next line
                     line = self.handle.readline()
@@ -466,6 +487,8 @@ class FastaM10Parser:
                     line = self.line
 
             else:
+                if line.strip() == ">>><<<":
+                    query_ended = True
                 line = self.handle.readline()
 
         self.line = line
@@ -477,6 +500,11 @@ class FastaM10Parser:
             if not line:
                 raise ValueError(
                     f"File ended before the first '>>' hit line of query {query_id!r}"
+                )
+            if _ends_query(line):
+                raise ValueError(
+                    "Expected a '>>' hit line in the alignments of query"
+                    f" {query_id!r}, found:\n{line!r}"
                 )
             if line.startswith(">>"):
                 break
@@ -597,9 +625,7 @@ class FastaM10Parser:
                 raise ValueError(
                     f"File ended inside the alignments of query {query_id!r}"
                 )
-            if line.strip() in [">>><<<", ">>>///"] or (
-                not line.startswith(">>>") and ">>>" in line
-            ):
+            if _ends_query(line):
                 # process HSP alignment and coordinates
                 _set_hsp_seqs(hsp, parsed_hsp, self._preamble["program"])
                 hit = Hit(hsp_list)
@@ -633,7 +659,7 @@ class FastaM10Indexer(SearchIndexer):
         while True:
             end_offset = handle.tell()
 
-            if not line.startswith(query_mark) and query_mark in line:
+            if not line.startswith(b">>") and query_mark in line:
                 regx = _RE_ID_DESC_SEQLEN_IDX.match(line, line.find(query_mark))
                 if regx is None:
                     raise ValueError(
@@ -648,7 +674,7 @@ class FastaM10Indexer(SearchIndexer):
                     yield qresult_key, start_offset, end_offset - start_offset
                     break
                 line = handle.readline()
-                if not line.startswith(query_mark) and query_mark in line:
+                if not line.startswith(b">>") and query_mark in line:
                     yield qresult_key, start_offset, end_offset - start_offset
                     start_offset = end_offset
             else:
@@ -674,7 +700,7 @@ class FastaM10Indexer(SearchIndexer):
                 raise ValueError(
                     "File ended before the first query line after the FASTA preamble"
                 )
-            if not line.startswith(query_mark) and query_mark in line:
+            if not line.startswith(b">>") and query_mark in line:
                 break
 
         # and read the qresult raw string
@@ -688,11 +714,13 @@ class FastaM10Indexer(SearchIndexer):
 
             line = handle.readline()
             # break when we've reached qresult end
-            if not line.startswith(query_mark) and query_mark in line:
+            if not line.startswith(b">>") and query_mark in line:
+                # FASTA 34 and 35 write '>>><<<' only after the last query, so
+                # add one here. Add none at end of file: a last query cut
+                # before its '>>><<<' must fail here as it does in parse().
+                lines.append(b">>><<<\n")
                 break
 
-        # append mock end marker, since it's not always present
-        lines.append(b">>><<<\n")
         return b"".join(lines)
 
 

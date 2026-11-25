@@ -3286,6 +3286,95 @@ class TruncatedCases(unittest.TestCase):
                     list(parse(truncated(filename, n), FMT))
                 self.assertEqual(str(cm.exception), message)
 
+    def test_cut_before_query_alignments(self):
+        """Test a file that ends between a query's library line and its hits."""
+        # The cuts fall just after the target library line ("Library:" in
+        # output001.m10, " vs ... library" in output002.m10), in the score
+        # histogram (output002.m10, 30), in the statistics block
+        # (output001.m10, 20) and in the statistics of the second query
+        # (output004.m10, 26). Without the '>>><<<' end marker, these used
+        # to parse as queries with zero hits, and SearchIO.index still
+        # returned one after parse was fixed.
+        first = "gi|10955263|ref|NP_052604.1|"
+        for filename, n, query_id in (
+            ("output001.m10", 9, first),
+            ("output001.m10", 20, first),
+            ("output002.m10", 11, first),
+            ("output002.m10", 30, first),
+            ("output007.m10", 12, first),
+            ("output004.m10", 26, "ref|NC_002127.1|:c1351-971"),
+        ):
+            message = f"File ended before the '>>><<<' end marker of query {query_id!r}"
+            with self.subTest(filename=filename, lines=n, via="parse"):
+                with self.assertRaises(ValueError) as cm:
+                    list(parse(truncated(filename, n), FMT))
+                self.assertEqual(str(cm.exception), message)
+            with self.subTest(filename=filename, lines=n, via="index"):
+                with self.assertRaises(ValueError) as cm:
+                    look_up(truncated(filename, n).getvalue(), query_id)
+                self.assertEqual(str(cm.exception), message)
+
+    def test_query_end_before_first_hit(self):
+        """Test a query whose alignments end before its first '>>' hit line."""
+        # In output002.m10 (FASTA 34), line 81 opens the alignments of the
+        # first query, ">>>gi|10955263|ref|NP_052604.1|, 107 aa vs ...", its
+        # first hit line is line 95, and line 158 is the second query line,
+        # "  2>>>gi|10955264|...". Cut after line 81 or 94, the first query
+        # is followed by an end marker or by the second query. The parser
+        # used to take '>>><<<' for a hit line, and to skip to the hits of
+        # the second query. SearchIO.index ends a record cut before the next
+        # query with '>>><<<'.
+        with open(get_file("output002.m10")) as handle:
+            lines = handle.readlines()
+        self.assertTrue(lines[80].startswith(">>>gi|10955263|ref|NP_052604.1|, "))
+        self.assertTrue(lines[94].startswith(">>gi|162139799|ref|NP_309634.2| "))
+        self.assertTrue(lines[157].startswith("  2>>>gi|10955264|ref|NP_052605.1| "))
+        message = (
+            "Expected a '>>' hit line in the alignments of query"
+            " 'gi|10955263|ref|NP_052604.1|', found:\n"
+        )
+        for n in (81, 94):
+            for rest in ([">>><<<\n"], lines[157:]):
+                text = "".join(lines[:n] + rest)
+                with self.subTest(lines=n, next=rest[0], via="parse"):
+                    with self.assertRaises(ValueError) as cm:
+                        list(parse(StringIO(text), FMT))
+                    self.assertEqual(str(cm.exception), message + repr(rest[0]))
+                with self.subTest(lines=n, next=rest[0], via="index"):
+                    with self.assertRaises(ValueError) as cm:
+                        look_up(text, "gi|10955263|ref|NP_052604.1|")
+                    self.assertEqual(str(cm.exception), message + repr(">>><<<\n"))
+
+    def test_hit_description_with_query_mark(self):
+        """Test a '>>' hit line whose description holds '>>>'."""
+        # In output002.m10, lines 95 and 127 are the two '>>' hit lines of
+        # the first query. A '>>>' in a hit description is not a query line.
+        with open(get_file("output002.m10")) as handle:
+            original = handle.readlines()
+        query_id = "gi|10955263|ref|NP_052604.1|"
+        hits = (
+            (94, "gi|162139799|ref|NP_309634.2|", "23S rRNA pseudouridine synthase E"),
+            (126, "gi|15831859|ref|NP_310632.1|", "trehalose-6-phosphate phosphatase"),
+        )
+        for i, (n, hit_id, name) in enumerate(hits):
+            lines = original.copy()
+            description = f"{name} [Escherichia coli O157:H7 str. Sakai]"
+            self.assertEqual(lines[n], f">>{hit_id} {description}\n")
+            lines[n] = f">>{hit_id} {description} >>> annotation\n"
+            text = "".join(lines)
+            qresults = list(parse(StringIO(text), FMT))
+            self.assertEqual([len(qresult) for qresult in qresults], [2, 2, 2])
+            for via, qresult in (
+                ("parse", qresults[0]),
+                ("index", look_up(text, query_id)),
+            ):
+                with self.subTest(line=n + 1, via=via):
+                    self.assertEqual(qresult.id, query_id)
+                    self.assertEqual(qresult.hit_keys, [hit[1] for hit in hits])
+                    self.assertEqual(
+                        qresult[i].description, f"{description} >>> annotation"
+                    )
+
     def test_malformed_attribute_line_in_hit(self):
         """Test a ';' line inside a hit block that is not '; name: value'."""
         # In output002.m10, line 96 is "; fa_frame: f", just after the
