@@ -2337,6 +2337,16 @@ class AceReadSortsTags(unittest.TestCase):
         self.assertEqual([t.name for t in contig.reads[0].rt], ["r0", "nobody"])
         self.assertEqual([t.name for t in contig.ct], ["noContig"])
 
+    def test_sort_again_keeps_wa_tags(self):
+        """Check a second sort() does not duplicate the WA tags."""
+        with open(support.DATA / "Ace" / "contig1.ace") as handle:
+            record = Ace.read(handle)
+        wa = list(record.wa)
+        self.assertEqual(len(wa), 1)
+        record.sort()
+        record.sort()
+        self.assertEqual(record.wa, wa)
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)

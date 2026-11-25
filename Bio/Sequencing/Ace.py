@@ -553,12 +553,19 @@ class ACEFileRecord:
         ct_by_name: defaultdict[str, list[ct]] = defaultdict(list)
         rt_by_name: defaultdict[str, list[rt]] = defaultdict(list)
         wr_by_name: defaultdict[str, list[wr]] = defaultdict(list)
+        # Skip WA tags an earlier sort() already copied, so calling it again
+        # does not duplicate them; compare by identity so two identical WA
+        # blocks in the file are both kept.
+        wa_seen = {id(t) for t in self.wa or ()}
         # search for tags that aren't in the right position
         for c in self.contigs:
             if c.wa:
-                if not self.wa:
+                if self.wa is None:
                     self.wa = []
-                self.wa.extend(c.wa)
+                for t in c.wa:
+                    if id(t) not in wa_seen:
+                        wa_seen.add(id(t))
+                        self.wa.append(t)
             if c.ct:
                 take_misplaced(c.ct, c.name, contig_names, ct_by_name)
             for r in c.reads:
