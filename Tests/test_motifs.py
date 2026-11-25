@@ -17,7 +17,10 @@ import tempfile
 import unittest
 import warnings
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from io import StringIO
+from unittest import mock
+from xml.etree import ElementTree
 from xml.parsers import expat
 
 try:
@@ -32,8 +35,12 @@ except ImportError:
 import support
 
 import Bio
+from Bio import _xml
 from Bio import BiopythonWarning
 from Bio import motifs
+from Bio.motifs import mast
+from Bio.motifs import meme
+from Bio.motifs import xms
 from Bio.motifs.matrix import PositionSpecificScoringMatrix
 from Bio.motifs.matrix import PositionWeightMatrix
 from Bio.motifs.thresholds import ScoreDistribution
@@ -268,6 +275,22 @@ U:   0.50   0.17   0.50   0.17   0.50
         m = motifs.create([Seq("ATATA")])
         with self.assertRaisesRegex(ValueError, "either counts or an alignment"):
             motifs.Motif(counts=m.counts, alignment=m.alignment)
+
+    def test_xml_entity_declarations_use_shared_handler(self):
+        """Test that the XMS and MEME/MAST parsers refuse entities via Bio._xml.
+
+        One handler builds the error, so its wording cannot drift apart.
+        """
+        doc = b'<?xml version="1.0"?><!DOCTYPE r [<!ENTITY e "x">]><r>&e;</r>'
+        with mock.patch.object(
+            _xml, "_refuse_entity_decl", side_effect=RuntimeError("shared")
+        ):
+            with self.assertRaisesRegex(RuntimeError, "shared"):
+                xms.read(BytesIO(doc))
+            with self.assertRaisesRegex(RuntimeError, "shared"):
+                meme.read(BytesIO(doc))
+            with self.assertRaisesRegex(RuntimeError, "shared"):
+                mast.read(BytesIO(doc))
 
 
 class TestDegenerateConsensus(unittest.TestCase):

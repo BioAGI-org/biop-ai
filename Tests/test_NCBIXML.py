@@ -7,9 +7,11 @@
 import io
 import unittest
 import warnings
+from unittest import mock
 
 import support
 
+from Bio import _xml
 from Bio import BiopythonParserWarning
 from Bio.Blast import NCBIXML
 
@@ -4420,6 +4422,18 @@ class TestNCBIXML(unittest.TestCase):
 """
         with self.assertRaisesRegex(ValueError, "entity declarations"):
             list(NCBIXML.parse(io.BytesIO(xml_data)))
+
+    def test_entity_declarations_use_shared_handler(self):
+        """Refuse entity declarations with the one handler in Bio._xml."""
+        xml_data = b"""<?xml version="1.0"?>
+<!DOCTYPE BlastOutput [<!ENTITY e "x">]>
+<BlastOutput><BlastOutput_program>&e;</BlastOutput_program></BlastOutput>
+"""
+        with mock.patch.object(
+            _xml, "_refuse_entity_decl", side_effect=RuntimeError("shared")
+        ):
+            with self.assertRaisesRegex(RuntimeError, "shared"):
+                list(NCBIXML.parse(io.BytesIO(xml_data)))
 
 
 if __name__ == "__main__":

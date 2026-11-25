@@ -41,6 +41,7 @@ import warnings
 import xml.sax
 from xml.sax.handler import ContentHandler
 
+from Bio import _xml
 from Bio import BiopythonDeprecationWarning
 from Bio import BiopythonParserWarning
 from Bio.Align import MultipleSeqAlignment
@@ -1238,11 +1239,6 @@ def read(handle, debug=0):
     return record
 
 
-def _reject_entity_decl(name, *args):
-    """Refuse XML entity declarations (PRIVATE)."""
-    raise ValueError(f"XML entity declarations are not allowed (found entity {name!r})")
-
-
 def parse(handle, debug=0):
     """Return an iterator a Blast record for each query.
 
@@ -1300,7 +1296,7 @@ def parse(handle, debug=0):
         expat_parser.buffer_text = True
         # BLAST XML never declares entities; nested ones could expand a
         # small file to megabytes of text ("billion laughs").
-        expat_parser.EntityDeclHandler = _reject_entity_decl
+        expat_parser.EntityDeclHandler = _xml._refuse_entity_decl
         blast_parser = BlastParser(debug)
         expat_parser.StartElementHandler = blast_parser.startElement
         expat_parser.EndElementHandler = blast_parser.endElement

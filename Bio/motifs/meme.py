@@ -9,6 +9,7 @@
 import xml.etree.ElementTree as ET
 from xml.parsers import expat
 
+from Bio import _xml
 from Bio import Align
 from Bio import motifs
 from Bio.Seq import Seq
@@ -135,16 +136,10 @@ class _XMLParser:
         self._builder = ET.TreeBuilder()
         self._parser = expat.ParserCreate(namespace_separator="}")
         self._parser.buffer_text = True
-        self._parser.EntityDeclHandler = self._entity_decl
+        self._parser.EntityDeclHandler = _xml._refuse_entity_decl
         self._parser.StartElementHandler = self._start
         self._parser.EndElementHandler = self._end
         self._parser.CharacterDataHandler = self._builder.data
-
-    @staticmethod
-    def _entity_decl(name, *args):
-        raise ValueError(
-            f"XML entity declarations are not allowed (found entity {name!r})"
-        )
 
     @staticmethod
     def _fixname(name):
