@@ -1010,9 +1010,9 @@ class MalformedFileTests(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp(prefix="biopython-test")
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir)
+        # A cleanup, not tearDown, so that it runs after the cleanups the
+        # tests add to close their indexes: Windows cannot delete open files.
+        self.addCleanup(shutil.rmtree, self.temp_dir)
 
     def write(self, name, text):
         """Write text to a file in the temporary directory and return its path."""
@@ -1113,7 +1113,10 @@ class MalformedFileTests(unittest.TestCase):
             "    <sequence length='2' mass='200' version='1'>AC</sequence>\n"
             "  </entry>\n</uniprot>\n",
         )
-        parsed_ids = [record.id for record in SeqIO.parse(path, "uniprot-xml")]
+        # The UniProt parser's XML reader holds the file in a reference cycle,
+        # so close it explicitly rather than wait for garbage collection.
+        with SeqIO.parse(path, "uniprot-xml") as records:
+            parsed_ids = [record.id for record in records]
         self.assertEqual(parsed_ids, ["P12345"])
         index = SeqIO.index(path, "uniprot-xml")
         self.addCleanup(index.close)
