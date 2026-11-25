@@ -8126,6 +8126,24 @@ class TestAlign_no_alignments(unittest.TestCase):
                     Align.parse(BytesIO(bytes(bad)), "bigbed")
 
 
+class TestAlign_no_zoom_levels(unittest.TestCase):
+    """Searching a bigBed file without zoom levels."""
+
+    def test_search(self):
+        # The number of items per data block is read from the zoom level
+        # indices only, so search() used to raise AttributeError when there
+        # were none.
+        with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        # The zoom level count is at byte 6 of the file header, and the table
+        # of 10 zoom levels of 24 bytes each follows the 64-byte header.
+        struct.pack_into("<H", data, 6, 0)
+        data[64 : 64 + 240] = bytes(240)
+        with Align.parse(BytesIO(data), "bigbed") as alignments:
+            self.assertEqual(len(list(alignments)), 2)
+            self.assertEqual(len(list(alignments.search("chr22"))), 2)
+
+
 class TestAlign_header_offsets(unittest.TestCase):
     """File header offsets that point past the end of the file."""
 
