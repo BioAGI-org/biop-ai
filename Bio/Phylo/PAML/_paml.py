@@ -52,6 +52,18 @@ def _windows_command(command, working_dir, path=os.path):
     return command
 
 
+def _relpath(path, start=os.curdir):
+    """Return path relative to start, or absolute if it has no such form (PRIVATE).
+
+    On Windows, a path on another drive than start cannot be made relative
+    to it, and os.path.relpath raises ValueError.
+    """
+    try:
+        return os.path.relpath(path, start)
+    except ValueError:
+        return os.path.abspath(path)
+
+
 class Paml:
     """Base class for wrapping PAML commands."""
 
@@ -126,14 +138,15 @@ class Paml:
 
         PAML requires that all paths specified in the control file be
         relative to the directory from which it is called rather than
-        absolute paths.
+        absolute paths. A path on another drive than working_dir (on
+        Windows) has no relative form, so it is given as an absolute path.
         """
         if self.working_dir is not None:
-            self._rel_working_dir = os.path.relpath(self.working_dir)
+            self._rel_working_dir = _relpath(self.working_dir)
         if self.alignment is not None:
-            self._rel_alignment = os.path.relpath(self.alignment, self.working_dir)
+            self._rel_alignment = _relpath(self.alignment, self.working_dir)
         if self.out_file is not None:
-            self._rel_out_file = os.path.relpath(self.out_file, self.working_dir)
+            self._rel_out_file = _relpath(self.out_file, self.working_dir)
 
     def run(self, ctl_file, verbose, command):
         """Run a PAML program using the current configuration.
