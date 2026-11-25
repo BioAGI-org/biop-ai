@@ -8209,6 +8209,18 @@ B GT
         stream = StringIO("# comment\n# STOCKHOLM 1.0\nseq1 ACGT\n//\n# comment\n")
         self.assertEqual(len(list(Align.parse(stream, "stockholm"))), 1)
 
+    def test_no_sequences(self):
+        """Reject an alignment with no sequence lines."""
+        for text in (
+            "# STOCKHOLM 1.0\n//\n",
+            "# STOCKHOLM 1.0\n#=GF ID x\n//\n",
+            "# STOCKHOLM 1.0\n#=GC SS_cons ....\n//\n",
+        ):
+            with self.subTest(text=text):
+                message = "^Found '//' before any sequence lines$"
+                with self.assertRaisesRegex(ValueError, message):
+                    Align.read(StringIO(text), "stockholm")
+
     def test_gf_feature_before_its_opener(self):
         """Reject #=GF RM, RT, DC or NL lines before the RN, DR or NE they belong to."""
         for feature, opener in (("RM", "RN"), ("RT", "RN"), ("DC", "DR"), ("NL", "NE")):
