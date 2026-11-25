@@ -113,9 +113,11 @@ class Hmmer2TextParser:
 
     def parse_qresult(self):
         """Parse a HMMER2 query block."""
+        seen_query = False
         while self.read_next():
             if not self.line.startswith("Query"):
-                return
+                break
+            seen_query = True
             _, id_ = self.parse_key_value()
             self.qresult = QueryResult(id=id_)
 
@@ -141,6 +143,13 @@ class Hmmer2TextParser:
             if description is not None:
                 self.qresult.description = description
             yield self.qresult
+
+        # Raise the same errors as Hmmer2TextIndexer on a file with no query
+        if not seen_query:
+            if self.line.startswith("//"):
+                raise ValueError("Found a '//' line before any 'Query' line")
+            if not self.line and self._meta.get("program") == "hmmsearch":
+                raise ValueError("File ended before a 'Query HMM:' line")
 
     def parse_hits(self):
         """Parse a HMMER2 hit block, beginning with the hit table."""
