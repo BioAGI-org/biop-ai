@@ -1835,6 +1835,7 @@ Otherwise, the distance between two columns in the matrix is calculated.
     double totalweight = 0.;
     double* tdata1;
     double* tdata2;
+    double* tweight;
 
     tdata1 = MALLOC(n*sizeof(double));
     if (!tdata1) return 0.0; /* Memory allocation error */
@@ -1843,11 +1844,20 @@ Otherwise, the distance between two columns in the matrix is calculated.
         FREE(tdata1);
         return 0.0;
     }
+    /* The weights are packed together with the data, so that the weight of
+     * each value stays with it when masked values are skipped. */
+    tweight = MALLOC(n*sizeof(double));
+    if (!tweight) /* Memory allocation error */ {
+        FREE(tdata1);
+        FREE(tdata2);
+        return 0.0;
+    }
     if (transpose == 0) {
         for (i = 0; i < n; i++) {
             if (mask1[index1][i] && mask2[index2][i]) {
                 tdata1[m] = data1[index1][i];
                 tdata2[m] = data2[index2][i];
+                tweight[m] = weight[i];
                 m++;
             }
         }
@@ -1857,6 +1867,7 @@ Otherwise, the distance between two columns in the matrix is calculated.
             if (mask1[i][index1] && mask2[i][index2]) {
                 tdata1[m] = data1[i][index1];
                 tdata2[m] = data2[i][index2];
+                tweight[m] = weight[i];
                 m++;
             }
         }
@@ -1864,24 +1875,27 @@ Otherwise, the distance between two columns in the matrix is calculated.
     if (m == 0) {
         FREE(tdata1);
         FREE(tdata2);
+        FREE(tweight);
         return 0;
     }
-    rank1 = getrank(m, tdata1, weight);
+    rank1 = getrank(m, tdata1, tweight);
     FREE(tdata1);
     if (!rank1) {
         FREE(tdata2);
+        FREE(tweight);
         return 0.0; /* Memory allocation error */
     }
-    rank2 = getrank(m, tdata2, weight);
+    rank2 = getrank(m, tdata2, tweight);
     FREE(tdata2);
     if (!rank2) /* Memory allocation error */ {
         FREE(rank1);
+        FREE(tweight);
         return 0.0;
     }
     for (i = 0; i < m; i++) {
         const double term1 = rank1[i];
         const double term2 = rank2[i];
-        const double w = weight[i];
+        const double w = tweight[i];
         sum1 += term1 * w;
         sum2 += term2 * w;
         result += term1 * term2 * w;
@@ -1895,6 +1909,7 @@ Otherwise, the distance between two columns in the matrix is calculated.
      */
     FREE(rank1);
     FREE(rank2);
+    FREE(tweight);
     if (!totalweight) return 0; /* usually due to empty clusters */
     result -= sum1 * sum2 / totalweight;
     denom1 -= sum1 * sum1 / totalweight;
