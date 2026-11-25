@@ -273,13 +273,19 @@ class Scop:
 
                     if record.parent != "":  # Not root node
                         if record.parent not in sunidDict:
-                            raise ValueError("Incomplete data?")
+                            raise ValueError(
+                                f"Incomplete data? parent sunid {record.parent} of "
+                                f"sunid {record.sunid} in HIE file is missing from DES file"
+                            )
 
                         n.parent = sunidDict[record.parent]
 
                     for c in record.children:
                         if c not in sunidDict:
-                            raise ValueError("Incomplete data?")
+                            raise ValueError(
+                                f"Incomplete data? child sunid {c} of sunid "
+                                f"{record.sunid} in HIE file is missing from DES file"
+                            )
                         n.children.append(sunidDict[c])
 
                 # Fill in the gaps with information from the CLA file
