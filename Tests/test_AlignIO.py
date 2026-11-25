@@ -114,13 +114,12 @@ class TestAlignIO_reading(unittest.TestCase):
         self.assertEqual(len(alignments), len(alignments2))
         for a1, a2 in zip(alignments, alignments2):
             self.assertEqual(a1.get_alignment_length(), a2.get_alignment_length())
-            self.assertEqual(len(a1), len(a2))
             if fmt == "mauve":
-                # Mauve rows follow the order in which each sequence is first
-                # seen in the file, so writing the alignments in a different
-                # order can reorder the rows within an alignment.
-                a1 = sorted(a1, key=lambda r: r.id)
-                a2 = sorted(a2, key=lambda r: r.id)
+                # The first Mauve block lists every sequence, so a sequence
+                # missing from it comes back as an all-gap placeholder row.
+                ids = {r.id for r in a1}
+                a2 = [r for r in a2 if r.id in ids or set(r.seq) != {"-"}]
+            self.assertEqual(len(a1), len(a2))
             for r1, r2 in zip(a1, a2):
                 # Check the bare minimum (ID and sequence) as
                 # many formats can't store more than that.
