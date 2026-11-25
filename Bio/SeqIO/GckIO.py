@@ -92,6 +92,7 @@ class GckIterator(SequenceIterator):
             raise ValueError("Empty file.")
         if len(data) < 24:
             raise ValueError("Improper header, cannot read 24 bytes from stream")
+        self._seen_record = False
 
     def __next__(self):
         """Return the next SeqRecord from the GCK stream."""
@@ -99,7 +100,12 @@ class GckIterator(SequenceIterator):
         # Read the actual sequence data
         packet = _read_packet(stream)
         if packet is None:
+            if not self._seen_record:
+                # A GCK file always holds one sequence, so this is not GCK.
+                raise ValueError("Premature end of file, no sequence packet")
             raise StopIteration
+        if len(packet) < 4:
+            raise ValueError("Sequence packet too short")
         # The body of the sequence packet starts with a 32-bit integer
         # representing the length of the sequence.
         seq_length = unpack(">I", packet[:4])[0]
@@ -119,6 +125,8 @@ class GckIterator(SequenceIterator):
         packet = _read_packet(stream)
         if packet is None:
             raise ValueError("Premature end of file")
+        if len(packet) < 6:
+            raise ValueError("Features packet too short")
         (seq_length, num_features) = unpack(">IH", packet[:6])
         # Check that length in the features packet matches the actual
         # length of the sequence
@@ -183,6 +191,8 @@ class GckIterator(SequenceIterator):
         packet = _read_packet(stream)
         if packet is None:
             raise ValueError("Premature end of file")
+        if len(packet) < 6:
+            raise ValueError("Sites packet too short")
         (seq_length, num_sites) = unpack(">IH", packet[:6])
         # Each site is stored in a 88-bytes structure
         if len(packet) - 6 != num_sites * 88:
@@ -242,4 +252,5 @@ class GckIterator(SequenceIterator):
         else:
             record.annotations["topology"] = "linear"
 
+        self._seen_record = True
         return record

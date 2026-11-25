@@ -91,6 +91,23 @@ class TestGckWithImproperHeader(unittest.TestCase):
             SeqIO.read(stream, "gck")
         stream.close()
 
+    def test_truncated_after_header(self):
+        """Reject files that end, or hold empty packets, after the header."""
+        with self.assertRaisesRegex(ValueError, "no sequence packet"):
+            list(SeqIO.parse(BytesIO(b"X" * 24), "gck"))
+        with self.assertRaisesRegex(ValueError, "Sequence packet too short"):
+            SeqIO.read(BytesIO(b"X" * 24 + b"\0\0\0\0"), "gck")
+        # Real header, sequence and unknown packets, then an empty features packet
+        with open(support.DATA / "Gck" / "artificial.gck", "rb") as f:
+            data = f.read(0x32)
+        with self.assertRaisesRegex(ValueError, "Features packet too short"):
+            SeqIO.read(BytesIO(data + b"\0\0\0\0"), "gck")
+        # The same up to the features and their names, then an empty sites packet
+        with open(support.DATA / "Gck" / "artificial.gck", "rb") as f:
+            data = f.read(0x12E)
+        with self.assertRaisesRegex(ValueError, "Sites packet too short"):
+            SeqIO.read(BytesIO(data + b"\0\0\0\0"), "gck")
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
