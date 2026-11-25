@@ -3364,12 +3364,18 @@ class Alignment:
 
         """
         lengths = [len(sequence) for sequence in self.sequences]
-        if sys.maxsize in lengths:
-            # Placeholder length, set for example by the BED parser.
+        # sys.maxsize is a placeholder length, set for example by the BED
+        # parser; the SAM parser gives a target read without @SQ headers as a
+        # SeqRecord with no sequence, of length 0.
+        if sys.maxsize in lengths or any(
+            isinstance(sequence, SeqRecord) and sequence.seq is None
+            for sequence in self.sequences
+        ):
             raise ValueError(
                 "inverse_indices needs the full sequence lengths, but the "
                 "length of a sequence is unknown (for example, because the "
-                "alignment was read from a BED file)"
+                "alignment was read from a BED file, or from a SAM file "
+                "without @SQ headers)"
             )
         a = [-np.ones(length, int) for length in lengths]
         n, m = self.coordinates.shape
