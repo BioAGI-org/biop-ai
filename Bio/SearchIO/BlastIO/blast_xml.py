@@ -886,7 +886,10 @@ class BlastXmlWriter:
                     raise ValueError(f"Element {elem} (attribute {attr}) not found")
             else:
                 if elem == "BlastOutput_version":
-                    content = f"{qresult.program.upper()} {qresult.version}"
+                    # the parser strips the program name only from a bare
+                    # x.y.z version; any other text was kept as written
+                    if _RE_VERSION.fullmatch(content):
+                        content = f"{qresult.program.upper()} {content}"
                 elif qresult.blast_id:
                     if elem == "BlastOutput_query-ID":
                         content = qresult.blast_id
