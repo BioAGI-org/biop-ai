@@ -128,6 +128,11 @@ def _open_for_random_access(
                 "Gzipped files are not suitable for indexing, "
                 "please use BGZF (blocked gzip format) instead."
             ) from None
+        except BaseException:
+            # A damaged first block, e.g. RuntimeError for a bad CRC
+            # or zlib.error for bad deflate data
+            handle.close()
+            raise
 
     return handle
 

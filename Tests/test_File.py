@@ -15,7 +15,9 @@ import shutil
 import struct
 import tempfile
 import unittest
+import zlib
 from io import StringIO
+from unittest import mock
 
 import support
 
@@ -66,6 +68,36 @@ class RandomAccess(unittest.TestCase):
                 handle.write(data)
             with self.assertRaisesRegex(ValueError, "x_len and extra_len differ"):
                 File._open_for_random_access(filename)
+
+    def test_bad_first_block_closes_handle(self):
+        """A bad CRC or bad deflate data in the first block closes the file."""
+        with tempfile.TemporaryDirectory() as tmp:
+            filename = os.path.join(tmp, "damaged.bgz")
+            with bgzf.BgzfWriter(filename, "wb") as handle:
+                handle.write(b">a\nACGT\n")
+            with open(filename, "rb") as handle:
+                good = handle.read()
+            block_size = struct.unpack("<H", good[16:18])[0] + 1
+            bad_crc = bytearray(good)
+            bad_crc[block_size - 8] ^= 0xFF
+            bad_deflate = bytearray(good)
+            bad_deflate[18 : block_size - 8] = b"\xff" * (block_size - 26)
+            opened = []
+
+            def recording_open(*args, **kwargs):
+                opened.append(open(*args, **kwargs))
+                return opened[-1]
+
+            for data, error in ((bad_crc, RuntimeError), (bad_deflate, zlib.error)):
+                with self.subTest(error=error.__name__):
+                    with open(filename, "wb") as handle:
+                        handle.write(data)
+                    opened.clear()
+                    with mock.patch("Bio.File.open", recording_open, create=True):
+                        with self.assertRaises(error):
+                            File._open_for_random_access(filename)
+                    self.assertEqual(len(opened), 1)
+                    self.assertTrue(opened[0].closed)
 
 
 class AsHandleTestCase(unittest.TestCase):
