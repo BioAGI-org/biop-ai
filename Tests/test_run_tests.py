@@ -211,6 +211,12 @@ class ProbeTests(unittest.TestCase):
     def run_pytest(files, *options):
         """Write files to a temporary directory and run pytest on them there."""
         with tempfile.TemporaryDirectory() as directory:
+            # On Windows the temporary directory may come as a short (8.3)
+            # name, such as RUNNER~1, while the child sees its working
+            # directory under the long name. pytest then took their common
+            # parent, the shared temporary directory, and failed on a sibling
+            # that another test process removed meanwhile. Use the long name.
+            directory = os.path.realpath(directory)
             paths = []
             for name, text in files.items():
                 path = os.path.join(directory, name)
