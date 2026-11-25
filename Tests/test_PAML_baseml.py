@@ -15,6 +15,8 @@ import support
 
 import Bio
 from Bio.Phylo.PAML import baseml
+from Bio.Phylo.PAML._parse_baseml import parse_basics
+from Bio.Phylo.PAML._parse_baseml import parse_parameters
 from Bio.Phylo.PAML._paml import PamlError
 
 
@@ -341,6 +343,26 @@ with tempfile.TemporaryDirectory() as tmp:
             self.assertIn("parameters", results, version_msg)
             params = results["parameters"]
             self.assertIn("SEs", params, version_msg)
+
+    def testParseThreeDigitParameterCount(self):
+        """Read np when ntime or np has 3 digits.
+
+        PAML prints "lnL(ntime:%3d  np:%3d)", so at 100 or more there is no
+        space after the colon. The count was then not read, and the
+        parameter list and SEs were left out.
+        """
+        row = " ".join(["0.10000"] * 109)
+        lines = [
+            "lnL(ntime:107  np:109):   -100.000000      +0.000000\n",
+            row + "\n",
+            "SEs for parameters:\n",
+            row + "\n",
+        ]
+        results, num_params = parse_basics(lines, {})
+        self.assertEqual(num_params, 109)
+        params = parse_parameters(lines, results, num_params)["parameters"]
+        self.assertEqual(params["parameter list"], row)
+        self.assertEqual(params["SEs"], row)
 
 
 if __name__ == "__main__":

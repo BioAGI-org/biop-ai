@@ -665,6 +665,24 @@ tree length =   0.00000
         self.assertNotIn("parameter list", results.get("parameters", {}))
         self.assertEqual(results["tree length"], 0.0)
 
+    def testParseThreeDigitParameterCount(self):
+        """Read np when ntime or np has 3 digits.
+
+        PAML prints "lnL(ntime:%3d  np:%3d)", so at 100 or more there is no
+        space after the colon. The count was then not read, and the
+        parameter list and SEs were left out.
+        """
+        row = " ".join(["0.10000"] * 109)
+        lines = [
+            "lnL(ntime:107  np:109):   -100.000000      +0.000000\n",
+            row + "\n",
+            "SEs for parameters:\n",
+            row + "\n",
+        ]
+        params = parse_model(lines, {})["parameters"]
+        self.assertEqual(params["parameter list"], row)
+        self.assertEqual(params["SEs"], row)
+
     def testParseNSsite3(self):
         res_dir = os.path.join(self.results_dir, "codeml", "NSsite3")
         for results_file in os.listdir(res_dir):

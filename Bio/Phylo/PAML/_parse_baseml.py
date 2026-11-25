@@ -15,7 +15,7 @@ line_floats_re = re.compile(r"-?(?<!\d)\d+\.\d+")
 def parse_basics(lines, results):
     """Parse the basics that should be present in most baseml results files."""
     version_re = re.compile(r"BASEML \(in paml version (\d+\.\d+[a-z]*).*")
-    np_re = re.compile(r"lnL\(ntime:\s+\d+\s+np:\s+(\d+)\)")
+    np_re = re.compile(r"lnL\(ntime:\s*\d+\s+np:\s*(\d+)\)")
     num_params = -1
     for line in lines:
         # Find all floating point numbers in this line
