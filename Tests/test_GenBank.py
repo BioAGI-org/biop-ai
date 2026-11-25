@@ -7899,6 +7899,37 @@ if location != "".join(lines):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_unquoted_qualifier_many_lines(self):
+        """An unquoted qualifier value over many lines parses quickly."""
+        # Each continuation line used to be added to the value string,
+        # copying it every time. 32,000 lines took about five seconds, four
+        # times as long for each doubling, so 200,000 lines took minutes.
+        code = """\
+import sys
+from Bio.GenBank.Scanner import GenBankScanner
+cont = ["x" * 58] * 200_000
+lines = ["1..10", "/note=abc", *cont, "/pseudo", "/gene=a", "b"]
+key, location, qualifiers = GenBankScanner().parse_feature("misc_feature", lines)
+expected = [("note", "\\n".join(["abc", *cont])), ("pseudo", None), ("gene", "a\\nb")]
+if qualifiers != expected:
+    sys.exit("wrong qualifiers: %r..." % str(qualifiers)[:60])
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_negative_location(self):
         """Negative feature locations."""
         path = support.DATA / "GenBank" / "negative_location.gb"
