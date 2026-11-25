@@ -748,10 +748,23 @@ class AlignmentIterator(interfaces.AlignmentIterator):
         fullDataOffset = header.fullDataOffset
         zoomList = _ZoomLevels(byteorder)
         zoomList.read(stream)
+        stream.seek(0, io.SEEK_END)
+        self._file_size = file_size = stream.tell()
+
+        def seek(offset, size, name):
+            # Check the offset before seeking to it: an offset past the end
+            # of the file can be too large for seek to accept.
+            if offset + size > file_size:
+                raise ValueError(
+                    f"The {name} at offset {offset}, of {size} bytes, extends "
+                    f"past the end of the file ({file_size} bytes)"
+                )
+            stream.seek(offset)
+
         formatter = _RTreeFormatter(byteorder).formatter_header
         for zoomLevel in zoomList:
             indexOffset = zoomLevel.indexOffset
-            stream.seek(indexOffset)
+            seek(indexOffset, formatter.size, "zoom level index")
             data = stream.read(formatter.size)
             (
                 signature,
@@ -771,7 +784,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     f"found 0x{signature:08X}"
                 )
         self.declaration = self._read_autosql(stream, header)
-        stream.seek(fullDataOffset)
+        seek(fullDataOffset, 8, "data count")
         (dataCount,) = struct.unpack(byteorder + "Q", stream.read(8))
         self._length = dataCount
 
@@ -782,14 +795,17 @@ class AlignmentIterator(interfaces.AlignmentIterator):
         self._uncompressBufSize = min(
             header.uncompressBufSize, _MAX_UNCOMPRESS_BUF_SIZE
         )
-        stream.seek(0, io.SEEK_END)
-        self._file_size = stream.tell()
+        formatter = _BPlusTreeFormatter(byteorder)
+        seek(
+            header.chromosomeTreeOffset,
+            formatter.formatter_header.size,
+            "chromosome index",
+        )
+        self.targets = formatter.read(stream)
 
-        stream.seek(header.chromosomeTreeOffset)
-        self.targets = _BPlusTreeFormatter(byteorder).read(stream)
-
-        stream.seek(header.fullIndexOffset)
-        self.tree = _RTreeFormatter(byteorder).read(stream)
+        formatter = _RTreeFormatter(byteorder)
+        seek(header.fullIndexOffset, formatter.formatter_header.size, "R tree index")
+        self.tree = formatter.read(stream)
         # The R tree index of a file with no items has no data blocks.
         if (dataCount == 0) != (not self.tree.children):
             raise ValueError(
