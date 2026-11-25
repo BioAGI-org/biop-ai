@@ -114,12 +114,12 @@ class CharBuffer:
 
     def next_nonwhitespace(self):
         """Check for next non whitespace character in NEXUS file."""
-        while True:
-            p = next(self)
-            if p is None:
-                break
-            if p not in WHITESPACE:
-                return p
+        # skips the same whitespace as peek_nonwhitespace, so the two agree
+        match = _NON_WHITESPACE.search(self._text, self._pos)
+        if match:
+            self._pos = match.end()
+            return match.group()
+        self._pos = len(self._text)
         return None
 
     def skip_whitespace(self):
