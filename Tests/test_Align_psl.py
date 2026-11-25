@@ -13799,6 +13799,35 @@ class TestAlign_bad_block_sizes(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Negative block size -2"):
                     next(Align.parse(StringIO(line + "\n"), "psl"))
 
+    def test_zero_block_size(self):
+        """Test that zero-size blocks are dropped, as UCSC tools accept them."""
+        # An empty block between two adjacent blocks used to be counted as a
+        # query insertion; an empty first block was dropped on writing.
+        middle = "20\t0\t0\t0\t0\t0\t0\t0\t+\tq\t30\t0\t20\tt\t30\t0\t20\t3\t10,0,10,\t0,10,10,\t0,10,10,"
+        first = "10\t0\t0\t0\t0\t0\t0\t0\t+\tq\t30\t0\t10\tt\t30\t0\t10\t2\t0,10,\t0,0,\t0,0,"
+        pslx = middle + "\tAAAAAAAAAA,,CCCCCCCCCC,\tAAAAAAAAAA,,CCCCCCCCCC,"
+        for line, coordinates in (
+            (middle, [[0, 10, 20], [0, 10, 20]]),
+            (first, [[0, 10], [0, 10]]),
+            (pslx, [[0, 10, 20], [0, 10, 20]]),
+        ):
+            with self.subTest(line=line):
+                alignment = next(Align.parse(StringIO(line + "\n"), "psl"))
+                self.assertEqual(alignment.coordinates.tolist(), coordinates)
+                text = format(alignment, "psl")
+                self.assertNotIn(",0,", text)
+                alignment = next(Align.parse(StringIO(text), "psl"))
+                self.assertEqual(alignment.coordinates.tolist(), coordinates)
+        alignment = next(Align.parse(StringIO(pslx + "\n"), "psl"))
+        self.assertEqual(alignment[0], "AAAAAAAAAACCCCCCCCCC")
+        # Dropping this empty block merges two query insertions into one
+        off_path = "20\t0\t0\t0\t2\t10\t1\t10\t+\tq\t40\t0\t30\tt\t40\t0\t30\t3\t10,0,10,\t0,15,20,\t0,10,20,"
+        with self.assertRaisesRegex(ValueError, "Inconsistent qNumInsert found"):
+            next(Align.parse(StringIO(off_path + "\n"), "psl"))
+        empty = "0\t0\t0\t0\t0\t0\t0\t0\t+\tq\t30\t0\t0\tt\t30\t0\t0\t1\t0,\t0,\t0,"
+        with self.assertRaisesRegex(ValueError, "No block of positive size"):
+            next(Align.parse(StringIO(empty + "\n"), "psl"))
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)

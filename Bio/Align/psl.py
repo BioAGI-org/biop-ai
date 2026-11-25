@@ -27,6 +27,7 @@ zero-based end position. We can therefore manipulate ``start`` and
 """
 
 from itertools import chain
+from itertools import compress
 
 import numpy as np
 
@@ -387,9 +388,14 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     "Inconsistent number of target start positions (%d found, expected %d)"
                     % (len(tStarts), blockCount)
                 )
-            qStarts = np.array(qStarts)
-            tStarts = np.array(tStarts)
-            qBlockSizes = np.array(blockSizes)
+            # UCSC tools accept a zero-size block. It has no aligned columns,
+            # so drop it; the insert counts are then checked without it.
+            nonempty = [blockSize > 0 for blockSize in blockSizes]
+            if not any(nonempty):
+                raise ValueError("No block of positive size")
+            qStarts = np.array(list(compress(qStarts, nonempty)))
+            tStarts = np.array(list(compress(tStarts, nonempty)))
+            qBlockSizes = np.array(list(compress(blockSizes, nonempty)))
             if strand in ("++", "+-"):
                 # protein sequence aligned against translated DNA sequence
                 tBlockSizes = 3 * qBlockSizes
@@ -484,8 +490,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 )
             feature = None
             if pslx is True:
-                qSeqs = words[21].rstrip(",").split(",")
-                tSeqs = words[22].rstrip(",").split(",")
+                qSeqs = list(compress(words[21].rstrip(",").split(","), nonempty))
+                tSeqs = list(compress(words[22].rstrip(",").split(","), nonempty))
                 qSeq = dict(zip(qStarts, qSeqs))
                 if strand in ("++", "+-"):
                     # protein sequence aligned against translated DNA sequence
