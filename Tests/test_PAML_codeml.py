@@ -283,7 +283,8 @@ class ModTest(unittest.TestCase):
 
     def testRunCtlFileThroughSymlink(self):
         # A relative control file name is resolved by the file system, as
-        # PAML resolves it, so "link/.." goes to the parent of link's target.
+        # PAML resolves it, so on POSIX "link/.." goes to the parent of the
+        # link's target.
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         work = os.path.join(tmp.name, "work")
@@ -316,8 +317,13 @@ class ModTest(unittest.TestCase):
         with mock.patch.object(subprocess, "call", fake_call):
             cml.run(parse=False)
         self.assertEqual(seen, [True])
-        self.assertTrue(os.path.isfile(os.path.join(tmp.name, "real", "mine.ctl")))
-        self.assertFalse(os.path.exists(os.path.join(work, "mine.ctl")))
+        if os.name == "nt":
+            # Windows takes "link\\.." away before it follows the link.
+            written, not_written = work, os.path.join(tmp.name, "real")
+        else:
+            written, not_written = os.path.join(tmp.name, "real"), work
+        self.assertTrue(os.path.isfile(os.path.join(written, "mine.ctl")))
+        self.assertFalse(os.path.exists(os.path.join(not_written, "mine.ctl")))
 
     def testRunSubclassChoosesCtlFile(self):
         # A subclass's write_ctl_file() may set ctl_file to another file;
