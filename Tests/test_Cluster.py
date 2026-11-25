@@ -3008,6 +3008,40 @@ int main(void)
                 1,
             )
 
+    def test_clustercentroids_wrong_size_raises_value_error(self):
+        """Check cdata or cmask of the wrong size raises ValueError.
+
+        The private clustercentroids raised RuntimeError for these, next to
+        ValueError for a mask of the wrong size.
+        """
+        if TestCluster.module != "Bio.Cluster":
+            self.skipTest("Pycluster raises RuntimeError")
+        from Bio.Cluster import _cluster
+
+        data = np.arange(20.0).reshape(4, 5)
+        mask = np.ones((4, 5), np.intc)
+        clusterid = np.array([0, 1, 0, 1], np.intc)
+        # Two clusters of rows, so cdata and cmask should be 2 x 5.
+        for name, cdata, cmask, message in (
+            ("cdata", (3, 5), (2, 5), "rows \\(3, expected 2\\)"),
+            ("cdata", (2, 4), (2, 5), "columns \\(4, expected 5\\)"),
+            ("cmask", (2, 5), (3, 5), "rows \\(3, expected 2\\)"),
+            ("cmask", (2, 5), (2, 4), "columns \\(4, expected 5\\)"),
+        ):
+            with self.subTest(cdata=cdata, cmask=cmask):
+                with self.assertRaisesRegex(
+                    ValueError, f"^{name} has incorrect number of {message}$"
+                ):
+                    _cluster.clustercentroids(
+                        data,
+                        mask,
+                        clusterid,
+                        "a",
+                        0,
+                        np.zeros(cdata),
+                        np.zeros(cmask, np.intc),
+                    )
+
     def test_distancematrix_arguments(self):
         # Test if incorrect arguments are caught by the C code
         if TestCluster.module == "Bio.Cluster":
