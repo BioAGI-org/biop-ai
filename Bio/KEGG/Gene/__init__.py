@@ -128,12 +128,14 @@ def parse(handle):
                 values = values.split()
                 row = (key, values)
                 record.dblinks.append(row)
-            else:
+            elif record.dblinks:
                 row = record.dblinks[-1]
                 key, values = row
                 values.extend(data.split())
                 row = key, values
                 record.dblinks[-1] = row
+            elif data:
+                raise ValueError(f"DBLINKS ids before any database: {line!r}")
 
 
 if __name__ == "__main__":

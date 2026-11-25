@@ -239,24 +239,28 @@ def parse(handle):
                 values = values.split()
                 row = (key, values)
                 record.dblinks.append(row)
-            else:
+            elif record.dblinks:
                 row = record.dblinks[-1]
                 key, values = row
                 values.extend(data.split())
                 row = key, values
                 record.dblinks[-1] = row
+            elif data:
+                raise ValueError(f"DBLINKS ids before any database: {line!r}")
         elif keyword == "DISEASE     ":
             if ":" in data:
                 database, data = data.split(":")
                 number, name = data.split(None, 1)
                 row = (database, number, name)
                 record.disease.append(row)
-            else:
+            elif record.disease:
                 row = record.disease[-1]
                 database, number, name = row
                 name = name + " " + data
                 row = database, number, name
                 record.disease[-1] = row
+            elif data:
+                raise ValueError(f"DISEASE text before any database: {line!r}")
         elif keyword == "EFFECTOR    ":
             record.effector.append(data.strip(";"))
         elif keyword == "GENES       ":
@@ -265,7 +269,7 @@ def parse(handle):
                 values = [value.split("(")[0] for value in values.split()]
                 row = (key, values)
                 record.genes.append(row)
-            else:
+            elif record.genes:
                 row = record.genes[-1]
                 key, values = row
                 for value in data.split():
@@ -273,6 +277,8 @@ def parse(handle):
                     values.append(value)
                 row = key, values
                 record.genes[-1] = row
+            elif data:
+                raise ValueError(f"GENES ids before any database: {line!r}")
         elif keyword == "INHIBITOR   ":
             record.inhibitor.append(data.strip(";"))
         elif keyword == "NAME        ":
@@ -291,17 +297,19 @@ def parse(handle):
         elif keyword == "REACTION    ":
             record.reaction.append(data.strip(";"))
         elif keyword == "STRUCTURES  ":
-            if data[:4] == "PDB:":
-                database = data[:3]
-                accessions = data[4:].split()
+            if ":" in data:
+                database, accessions = data.split(":", 1)
+                accessions = accessions.split()
                 row = (database, accessions)
                 record.structures.append(row)
-            else:
+            elif record.structures:
                 row = record.structures[-1]
                 database, accessions = row
                 accessions.extend(data.split())
                 row = (database, accessions)
                 record.structures[-1] = row
+            elif data:
+                raise ValueError(f"STRUCTURES ids before any database: {line!r}")
         elif keyword == "SUBSTRATE   ":
             record.substrate.append(data.strip(";"))
         elif keyword == "SYSNAME     ":
