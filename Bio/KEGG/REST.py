@@ -23,6 +23,12 @@ Currently KEGG does not provide any usage guidelines (unlike the NCBI whose
 requirements are reasonably clear). To avoid risking overloading the service,
 Biopython will only allow three calls per second.
 
+Set the module variable ``timeout`` to a number of seconds to stop waiting
+for a silent server: it applies to connecting and to each read of a request,
+not to the whole download, and a server that stays silent for longer raises
+TimeoutError. The default, None, uses socket.getdefaulttimeout() (no limit
+unless set).
+
 References:
 Kanehisa, M. and Goto, S.; KEGG: Kyoto Encyclopedia of Genes and Genomes.
 Nucleic Acids Res. 28, 29-34 (2000).
@@ -31,10 +37,13 @@ Nucleic Acids Res. 28, 29-34 (2000).
 
 import io
 import re
+import socket
 import time
 from urllib.request import urlopen
 
 from Bio._utils import function_with_previous
+
+timeout = None
 
 # An unprefixed KEGG compound, drug or glycan entry, such as C00001
 _CHEM_ENTRY = re.compile(r"[CDG]\d{5}")
@@ -58,7 +67,9 @@ def _q(op, arg1, arg2=None, arg3=None):
         args = f"{op}/{arg1}/{arg2}"
     else:
         args = f"{op}/{arg1}"
-    resp = urlopen(URL % (args))
+    resp = urlopen(
+        URL % (args), timeout=socket.getdefaulttimeout() if timeout is None else timeout
+    )
 
     if "image" == arg2:
         return resp

@@ -35,3 +35,24 @@ class ExPASyOfflineTests(unittest.TestCase):
         content_handler.startElement("matchset", {"n_match": "0", "n_seq": "0"})
         with self.assertRaisesRegex(ValueError, "Unexpected XML end element"):
             content_handler.endElement("not_matchset")
+
+    def test_timeout(self):
+        """A silent server must not block an ExPASy request forever."""
+        support.assert_client_times_out(
+            self,
+            """
+            from Bio import ExPASy
+            ExPASy.timeout = 0.5
+            ExPASy._open(url)
+            """,
+        )
+
+    def test_scanprosite_timeout(self):
+        """A silent server must not block ScanProsite.scan forever."""
+        support.assert_client_times_out(
+            self,
+            """
+            from Bio.ExPASy import ScanProsite
+            ScanProsite.scan(seq="MKT", mirror=url, timeout=0.5)
+            """,
+        )

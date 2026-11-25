@@ -15,6 +15,8 @@ import types
 import unittest
 from unittest import mock
 
+import support
+
 from Bio.KEGG import REST
 from Bio.KEGG.REST import kegg_conv
 from Bio.KEGG.REST import kegg_find
@@ -26,7 +28,7 @@ from Bio.KEGG.REST import kegg_list
 BASE = "https://rest.kegg.jp/"
 
 
-def fake_urlopen(url):
+def fake_urlopen(url, timeout=None):
     """Return an empty response that remembers its URL, as urlopen does."""
     resp = io.BytesIO(b"")
     resp.url = url
@@ -211,6 +213,21 @@ class KEGGRESTURLs(unittest.TestCase):
             kegg_link("pathway", "hsa:10458", "turtle")
         with self.assertRaisesRegex(ValueError, "kegg link request"):
             kegg_link("pathway", "hsa", "kingdom")
+
+
+class KEGGRESTTimeout(unittest.TestCase):
+    def test_timeout(self):
+        """A silent server must not block a KEGG request forever."""
+        support.assert_client_times_out(
+            self,
+            """
+            from urllib.request import urlopen
+            from Bio.KEGG import REST
+            REST.urlopen = lambda kegg_url, **kwargs: urlopen(url, **kwargs)
+            REST.timeout = 0.5
+            REST.kegg_info("kegg")
+            """,
+        )
 
 
 if __name__ == "__main__":

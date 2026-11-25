@@ -23,6 +23,7 @@ __all__ = [
     "write",
 ]
 
+import socket
 from urllib.parse import urlencode
 from urllib.request import Request
 from urllib.request import urlopen
@@ -475,12 +476,17 @@ class Motif:
                 values[mask] += frequencies * np.log2(frequencies / background[letter])
         return values
 
-    def weblogo(self, fname, fmt="PNG", **kwds):
+    def weblogo(self, fname, fmt="PNG", timeout=None, **kwds):
         """Download and save a weblogo using the Berkeley weblogo service.
 
         Requires an internet connection.
 
         The parameters from ``**kwds`` are passed directly to the weblogo server.
+
+        ``timeout`` is the socket timeout in seconds for connecting and for
+        each read; a server that stays silent for longer raises TimeoutError.
+        The default, None, uses socket.getdefaulttimeout() (no limit unless
+        set).
 
         Currently, this method uses WebLogo version 3.3.
         These are the arguments and their default values passed to
@@ -574,7 +580,9 @@ class Motif:
         values.update({k: "" if v is False else str(v) for k, v in kwds.items()})
         data = urlencode(values).encode("utf-8")
         req = Request(url, data)
-        response = urlopen(req)
+        if timeout is None:
+            timeout = socket.getdefaulttimeout()
+        response = urlopen(req, timeout=timeout)
         with open(fname, "wb") as f:
             im = response.read()
             f.write(im)
