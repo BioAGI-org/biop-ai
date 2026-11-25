@@ -1195,7 +1195,10 @@ KDTree_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
 }
 
 PyDoc_STRVAR(PyKDTree_search__doc__,
-"Search all points within the given radius of center.\n\
+"search($self, center, radius, /)\n\
+--\n\
+\n\
+Search all points within the given radius of center.\n\
 \n\
 Arguments:\n\
  - center: NumPy array of size 3.\n\
@@ -1290,7 +1293,10 @@ exit:
 }
 
 PyDoc_STRVAR(PyKDTree_neighbor_search__doc__,
-"All fixed neighbor search.\n\
+"neighbor_search($self, radius, /)\n\
+--\n\
+\n\
+All fixed neighbor search.\n\
 \n\
 Find all point pairs that are within radius of each other.\n\
 \n\
@@ -1353,7 +1359,10 @@ PyKDTree_neighbor_search(KDTree* self, PyObject* args)
 }
 
 PyDoc_STRVAR(PyKDTree_neighbor_simple_search__doc__,
-"All fixed neighbor search (for testing purposes only).\n\
+"neighbor_simple_search($self, radius, /)\n\
+--\n\
+\n\
+All fixed neighbor search (for testing purposes only).\n\
 \n\
 Find all point pairs that are within radius of each other, using a simple\n\
 but slow algorithm. This function is provided to be able to verify the\n\

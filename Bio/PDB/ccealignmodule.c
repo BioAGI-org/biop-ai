@@ -977,15 +977,22 @@ cleanup:
 // Python Interface
 //
 PyDoc_STRVAR(method_doc,
-"run_cealign(coordsA, coordsB, fragmentSize, gapMax) -> list\
-\n\n\
+"run_cealign(coordsA, coordsB, fragmentSize=8, gapMax=30, /)\n\
+--\n\
+\n\
 Find the optimal alignments between two structures, using CEAlign.\
 \n\n\
 Arguments:\n\
-- listA: List of lists with coordinates for structure A.\n\
-- listB: List of lists with coordinates for structure B.\n\
-- fragmentSize: Size of fragments to be used in alignment.\n\
-- gapMax: Maximum gap allowed between two aligned fragment pairs.");
+- coordsA: List of lists with coordinates for structure A.\n\
+- coordsB: List of lists with coordinates for structure B.\n\
+- fragmentSize: Size of fragments to be used in alignment (default 8).\n\
+- gapMax: Maximum gap allowed between two aligned fragment pairs\n\
+  (default 30).\n\
+\n\
+Returns a list of CEAlignment named tuples (path, z_score, length):\n\
+path holds two lists of aligned indices, into coordsA and coordsB,\n\
+z_score is the alignment Z-score, and length is the number of aligned\n\
+pairs.");
 
 static PyMethodDef CEAlignMethods[] = {
     {"run_cealign", PyCealign, METH_VARARGS, method_doc},

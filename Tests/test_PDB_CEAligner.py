@@ -7,6 +7,7 @@
 """Unit tests for the Bio.PDB.CEAligner module."""
 
 import gc
+import inspect
 import os
 import pickle
 import platform
@@ -211,6 +212,13 @@ class RunCEAlignArgumentTests(unittest.TestCase):
         """Test that a well formed call still works."""
         coords = self.coords()
         self.assertGreater(len(run_cealign(coords, coords, 8, 30)), 0)
+
+    def test_signature(self):
+        """Test that the signature shows the optional arguments' defaults."""
+        self.assertEqual(
+            str(inspect.signature(run_cealign)),
+            "(coordsA, coordsB, fragmentSize=8, gapMax=30, /)",
+        )
 
     def test_fragment_size_not_positive(self):
         """Test that a fragment size of zero or less is rejected."""
