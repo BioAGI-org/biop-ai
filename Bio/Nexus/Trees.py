@@ -762,10 +762,12 @@ class Tree(Nodes.Chain):
                     else:
                         info_string = "0.00:0.00000"
             if not ignore_comments:
-                try:
-                    info_string = str(data.nodecomment) + info_string
-                except AttributeError:
-                    pass
+                # NodeData has comment; a custom data class may have nodecomment
+                comment = getattr(data, "comment", None) or getattr(
+                    data, "nodecomment", None
+                )
+                if comment:
+                    info_string = str(comment) + info_string
             return info_string
 
         def ladderize_nodes(nodes, ladderize=None):

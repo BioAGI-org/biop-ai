@@ -1377,6 +1377,49 @@ Root:  16
                 # a string support made this raise ValueError
                 tree.to_string(plain=False)
 
+    def test_NexusComments_to_string(self):
+        """Write node comments when ignore_comments is False."""
+        tree = Trees.Tree("((A[&rate=1]:0.1,B:0.2)[&rate=2]:0.3,C:0.4);")
+        self.assertNotIn("[&rate", tree.to_string(plain=False))
+        text = tree.to_string(plain=False, plain_newick=True, ignore_comments=False)
+        # the old code read a missing attribute and dropped every comment
+        self.assertEqual(
+            text, "((A[&rate=1]:0.10000,B:0.20000)[&rate=2]0.00000:0.30000,C:0.40000)"
+        )
+        again = Trees.Tree(text)
+        for old, new in zip(tree.chain.values(), again.chain.values()):
+            self.assertEqual(new.data.taxon, old.data.taxon)
+            self.assertEqual(new.data.comment, old.data.comment)
+
+    def test_NexusComments_to_string_nodecomment(self):
+        """A custom data class with nodecomment, not comment, still writes it."""
+
+        class Data:
+            def __init__(
+                self, taxon=None, branchlength=0.0, support=None, comment=None
+            ):
+                self.taxon = taxon
+                self.branchlength = branchlength
+                self.support = support
+                self.nodecomment = None
+
+        tree = Trees.Tree("(A:0.1,B:0.2);", data=Data)
+        tree.node(tree.search_taxon("A")).data.nodecomment = "[&rate=1]"
+        text = tree.to_string(plain=False, plain_newick=True, ignore_comments=False)
+        self.assertEqual(text, "(A[&rate=1]:0.10000,B:0.20000)")
+
+    def test_NexusComments_to_string_ignore_comments(self):
+        """With ignore_comments, to_string does not read the comments."""
+
+        class Data(Trees.NodeData):
+            @property
+            def nodecomment(self):
+                raise RuntimeError("nodecomment read")
+
+        tree = Trees.Tree("(A:0.1,B:0.2);", data=Data)
+        text = tree.to_string(plain=False, plain_newick=True)
+        self.assertEqual(text, "(A:0.10000,B:0.20000)")
+
     def test_NexusComments_second_unmatched(self):
         """An unclosed second comment raises TreeError."""
         with self.assertRaisesRegex(Trees.TreeError, r"Found \[& without matching \]"):
