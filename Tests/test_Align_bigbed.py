@@ -8126,6 +8126,38 @@ class TestAlign_no_alignments(unittest.TestCase):
                     Align.parse(BytesIO(bytes(bad)), "bigbed")
 
 
+class TestAlign_header_offsets(unittest.TestCase):
+    """File header offsets that point past the end of the file."""
+
+    def test_past_end_of_file(self):
+        # The offsets of the chromosome index, the data count, the R tree
+        # index and the first zoom level index are at bytes 8, 16, 24 and
+        # 80 of the file. Each used to raise struct.error when it pointed
+        # too near the end of the file, and OverflowError when it was too
+        # large to seek to.
+        with open(support.DATA / "Blat" / "bed12.bb", "rb") as stream:
+            data = stream.read()
+        size = len(data)
+        fields = (
+            (8, "chromosome index", 32),
+            (16, "data count", 8),
+            (24, "R tree index", 48),
+            (80, "zoom level index", 48),
+        )
+        for position, name, length in fields:
+            for offset in (size, size - length + 1, 2**63 + 5):
+                with self.subTest(name=name, offset=offset):
+                    bad = bytearray(data)
+                    struct.pack_into("<Q", bad, position, offset)
+                    with self.assertRaises(ValueError) as cm:
+                        Align.parse(BytesIO(bad), "bigbed")
+                    self.assertEqual(
+                        str(cm.exception),
+                        f"The {name} at offset {offset}, of {length} bytes, "
+                        f"extends past the end of the file ({size} bytes)",
+                    )
+
+
 class SeekGuard(BytesIO):
     """A binary stream that fails the test if seeked on and on."""
 
