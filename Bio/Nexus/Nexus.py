@@ -338,12 +338,15 @@ def _make_unique(values):
 def _next_label(label):
     """Return the name that follows label in its chain of copies (PRIVATE)."""
     label_split = label.split(".")
-    if label_split[-1].startswith("copy"):
+    last = label_split[-1]
+    number = last[4:]
+    if last == "copy":
         copy_num = 1
-        if label_split[-1] != "copy":
-            copy_num = int(label_split[-1][4:]) + 1
-        return f"{'.'.join(label_split[:-1])}.copy{copy_num}"
-    return label + ".copy"
+    elif last.startswith("copy") and number.isascii() and number.isdigit():
+        copy_num = int(number) + 1
+    else:
+        return label + ".copy"
+    return f"{'.'.join(label_split[:-1])}.copy{copy_num}"
 
 
 def _unique_label(previous_labels, label, skip=None):

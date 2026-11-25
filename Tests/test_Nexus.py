@@ -2481,6 +2481,25 @@ print(
                 self.assertEqual(nexus.unaltered_taxlabels, read)
                 self.assertEqual(nexus.taxlabels, renamed)
 
+    def test_copy_without_number(self):
+        """Repeats of a label like "seq.copy_a" or "copycat" get ".copy" added."""
+        # The text after "copy" was read as a copy number, so these raised
+        # ValueError from int().
+        for label in ("seq.copy_a", "copycat", "x.copyx", "x.copy²"):
+            renamed = [label, f"{label}.copy", f"{label}.copy1"]
+            with self.subTest(label=label, source="matrix"):
+                nexus = Nexus.Nexus(
+                    "#NEXUS\nbegin data;\ndimensions ntax=3 nchar=1;\n"
+                    f"format datatype=dna;\nmatrix\n{label} A\n{label} A\n{label} A\n"
+                    ";\nend;\n"
+                )
+                self.assertEqual(nexus.taxlabels, renamed)
+            with self.subTest(label=label, source="add_sequence"):
+                nexus = Nexus.Nexus()
+                for _ in range(3):
+                    nexus.add_sequence(label, "A")
+                self.assertEqual(nexus.taxlabels, renamed)
+
     def test_explicit_copies(self):
         """Rows "a.copy1" to "a.copy15000", then the same rows again."""
         # Each repeat of the second half started its own walk up the chain
