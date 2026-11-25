@@ -170,6 +170,7 @@ sources = ["Bio/motifs/_pwm.c"]
 [[tool.setuptools.ext-modules]]
 name = "Bio.Cluster._cluster"
 sources = ["Bio/Cluster/cluster.c", "Bio/Cluster/clustermodule.c"]
+depends = ["Bio/Cluster/cluster.h", "Bio/_freethreading.h"]
 extra-compile-args = ["-DCLUSTER_USE_PYTHON_MEMORY"]
 
 [[tool.setuptools.ext-modules]]
