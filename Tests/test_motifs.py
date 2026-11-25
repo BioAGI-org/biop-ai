@@ -34,6 +34,7 @@ import Bio
 from Bio import BiopythonWarning
 from Bio import motifs
 from Bio.motifs.matrix import PositionSpecificScoringMatrix
+from Bio.motifs.matrix import PositionWeightMatrix
 from Bio.motifs.thresholds import ScoreDistribution
 from Bio.Seq import Seq
 
@@ -6232,6 +6233,28 @@ class TestScoreDistribution(unittest.TestCase):
             with self.subTest(rate_proportion=rate_proportion):
                 with self.assertRaises(ValueError):
                     distribution.threshold_balanced(rate_proportion)
+
+    def test_threshold_patser_negative_expected_score(self):
+        """threshold_patser gives min_score when the expected score is negative.
+
+        With a background other than the PSSM's own, ic can be below 0, so
+        2**-ic is above 1; this raised "fpr must be between 0 and 1" (#538).
+        """
+        motif = motifs.create([Seq("AAAA"), Seq("AAAA"), Seq("AAAT")])
+        motif.pseudocounts = 0.5
+        background = {"A": 0.1, "C": 0.3, "G": 0.3, "T": 0.3}
+        distribution = motif.pssm.distribution(background, precision=100)
+        self.assertLess(distribution.ic, 0)
+        self.assertEqual(distribution.threshold_patser(), distribution.min_score)
+        # Rounding made the density add up to 1 above the lowest bin, so
+        # threshold_fpr(1) stopped there, at -0.323 instead of -1.322.
+        pwm = PositionWeightMatrix("ACGT", {"A": [1], "C": [2], "G": [3], "T": [4]})
+        background = {"A": 1e-17, "C": 1, "G": 1e-17, "T": 1e-17}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", BiopythonWarning)
+            distribution = pwm.log_odds().distribution(background, precision=100)
+        self.assertLess(distribution.ic, 0)
+        self.assertEqual(distribution.threshold_patser(), distribution.min_score)
 
     def test_mismatched_background_warns(self):
         """A background other than the PSSM's own gives a warning.
