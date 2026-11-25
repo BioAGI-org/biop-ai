@@ -257,10 +257,10 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
             i = j + 1
             prefix = buffer[i : i + 1]
             if prefix == b"#":
-                m = re.match(b"^[^;]*", buffer[i:])
+                m = re.match(b"^[^;\0]*", buffer[i:])
                 j = i + m.span()[1]
             elif prefix == b"a":
-                m = re.match(b"^[^;]*", buffer[i:])
+                m = re.match(b"^[^;\0]*", buffer[i:])
                 j = i + m.span()[1]
                 line = buffer[i:j].tobytes()
                 words = line[1:].split()
@@ -409,6 +409,12 @@ class AlignmentIterator(bigbed.AlignmentIterator, maf.AlignmentIterator):
             elif prefix == b"\00":
                 # reached the end of the alignment
                 break
+            elif prefix == b"":
+                # the last line ended at the NUL byte instead of a semicolon
+                raise ValueError(
+                    f"bigMaf item at {chromStart}-{chromEnd}: "
+                    "last line is not followed by ';'"
+                )
             else:
                 m = re.match(b"^[^;\0]*", buffer[i:])
                 line = buffer[i : i + m.end()].tobytes().decode(errors="replace")
