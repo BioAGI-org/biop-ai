@@ -108,7 +108,9 @@ class Hmmer3TextParser:
 
     def _parse_qresult(self):
         """Parse a HMMER3 query block (PRIVATE)."""
-        self._read_until(lambda line: line.startswith("Query:"))
+        self._read_until(lambda line: line.startswith(("Query:", "//")))
+        if self.line.startswith("//"):
+            raise ValueError("Found a '//' line before any 'Query:' line")
 
         while self.line:
             regx = re.search(_QRE_ID_LEN, self.line)

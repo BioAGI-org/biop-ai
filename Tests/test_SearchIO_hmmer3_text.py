@@ -784,6 +784,18 @@ class HmmscanCases(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "ended in the hit table"):
                     next(qresults)
 
+    def test_30_hmmscan_001_orphan_end_line(self):
+        """Parsing hmmscan 3.0 (text_30_hmmscan_001) with '//' before any Query."""
+        # parse() used to skip the '//' and return no results, where index()
+        # raises (#580).
+        with open(get_file("text_30_hmmscan_001.out")) as handle:
+            # The first 11 lines are the header, before the Query line
+            text = "".join(handle.readlines()[:11]) + "\n//\n[ok]\n"
+        with self.assertRaisesRegex(
+            ValueError, "Found a '//' line before any 'Query:' line"
+        ):
+            list(parse(StringIO(text), FMT))
+
     def test_30_hmmscan_002_padded_query_line(self):
         """Parsing hmmscan 3.0 (text_30_hmmscan_002) after a padded Query line."""
         # The parser skips a "Query:" line without [L=N]. The old id regex

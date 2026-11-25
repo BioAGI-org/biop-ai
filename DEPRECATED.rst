@@ -662,6 +662,13 @@ parser now raises ``ValueError`` on a ``//`` line that comes before any
 ``SearchIO.index`` raises the same ``ValueError`` there, where it used to
 raise ``UnboundLocalError``.
 
+Changed in biop-ai 1.89 without a deprecation period. The ``hmmer2-text``
+and ``hmmer3-text`` parsers now raise ``ValueError`` on a ``//`` line that
+comes before any ``Query`` line, and ``hmmer2-text`` also raises it on a
+``hmmsearch`` file that ends with no ``Query HMM:`` line. They used to
+return no results, while ``SearchIO.index`` already raised ``ValueError``.
+A file with only the HMMER3 or ``hmmpfam`` header still gives no results.
+
 Changed in biop-ai 1.89 without a deprecation period. The ``hhsuite2-text``
 and ``hhsuite3-text`` parsers now raise ``ValueError`` in two cases where
 they used to raise ``RuntimeError``: when a line after ``No N`` is not a hit

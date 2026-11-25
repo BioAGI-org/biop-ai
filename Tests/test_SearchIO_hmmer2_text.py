@@ -279,6 +279,26 @@ class HmmpfamTests(unittest.TestCase):
             " which is not in the hit table",
         )
 
+    def test_no_query(self):
+        """Test a '//' before any Query line, or a hmmsearch file with no query.
+
+        parse() used to return no results, where index() raises (#580).
+        """
+        hmmpfam = support.DATA / "Hmmer" / "text_21_hmmpfam_001.out"
+        hmmsearch = support.DATA / "Hmmer" / "text_20_hmmsearch_001.out"
+        cases = (
+            (hmmpfam, "//\n", "Found a '//' line before any 'Query' line"),
+            (hmmsearch, "//\n", "Found a '//' line before any 'Query' line"),
+            (hmmsearch, "", "File ended before a 'Query HMM:' line"),
+        )
+        for filename, tail, message in cases:
+            with self.subTest(filename=filename.name, tail=tail):
+                with open(filename) as handle:
+                    # The first 8 lines are the header, before the Query line
+                    text = "".join(handle.readlines()[:8]) + tail
+                with self.assertRaisesRegex(ValueError, message):
+                    list(parse(StringIO(text), self.fmt))
+
     def test_hmmpfam_24(self):
         """Test parsing hmmpfam 2.4 file (text_24_hmmpfam_001.out)."""
         results = list(
