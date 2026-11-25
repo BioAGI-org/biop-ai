@@ -6,7 +6,6 @@
 """Bio.SearchIO parser for HHSUITE version 2 and 3 plain text output format."""
 
 import re
-import warnings
 
 from Bio.SearchIO._model import Hit
 from Bio.SearchIO._model import HSP
@@ -153,11 +152,10 @@ class Hhsuite2TextParser:
             if key in score_map:
                 try:
                     hit_data[score_map[key]] = float(value)
-                except KeyError:
-                    # We trigger warnings here as it's not a big enough problem to crash, but indicates something unexpected.
-                    warnings.warn(
-                        f"HHsuite parser: unable to extract {key} from line: {line}"
-                    )
+                except ValueError:
+                    raise ValueError(
+                        f"Could not parse {key} value {value!r} in score line: {line!r}"
+                    ) from None
 
     def _parse_hit_match_block(self, hit_match_data):
         """Parse a single block of hit sequence data (PRIVATE).

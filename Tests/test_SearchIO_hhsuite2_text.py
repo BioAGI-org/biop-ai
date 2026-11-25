@@ -323,6 +323,7 @@ print(len(hsp.query), len(hsp.hit))
             (head + "garbage\n", "^Unexpected content in HIT_BLOCK_DESC"),
             (head, "^Unexpected content in HIT_BLOCK_DESC"),
             (head + ">h1 d\nProbab=99.0  Score=10.0\n\n", "^No Q or T sequence"),
+            (head + ">h1 d\nProbab=abc  Score=10.0\n\n", "^Could not parse Probab"),
             ("Query q1\nMatch_columns\n\nNo 1  \n", "^No value in Match_columns"),
             ("Query q1\n\n" + "x\n" * 5001, "^Exceeded max_read_until"),
         ):
