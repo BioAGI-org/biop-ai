@@ -5,12 +5,16 @@
 """Test the NCBI XML parser."""
 
 import io
+import os
+import subprocess
+import sys
 import unittest
 import warnings
 from unittest import mock
 
 import support
 
+import Bio
 from Bio import _xml
 from Bio import BiopythonParserWarning
 from Bio.Blast import NCBIXML
@@ -4434,6 +4438,48 @@ class TestNCBIXML(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "shared"):
                 list(NCBIXML.parse(io.BytesIO(xml_data)))
+
+    def test_long_text_element(self):
+        """Parse a long text element in time linear in its length."""
+        # parse() feeds expat 1 KiB blocks, and each block's text was added
+        # to the element's text by copying it. That took 0.7 s for 4 MiB
+        # and 3.7 s for 8 MiB, so 64 MiB took about four minutes. Now it
+        # takes under a second. Run it in a child stopped after 60 seconds.
+        code = """\
+import io
+import sys
+import warnings
+warnings.simplefilter("ignore")
+from Bio.Blast import NCBIXML
+with open(sys.argv[1], "rb") as handle:
+    data = handle.read()
+start, end = b"<BlastOutput_reference>", b"</BlastOutput_reference>"
+head, rest = data.split(start)
+tail = rest.split(end)[1]
+text = "ACGT" * (16 << 20)
+xml = head + start + text.encode() + end + tail
+(record,) = NCBIXML.parse(io.BytesIO(xml))
+print(record.reference == text)
+"""
+        filename = support.DATA / "Blast" / "xml_2212L_blastp_001.xml"
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code, filename],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("parsing a 64 MiB text element took over 60 seconds")
+        self.assertEqual(result.stdout, "True\n", result.stderr)
 
 
 if __name__ == "__main__":
