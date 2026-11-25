@@ -359,6 +359,12 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 gc_widths = defaultdict(list)  # of the pieces of each feature
                 gs = defaultdict(lambda: {"DR": []})
                 gr = defaultdict(lambda: defaultdict(str))
+            elif records is None:
+                if line.startswith("#") and not line.startswith("#="):
+                    continue  # a comment outside an alignment
+                raise ValueError(
+                    f"Expected the '# STOCKHOLM 1.0' header, found:\n{line}"
+                )
             elif line == "//":
                 # Reached the end of the alignment.
                 AlignmentIterator._check_blocks_complete(aligned_sequences, widths)
@@ -466,6 +472,18 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     raise ValueError(
                         f"Expected '#=GF <feature> <text>', found:\n{line}"
                     ) from None
+                # These features add to the reference, database reference or
+                # nested domain that the last RN, DR or NE line started.
+                opener, started = {
+                    "RM": ("RN", references),
+                    "RT": ("RN", references),
+                    "RA": ("RN", references),
+                    "RL": ("RN", references),
+                    "DC": ("DR", database_references),
+                    "NL": ("NE", nested_domains),
+                }.get(feature, (None, True))
+                if not started:
+                    raise ValueError(f"Expected a #=GF {opener} line before:\n{line}")
                 if feature == "RN":
                     if not (text.startswith("[") and text.endswith("]")):
                         raise ValueError(

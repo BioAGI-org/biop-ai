@@ -8191,6 +8191,33 @@ B GT
         )
         self.assertEqual(alignment.sequences[1].description, "The other sequence")
 
+    def test_missing_header(self):
+        """Reject lines before the header, but skip comments outside alignments."""
+        for text in (
+            "seq1 ACGT\n//\n",
+            "#=GF ID x\n//\n",
+            "#=GS a AC x\n//\n",
+            "#=GC SS_cons ....\n//\n",
+            "#=GR a SS ....\n//\n",
+            "//\n",
+            "# STOCKHOLM 1.0\nseq1 ACGT\n//\nseq2 ACGT\n//\n",
+        ):
+            with self.subTest(text=text):
+                message = "^Expected the '# STOCKHOLM 1.0' header, found:"
+                with self.assertRaisesRegex(ValueError, message):
+                    list(Align.parse(StringIO(text), "stockholm"))
+        stream = StringIO("# comment\n# STOCKHOLM 1.0\nseq1 ACGT\n//\n# comment\n")
+        self.assertEqual(len(list(Align.parse(stream, "stockholm"))), 1)
+
+    def test_gf_feature_before_its_opener(self):
+        """Reject #=GF RM, RT, DC or NL lines before the RN, DR or NE they belong to."""
+        for feature, opener in (("RM", "RN"), ("RT", "RN"), ("DC", "DR"), ("NL", "NE")):
+            with self.subTest(feature=feature):
+                stream = StringIO(f"# STOCKHOLM 1.0\n#=GF {feature} x\nA ACGT\n//\n")
+                message = f"^Expected a #=GF {opener} line before:"
+                with self.assertRaisesRegex(ValueError, message):
+                    Align.read(stream, "stockholm")
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
