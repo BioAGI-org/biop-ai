@@ -455,10 +455,17 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     records.append(record)
                 pieces.append(aligned_sequence.replace(".", "-"))
                 gr_features = set()
-            elif line.startswith("#=GF "):
+            # The markup tag is followed by a space or a tab; compare it
+            # without that, so that a bare tag is not taken for a comment.
+            elif line[:5].rstrip() == "#=GF":
                 # Generic per-File annotation, free text
                 # Format: #=GF <feature> <free text>
-                feature, text = line[5:].strip().split(None, 1)
+                try:
+                    feature, text = line[5:].strip().split(None, 1)
+                except ValueError:
+                    raise ValueError(
+                        f"Expected '#=GF <feature> <text>', found:\n{line}"
+                    ) from None
                 if feature == "RN":
                     if not (text.startswith("[") and text.endswith("]")):
                         raise ValueError(
@@ -513,16 +520,21 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     # Each feature key could be used more than once,
                     # so store the entries as a list of strings.
                     gf[feature].append(text)
-            elif line.startswith("#=GC "):
+            elif line[:5].rstrip() == "#=GC":
                 # Generic per-Column annotation, exactly 1 char per column
                 # Format: "#=GC <feature> <exactly 1 char per column>"
-                feature, text = line[5:].strip().split(None, 2)
+                try:
+                    feature, text = line[5:].strip().split(None, 2)
+                except ValueError:
+                    raise ValueError(
+                        f"Expected '#=GC <feature> <annotation>', found:\n{line}"
+                    ) from None
                 if feature not in gc:
                     gc[feature] = ""
                 gc[feature] += text.strip()  # append to any previous entry
                 # Might be interleaved blocks; the widths are checked at //
                 gc_widths[feature].append(len(text.strip()))
-            elif line.startswith("#=GS "):
+            elif line[:5].rstrip() == "#=GS":
                 # Generic per-Sequence annotation, free text
                 # Format: "#=GS <seqname> <feature> <free text>"
                 # Not seqname: a #=GS line may name another sequence, and
@@ -532,7 +544,13 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 except ValueError:
                     # Free text can sometimes be empty, which a one line split throws an error for.
                     # See https://github.com/biopython/biopython/issues/2982 for more details
-                    name, feature = line[5:].strip().split(None, 1)
+                    try:
+                        name, feature = line[5:].strip().split(None, 1)
+                    except ValueError:
+                        raise ValueError(
+                            f"Expected '#=GS <seqname> <feature> <text>', "
+                            f"found:\n{line}"
+                        ) from None
                     text = ""
                 if feature == "DR":
                     gs[name][feature].append(text)
@@ -543,7 +561,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                             f"found a second one:\n{line}"
                         )
                     gs[name][feature] = text
-            elif line[:5] == "#=GR ":
+            elif line[:5].rstrip() == "#=GR":
                 # Generic per-Sequence AND per-Column markup
                 # Format: "#=GR <seqname> <feature> <exactly 1 char per column>"
                 terms = line[5:].split(None, 2)
