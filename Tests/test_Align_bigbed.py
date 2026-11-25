@@ -8768,6 +8768,20 @@ class TestAlign_malformed_data_block(unittest.TestCase):
                         list(alignments.search("chr22"))
                     self.assertEqual(str(cm.exception), message)
 
+    def test_item_without_nul(self):
+        # The block ends with all 12 bytes of the chromosome number, start and
+        # end of its second item, but not the NUL byte that ends the item.
+        # This used to raise ValueError("subsection not found").
+        stream, offset = self.make_stream(zlib.compress(self.items[:-1]))
+        message = f"The data block at offset {offset} ends with a truncated item"
+        with Align.parse(stream, "bigbed") as alignments:
+            with self.assertRaises(ValueError) as cm:
+                list(alignments)
+            self.assertEqual(str(cm.exception), message)
+            with self.assertRaises(ValueError) as cm:
+                list(alignments.search("chr22"))
+            self.assertEqual(str(cm.exception), message)
+
     def test_invalid(self):
         # These used to raise zlib.error. The last four bytes of the
         # compressed data are the Adler-32 checksum of the block.
