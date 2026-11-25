@@ -2970,8 +2970,14 @@ class TestJASPAR(unittest.TestCase):
             record = motifs.parse(StringIO(text), "pfm-four-rows")
             self.assertEqual(len(record), 1, text)
             self.assertEqual(record[0].counts["T"], [7.0, 8.0])
-        record = motifs.parse(StringIO("A x\nC x\nG x\nT x\n"), "pfm-four-rows")
-        self.assertEqual(len(record), 0)
+        # Lines that are all skipped mean the file is in another format
+        # (issue #543), but an empty file still gives no motifs.
+        with self.assertRaisesRegex(ValueError, "first unrecognised line: 'A x'"):
+            motifs.parse(StringIO("A x\nC x\nG x\nT x\n"), "pfm-four-rows")
+        with open(support.DATA / "motifs" / "alignace.out") as handle:
+            with self.assertRaisesRegex(ValueError, "No pfm-four-rows matrix found"):
+                motifs.parse(handle, "pfm-four-rows")
+        self.assertEqual(len(motifs.parse(StringIO("\n\n"), "pfm-four-rows")), 0)
         # A letter and a digit with no separator is a header, not a row.
         for header in ("T7 promoter", "A1 site", "G4 quadruplex", "C2H2-ZFs"):
             with self.subTest(header=header):

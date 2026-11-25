@@ -368,6 +368,7 @@ def _read_pfm_four_rows(handle):
     nucleotide_counts = {}
     row_count = 0
     nucleotides = ["A", "C", "G", "T"]
+    first_skipped = None
 
     for line in handle:
         line = line.strip()
@@ -395,6 +396,8 @@ def _read_pfm_four_rows(handle):
             nucleotide = nucleotides[row_count]
             counts_str = row_match_without_nucleotide_letter.group(1)
         else:
+            if line and first_skipped is None:
+                first_skipped = line
             continue
         if nucleotide in nucleotide_counts:
             raise ValueError(f"Second row for {nucleotide} in one motif: {line!r}")
@@ -422,6 +425,11 @@ def _read_pfm_four_rows(handle):
 
     if row_count or motif_name is not None:
         raise ValueError(f"Last motif has only {row_count} of its 4 rows")
+    if not record and first_skipped is not None:
+        # Probably a file in some other format; do not return an empty result.
+        raise ValueError(
+            f"No pfm-four-rows matrix found; first unrecognised line: {first_skipped!r}"
+        )
 
     return record
 
