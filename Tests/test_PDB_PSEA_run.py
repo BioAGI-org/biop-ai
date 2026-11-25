@@ -5,7 +5,8 @@
 
 """Tests for Bio.PDB.PSEA.run_psea with a stand-in for the psea program.
 
-These run without psea installed, unlike test_PDB_PSEA.py.
+These run without psea installed, unlike the tests in test_PDB_PSEA.py
+that call run_psea.
 """
 
 import errno
