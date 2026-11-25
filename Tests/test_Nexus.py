@@ -2397,8 +2397,13 @@ def parse_in_child(testcase, code, *args):
     instead of only running slowly. The fixed code takes a few seconds at most,
     even on a busy machine, so the limit is kept low: old code that takes 7
     minutes here must still fail on a machine many times faster.
+
+    The child inherits the environment. Under the debug allocator and ASan,
+    as in the CI test_linux job, it runs about four times slower, so the
+    limit there is 60 seconds, still well short of the old code's minutes.
     """
     env = os.environ.copy()
+    limit = 60 if env.get("PYTHONMALLOC") == "debug" else 20
     env["PYTHONPATH"] = os.pathsep.join(
         filter(
             None,
@@ -2411,10 +2416,10 @@ def parse_in_child(testcase, code, *args):
             capture_output=True,
             text=True,
             env=env,
-            timeout=20,
+            timeout=limit,
         )
     except subprocess.TimeoutExpired:
-        testcase.fail("parsing did not finish within 20 seconds")
+        testcase.fail(f"parsing did not finish within {limit} seconds")
     testcase.assertEqual(result.returncode, 0, result.stderr)
     return json.loads(result.stdout)
 
