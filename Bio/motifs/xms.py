@@ -11,6 +11,7 @@ from xml.dom import expatbuilder
 from xml.dom import Node
 from xml.parsers import expat
 
+from Bio import _xml
 from Bio import motifs
 
 
@@ -93,9 +94,7 @@ class _ExpatBuilder(expatbuilder.ExpatBuilderNS):
     """
 
     def entity_decl_handler(self, entityName, *args):
-        raise ValueError(
-            f"XML entity declarations are not allowed (found entity {entityName!r})"
-        )
+        _xml._refuse_entity_decl(entityName, *args)
 
 
 class Record(list):
