@@ -15,6 +15,7 @@ import collections.abc
 import contextlib
 import itertools
 import os
+import weakref
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import Callable
@@ -398,6 +399,8 @@ class _SQLiteManySeqFilesDict(_IndexedSeqFileDict[_RecordT_co]):
         self._obj_repr = obj_repr
         self._max_open = max_open
         self._proxies: dict[int, _IndexedSeqFileProxy[_RecordT_co]] = {}
+        # Cursors of key iterators still in use, for close() to close
+        self._cursors: weakref.WeakSet[sqlite3.Cursor] = weakref.WeakSet()
 
         # Note if using SQLite :memory: trick index filename, this will
         # give $PWD as the relative path (which is fine).
@@ -610,7 +613,6 @@ class _SQLiteManySeqFilesDict(_IndexedSeqFileDict[_RecordT_co]):
         except sqlite3.IntegrityError as err:
             self._proxies = random_access_proxies
             self.close()
-            con.close()
             raise ValueError(f"Duplicate key? {err}") from None
         con.execute("PRAGMA locking_mode=NORMAL")
         con.execute("UPDATE meta_data SET value = ? WHERE key = ?;", (count, "count"))
@@ -634,9 +636,11 @@ class _SQLiteManySeqFilesDict(_IndexedSeqFileDict[_RecordT_co]):
 
     def __iter__(self) -> Iterator[str]:
         """Iterate over the keys."""
-        for row in self._con.execute(
+        cursor = self._con.execute(
             "SELECT key FROM offset_data ORDER BY file_number, offset;"
-        ):
+        )
+        self._cursors.add(cursor)
+        for row in cursor:
             yield str(row[0])
 
     def __getitem__(self, key: str) -> _RecordT_co:
@@ -705,7 +709,18 @@ class _SQLiteManySeqFilesDict(_IndexedSeqFileDict[_RecordT_co]):
                 return proxy.get_raw(offset)
 
     def close(self) -> None:
-        """Close any open file handles."""
+        """Close any open file handles, and the SQLite index file.
+
+        Once called, further use of the index won't work. As with
+        Bio.SeqIO.index, this lets you delete the files, which on Windows
+        is only possible once all open handles to them are closed.
+        """
         proxies = self._proxies
         while proxies:
             proxies.popitem()[1]._handle.close()
+        # A partly read key iterator's cursor would keep the file open, and
+        # locked, after the connection is closed
+        for cursor in list(self._cursors):
+            cursor.close()
+        self._cursors.clear()
+        self._con.close()
