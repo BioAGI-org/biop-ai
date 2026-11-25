@@ -7,6 +7,8 @@
 """Unit tests for the Bio.NMR Module."""
 
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -128,6 +130,33 @@ class NmrTests(unittest.TestCase):
             self.assertEqual(rows, ["1\t7.663\t*\n", "2\t7.663\t*\n"])
             # a file with no peaks gives no rows, not a made-up residue -1
             self.assertEqual(xpktools.data_table(paths[2:3], "H1.P", "H1"), [])
+
+    def test_simplepredict_no_peaks(self):
+        """The simplepredict.py example stops cleanly on a file with no peaks."""
+        script = support.DATA.parent / "Doc" / "examples" / "nmr" / "simplepredict.py"
+        if not script.is_file():
+            self.skipTest(f"Missing {script}")
+        with open(support.DATA / "NMR" / "noed.xpk") as handle:
+            header = handle.readlines()[:6]
+        env = dict(os.environ)
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(None, [str(support.DATA.parent), env.get("PYTHONPATH")])
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            # the script reads ./noed.xpk from the working directory
+            with open(os.path.join(directory, "noed.xpk"), "w") as handle:
+                handle.writelines(header)
+            result = subprocess.run(
+                [sys.executable, str(script)],
+                cwd=directory,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("No data lines in ./noed.xpk", result.stderr)
+        self.assertEqual(result.returncode, 1)
 
     def test_noetools(self):
         """Self test for NMR.NOEtools.

@@ -78,10 +78,13 @@ peaklist = xpktools.Peaklist(infn)  # infn is the name of the xpk file
 res_dict = peaklist.residue_dict(detectatom)
 
 # As well as the data, the dictionary contains two other entries,
-# corresponding to the maximum and minimum residues indexed
+# corresponding to the maximum and minimum residues indexed.
+# Both are None when the file has a header but no data lines.
 
 MAXRES = res_dict["maxres"]
 MINRES = res_dict["minres"]
+if MINRES is None:
+    raise SystemExit(f"No data lines in {infn}; nothing to predict.")
 
 # ****** CALCULATE AND WRITE CROSSPEAK PEAKLIST *****
 
