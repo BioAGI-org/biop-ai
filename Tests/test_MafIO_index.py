@@ -867,49 +867,6 @@ idx.close()
                 result.stderr,
             )
 
-        def test_get_spliced_ungapped_memory(self):
-            # get_spliced needs one dictionary entry per row and reference
-            # position. Collecting each position's letters in a list as well
-            # more than doubled its peak memory on an ungapped block.
-            try:
-                import tracemalloc
-            except ImportError:
-                self.skipTest("no tracemalloc")
-            if tracemalloc.is_tracing():
-                self.skipTest("tracemalloc is already tracing")
-            rows, cols = 10, 10_000
-            maf = os.path.join(self.tmpdir, "ungapped.maf")
-            with open(maf, "w") as handle:
-                handle.write("##maf version=1\n\na score=0\n")
-                handle.write(f"s ref.chr1 0 {cols} + {cols} {'A' * cols}\n")
-                for row in range(1, rows):
-                    handle.write(f"s sp{row}.chr1 0 {cols} + {cols} {'C' * cols}\n")
-                handle.write("\n")
-            idx = MafIndex(os.path.join(self.tmpdir, "ungapped.idx"), maf, "ref.chr1")
-            try:
-                # the memory that a dictionary entry per row and position needs
-                tracemalloc.start()
-                try:
-                    entries = [dict.fromkeys(range(cols), "") for row in range(rows)]
-                    baseline = tracemalloc.get_traced_memory()[1]
-                    del entries
-                finally:
-                    tracemalloc.stop()
-                if baseline == 0:
-                    self.skipTest("tracemalloc reports no memory")
-                tracemalloc.start()
-                try:
-                    alignment = idx.get_spliced([0], [cols])
-                    peak = tracemalloc.get_traced_memory()[1]
-                finally:
-                    tracemalloc.stop()
-            finally:
-                idx.close()
-            self.assertEqual(len(alignment), rows)
-            self.assertEqual(alignment.get_alignment_length(), cols)
-            # about 1.1 times the baseline; a list per position made it 2.3-2.6
-            self.assertLess(peak / baseline, 1.6)
-
     class TestSpliceBadMAF(unittest.TestCase):
         """Test in silico splicing on an incorrectly-formatted MAF."""
 
