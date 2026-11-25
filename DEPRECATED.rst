@@ -992,6 +992,11 @@ The Bio.SubsMat module was deprecated in Release 1.78, and removed in Release
 
 Bio.Align
 ---------
+Changed in biop-ai 1.89 without a deprecation period. The ``hhr`` parser in
+``Bio.Align`` now raises ``ValueError`` from ``Bio.Align.parse`` when the
+header has no ``Query`` line, instead of ``AttributeError`` when the first
+alignment is read.
+
 The ``infer_coordinates`` class method of the ``Alignment`` class in
 ``Bio.Align`` was deprecated in Release 1.84, and removed in Release 1.86.
 Instead, please use the ``parse_printed_alignment`` method, which is much

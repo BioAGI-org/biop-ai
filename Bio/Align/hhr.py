@@ -55,6 +55,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 metadata["Command line"] = value
             else:
                 raise ValueError("Unknown key '%s'" % key)
+        if not hasattr(self, "query_name"):
+            raise ValueError("No 'Query' line in .hhr header")
         self.metadata = metadata
         line = stream.readline()
         if not line:
