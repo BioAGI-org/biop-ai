@@ -6219,6 +6219,20 @@ class TestScoreDistribution(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "background frequency is zero"):
             motif.pssm.distribution()
 
+    def test_infinite_score_raises_direct(self):
+        """ScoreDistribution(pssm=...) itself rejects an infinite score.
+
+        Built directly, without pssm.distribution, this failed with "cannot
+        convert float NaN to integer" (#536).
+        """
+        motif = motifs.create([Seq("ACGT"), Seq("ACGA")])
+        with self.assertRaisesRegex(ValueError, "pseudocounts"):
+            ScoreDistribution(pssm=motif.pssm, background=self.background)
+        motif.pseudocounts = 0.5
+        motif.background = {"A": 0.5, "C": 0.5, "G": 0.0, "T": 0.0}
+        with self.assertRaisesRegex(ValueError, "background frequency is zero"):
+            ScoreDistribution(pssm=motif.pssm, background=motif.background)
+
 
 # Run only while the GIL is off. A free-threaded build turns it back on when
 # an undeclared extension is imported, unless PYTHON_GIL=0 is set.
