@@ -437,6 +437,13 @@ class _TruncatedBlockError(ValueError):
     """A BGZF block that ends early: a damaged file, not plain gzip (PRIVATE)."""
 
 
+class _CorruptBlockError(ValueError, RuntimeError):
+    """A BGZF block whose CRC or data length does not match its data (PRIVATE).
+
+    This was a RuntimeError, so it is still one for callers that catch that.
+    """
+
+
 def _read_exact(handle, size):
     """Read exactly size bytes from handle, else raise ValueError (PRIVATE)."""
     data = handle.read(size)
@@ -505,7 +512,9 @@ def _load_bgzf_block(handle, text_mode=False):
     expected_crc = _read_exact(handle, 4)
     expected_size = struct.unpack("<I", _read_exact(handle, 4))[0]
     if expected_size != len(data):
-        raise RuntimeError("Decompressed to %i, not %i" % (len(data), expected_size))
+        raise _CorruptBlockError(
+            "Decompressed to %i, not %i" % (len(data), expected_size)
+        )
     # Should cope with a mix of Python platforms...
     crc = zlib.crc32(data)
     if crc < 0:
@@ -513,7 +522,7 @@ def _load_bgzf_block(handle, text_mode=False):
     else:
         crc = struct.pack("<I", crc)
     if expected_crc != crc:
-        raise RuntimeError(f"CRC is {crc}, not {expected_crc}")
+        raise _CorruptBlockError(f"CRC is {crc}, not {expected_crc}")
     if text_mode:
         # Note ISO-8859-1 aka Latin-1 preserves first 256 chars
         # (i.e. ASCII), but critically is a single byte encoding
