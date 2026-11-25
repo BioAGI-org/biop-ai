@@ -10,7 +10,7 @@ import subprocess
 import sys
 import unittest
 from math import erfc
-from math import isnan
+from math import inf
 from math import nan
 from math import sqrt
 from unittest import mock
@@ -132,11 +132,6 @@ class TestHugeDegreesOfFreedom(unittest.TestCase):
         for value in values:
             self.assertAlmostEqual(float(value), 0.5, places=5)
 
-    def test_nan_stat_large_df(self):
-        # A NaN statistic gives NaN on both paths, as it always has.
-        self.assertTrue(isnan(chi2.cdf_chi2(1e12, nan)))
-        self.assertTrue(isnan(chi2.cdf_chi2(10, nan)))
-
     def test_offset_near_mean(self):
         # At df = 1e30 an offset of one standard deviation is a relative
         # change of 1.4e-15 in stat, which forming stat / df first rounds
@@ -151,10 +146,19 @@ class TestHugeDegreesOfFreedom(unittest.TestCase):
         self.assertEqual(chi2.cdf_chi2(df, 1e-300), 1.0)
         self.assertEqual(chi2.cdf_chi2(df, float("inf")), 0.0)
 
-    def test_infinite_df(self):
-        # An infinite df does not take the approximation, which would divide
-        # by zero; it gives what it gave before.
-        self.assertEqual(chi2.cdf_chi2(float("inf"), float("inf")), 0.0)
+    def test_non_finite_input(self):
+        # An infinite or NaN df, or a NaN statistic, raises ValueError; these
+        # used to return NaN (or 0.0 and 1 for an infinite df). An infinite
+        # statistic is allowed and gives the limit, 0.0.
+        for df, stat in ((inf, 1.0), (inf, inf), (inf, 0.0), (nan, 1.0)):
+            with self.subTest(df=df, stat=stat):
+                with self.assertRaisesRegex(ValueError, "df must be finite"):
+                    chi2.cdf_chi2(df, stat)
+        for df in (2, 1e12):
+            with self.subTest(df=df, stat=nan):
+                with self.assertRaisesRegex(ValueError, "must be positive"):
+                    chi2.cdf_chi2(df, nan)
+        self.assertEqual(chi2.cdf_chi2(1, inf), 0.0)
 
 
 if __name__ == "__main__":
