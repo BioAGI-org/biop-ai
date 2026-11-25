@@ -1035,19 +1035,21 @@ class EmblScanner(InsdcScanner):
             for line in line_iter:
                 if line.startswith("CO   "):
                     line = line[5:].strip()
-                    contig_location = line
+                    # Join the lines once: adding each line to a string
+                    # takes quadratic time on PyPy.
+                    contig_parts = [line]
                     while True:
                         line = next(line_iter)
                         if not line:
                             break
                         elif line.startswith("CO   "):
                             # Don't need to preserve the whitespace here.
-                            contig_location += line[5:].strip()
+                            contig_parts.append(line[5:].strip())
                         else:
                             raise ValueError(
                                 "Expected CO (contig) continuation line, got:\n" + line
                             )
-                    consumer.contig_location(contig_location)
+                    consumer.contig_location("".join(contig_parts))
                 if line.startswith("SQ   Sequence "):
                     # e.g.
                     # SQ   Sequence 219 BP; 82 A; 48 C; 33 G; 45 T; 11 other;
@@ -2026,14 +2028,16 @@ class GenBankScanner(InsdcScanner):
                     consumer.add_wgs_scafld(line)
                 if line.startswith("CONTIG"):
                     line = line[6:].strip()
-                    contig_location = line
+                    # Join the lines once: adding each line to a string
+                    # takes quadratic time on PyPy.
+                    contig_parts = [line]
                     while True:
                         line = next(line_iter)
                         if not line:
                             break
                         elif line[: self.GENBANK_INDENT] == self.GENBANK_SPACER:
                             # Don't need to preserve the whitespace here.
-                            contig_location += line[self.GENBANK_INDENT :].rstrip()
+                            contig_parts.append(line[self.GENBANK_INDENT :].rstrip())
                         elif line.startswith("ORIGIN"):
                             # Strange, seen this in GenPept files via Entrez gbwithparts
                             line = line[6:].strip()
@@ -2044,7 +2048,7 @@ class GenBankScanner(InsdcScanner):
                             raise ValueError(
                                 "Expected CONTIG continuation line, got:\n" + line
                             )
-                    consumer.contig_location(contig_location)
+                    consumer.contig_location("".join(contig_parts))
             return
         except StopIteration:
             raise ValueError("Problem in misc lines before sequence") from None

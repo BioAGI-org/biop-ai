@@ -7667,6 +7667,48 @@ class GenBankTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Expected '//' at the end"):
             SeqIO.read(handle, "genbank")
 
+    def test_contig_many_lines(self):
+        """GenBank CONTIG and EMBL CO lines over many lines parse quickly."""
+        # Each continuation line used to be added to the contig string. On
+        # PyPy that copies the string every time: 40,000 lines took about
+        # five seconds, four times as long for each doubling, so 200,000
+        # lines took minutes and the timeout fails the test. CPython was
+        # already fast, so there this only checks the joined value.
+        code = """\
+import sys
+from Bio.GenBank.Scanner import EmblScanner, GenBankScanner
+class Consumer:
+    def contig_location(self, content):
+        self.contig = content
+piece = "gap(100),complement(AB000001.1:1..1000),"
+n = 200_000
+expected = "join(" + piece * (n + 1) + "gap(1))"
+for scanner, first, prefix in (
+    (GenBankScanner(), "CONTIG      join(", " " * 12),
+    (EmblScanner(), "CO   join(", "CO   "),
+):
+    lines = [first + piece, *[prefix + piece] * n, prefix + "gap(1))"]
+    consumer = Consumer()
+    scanner._feed_misc_lines(consumer, lines)
+    if consumer.contig != expected:
+        sys.exit("wrong contig: %r..." % consumer.contig[:60])
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_qualifier_continuation_before_qualifier_raises(self):
         """A feature line that is not a /qualifier raises ValueError."""
         handle = self.read_noref_modified(
