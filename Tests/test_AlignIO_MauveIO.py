@@ -8,10 +8,14 @@
 import os
 import unittest
 from io import StringIO
+from types import MappingProxyType
 
 from Bio import SeqIO
+from Bio.Align import MultipleSeqAlignment
 from Bio.AlignIO.MauveIO import MauveIterator
 from Bio.AlignIO.MauveIO import MauveWriter
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 
 
 class TestMauveIO(unittest.TestCase):
@@ -112,6 +116,64 @@ class TestMauveIO(unittest.TestCase):
             for r1, r2 in zip(a1, a2):
                 self.assertEqual(r1.id, r2.id)
                 self.assertEqual(r1.seq, r2.seq)
+
+    def test_write_first_block_lists_every_sequence(self):
+        """The first block written lists every sequence, so rows keep order."""
+        with open(self.SIMPLE_XMFA) as handle:
+            aln_list = list(MauveIterator(handle))
+        handle = StringIO()
+        # The first block written holds only sequence 2
+        MauveWriter(handle).write_file(aln_list[::-1])
+        self.assertIn("#Sequence2Entry\t2\n", handle.getvalue())
+        handle.seek(0)
+        aln_list_out = list(MauveIterator(handle))
+        self.assertEqual([r.id for r in aln_list_out[0]], ["1", "2/11410-12880"])
+        self.assertEqual(set(aln_list_out[0][0].seq), {"-"})
+        self.assertEqual(
+            [r.id for r in aln_list_out[3]], ["1/5670-9940", "2/7140-11410"]
+        )
+        # Two placeholders in the first block are both kept
+        data = (
+            "> 1:0-0 + a.fa\n> 2:0-0 + b.fa\n> 3:1-4 + c.fa\nACGT\n=\n"
+            "> 1:1-4 + a.fa\nAAAA\n> 2:1-4 + b.fa\nCCCC\n=\n"
+        )
+        handle = StringIO()
+        MauveWriter(handle).write_file(MauveIterator(StringIO(data)))
+        handle.seek(0)
+        alignment = next(MauveIterator(handle))
+        self.assertEqual([r.id for r in alignment], ["a.fa", "b.fa", "c.fa/0-4"])
+
+    def test_write_reused_alignment(self):
+        """Each alignment from an iterator that reuses one object is kept."""
+        alignment = MultipleSeqAlignment([SeqRecord(Seq("AAAA"), id="1", name="1")])
+
+        def blocks():
+            yield alignment
+            alignment[0].seq = Seq("CCCC")
+            yield alignment
+
+        handle = StringIO()
+        MauveWriter(handle).write_file(blocks())
+        handle.seek(0)
+        self.assertEqual(
+            [str(a[0].seq) for a in MauveIterator(handle)], ["AAAA", "CCCC"]
+        )
+
+    def test_write_uncopyable_annotation(self):
+        """An unused annotation that cannot be copied does not stop writing."""
+        record = SeqRecord(Seq("AAAA"), id="1", name="1")
+        record.annotations["metadata"] = MappingProxyType({"key": "value"})
+        handle = StringIO()
+        MauveWriter(handle).write_file([MultipleSeqAlignment([record])])
+        handle.seek(0)
+        self.assertEqual([str(a[0].seq) for a in MauveIterator(handle)], ["AAAA"])
+
+    def test_write_not_an_alignment(self):
+        """Something that is not an alignment is rejected by write_alignment."""
+        # Not an UndefinedSequenceError from numbering its "rows" first.
+        record = SeqRecord(Seq(None, length=4), id="a")
+        with self.assertRaisesRegex(AttributeError, "get_alignment_length"):
+            MauveWriter(StringIO()).write_file([record])
 
     def test_malformed_header(self):
         """A malformed header line is named in the error message."""
