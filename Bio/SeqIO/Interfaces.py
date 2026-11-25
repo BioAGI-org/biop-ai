@@ -149,6 +149,9 @@ class SequenceIterator(ABC, Generic[AnyStr]):
             raise ValueError("The alphabet argument is no longer supported")
         modes = self.modes
         self.source = source
+        # Record ownership separately: a subclass may reuse the name source
+        # (SeqXmlIterator stores the file's source database there).
+        self._owns_stream = isinstance(source, _PathLikeTypes)
         if isinstance(source, _PathLikeTypes):
             mode = modes[0]
             self.stream = open(source, "r" + mode)
@@ -203,8 +206,14 @@ class SequenceIterator(ABC, Generic[AnyStr]):
             stream = self.stream
         except AttributeError:
             return
-        # A subclass that failed before setting source may not have one
-        if hasattr(self, "source") and stream is not self.source:
+        # Close the stream only if we opened it from a path.
+        try:
+            owns_stream = self._owns_stream
+        except AttributeError:
+            # A subclass whose __init__ set stream without calling ours:
+            # as before, it owns the stream if that is not its source.
+            owns_stream = hasattr(self, "source") and stream is not self.source
+        if owns_stream:
             stream.close()
         del self.stream
         return False
