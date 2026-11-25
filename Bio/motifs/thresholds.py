@@ -7,6 +7,7 @@
 
 import contextlib
 import math
+import sys
 import warnings
 
 import numpy as np
@@ -203,12 +204,22 @@ class ScoreDistribution:
         self.bg_density = bg_density.tolist()
         if mismatched:
             # 2**score * background gives the motif's probabilities only
-            # for the background the PSSM was built with.
+            # for the background the PSSM was built with. Report the warning
+            # at the first caller outside Bio.motifs, whether it called
+            # pssm.distribution or this class.
+            stacklevel = 2
+            frame = sys._getframe(1)
+            while frame.f_back and frame.f_globals.get("__name__", "").startswith(
+                "Bio.motifs"
+            ):
+                frame = frame.f_back
+                stacklevel += 1
             warnings.warn(
                 "The background is not the one the PSSM was built with, so "
                 "the motif score density is wrong, and threshold_fnr and "
                 "threshold_balanced will be wrong.",
                 BiopythonWarning,
+                stacklevel=stacklevel,
             )
 
     def _index_diff(self, x, y=0.0):
