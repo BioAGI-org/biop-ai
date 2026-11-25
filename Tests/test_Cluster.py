@@ -1445,6 +1445,79 @@ class TestCluster(unittest.TestCase):
             lines.append(line)
         self.assertEqual(lines, [])
 
+    def test_somcluster_c_null_celldata_allocation(self):
+        # The C function somcluster accepts celldata == NULL and then makes
+        # its own nxgrid x nygrid table of centroids.  Its two pointer tables
+        # were sized nxgrid*nygrid*ndata and nygrid*ndata instead of nxgrid
+        # and nygrid.  The Python wrapper always passes celldata, so call the
+        # C library directly and count the bytes it asks calloc for.
+        directory = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), os.pardir, "Bio", "Cluster"
+        )
+        if sys.platform == "win32":
+            self.skipTest("compiles with gcc or clang, not on Windows")
+        compiler = shutil.which("gcc") or shutil.which("clang")
+        if compiler is None or not os.path.exists(os.path.join(directory, "cluster.c")):
+            self.skipTest("needs gcc or clang and the Bio.Cluster C source")
+        driver = r"""
+#include <stdio.h>
+#include <stdlib.h>
+static size_t requested = 0;
+static void* counting_calloc(size_t n, size_t size)
+{
+    requested += n * size;
+    return calloc(n, size);
+}
+#define calloc counting_calloc
+#include "cluster.c"
+#undef calloc
+
+int main(void)
+{
+    enum {NROWS = 4, NCOLUMNS = 50, NX = 3, NY = 2};
+    double values[NROWS][NCOLUMNS];
+    int masks[NROWS][NCOLUMNS];
+    double* data[NROWS];
+    int* mask[NROWS];
+    double weight[NCOLUMNS];
+    int clusterid[NROWS][2];
+    int i, j;
+    for (i = 0; i < NROWS; i++) {
+        for (j = 0; j < NCOLUMNS; j++) {
+            values[i][j] = i + 0.01 * j;
+            masks[i][j] = 1;
+        }
+        data[i] = values[i];
+        mask[i] = masks[i];
+    }
+    for (j = 0; j < NCOLUMNS; j++) weight[j] = 1.0;
+    if (!somcluster(NROWS, NCOLUMNS, data, mask, weight, 0, NX, NY, 0.02, 5,
+                    'e', NULL, clusterid, 1, NULL)) return 1;
+    /* stddata in somworker, then the two pointer tables of celldata */
+    printf("%zu %zu\n", requested, NROWS * sizeof(double)
+           + NX * sizeof(double**) + NX * NY * sizeof(double*));
+    return 0;
+}
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            source = os.path.join(tmp, "driver.c")
+            program = os.path.join(tmp, "driver")
+            with open(source, "w") as handle:
+                handle.write(driver)
+            result = subprocess.run(
+                [compiler, "-I", directory, "-o", program, source, "-lm"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            result = subprocess.run(
+                [program], capture_output=True, text=True, timeout=60
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        requested, needed = map(int, result.stdout.split())
+        self.assertLessEqual(requested, needed)
+
     def test_treecluster(self):
         if TestCluster.module == "Bio.Cluster":
             from Bio.Cluster import treecluster
