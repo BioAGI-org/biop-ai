@@ -114,6 +114,8 @@ class ScopTests(unittest.TestCase):
         for old, new, message in [
             ("A:\ta.1.1.2\t14984", "A:\ta.1.1.3\t14984", "sccs a.1.1.3"),
             ("d3sdha_\t3sdh", "d3sdhz_\t3sdh", "sid d3sdhz_"),
+            # 46465 is an 'sp' node in the DES file, not a 'px' domain
+            ("A:\ta.1.1.2\t14984", "A:\ta.1.1.2\t46465", "'sp' node"),
         ]:
             with self.subTest(message=message):
                 self.assertIn(old, cla)
