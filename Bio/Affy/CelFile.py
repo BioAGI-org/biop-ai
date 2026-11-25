@@ -81,6 +81,7 @@ class Record:
         self.mask = None
         self.noutliers = None
         self.outliers = None
+        self.nmodified = None
         self.modified = None
 
 
@@ -255,6 +256,7 @@ def _read_v4(f):
     record.mask = None
     record.noutliers = None
     record.outliers = None
+    record.nmodified = None
     record.modified = None
 
     # Real data never seems to have anything but zeros here, but we don't want
