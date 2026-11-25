@@ -1115,10 +1115,14 @@ def qblast(
                       (connecting, each read) of every request; it does not
                       limit the whole search. A server that stays silent for
                       longer raises TimeoutError; a connection that cannot be
-                      made in time raises urllib.error.URLError. Default
+                      made in time raises urllib.error.URLError. The timeout
+                      stays set on the returned stream, so reading the
+                      results from it can also raise TimeoutError if the
+                      server stalls for longer; use a larger value (or None)
+                      to read large results over a slow connection. Default
                       None, which uses socket.getdefaulttimeout() (no limit
                       unless set).
-     - max_wait       Total time in seconds to wait for the results. Once
+     - max_wait      Total time in seconds to wait for the results. Once
                       this has passed and the search is still running,
                       raise TimeoutError; the message gives the RID, so the
                       results can be fetched later. Default None, which
