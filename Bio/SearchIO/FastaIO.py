@@ -428,6 +428,11 @@ class FastaM10Parser:
                     line = self.handle.readline()
 
                 elif qres_state == state_QRES_CONTENT:
+                    if qresult is None:
+                        raise ValueError(
+                            "Expected a query line '>>>ID DESCRIPTION - LENGTH aa'"
+                            f" before the first hit block, found:\n{line!r}"
+                        )
                     if not line[3:].startswith(qresult.id):
                         raise ValueError(
                             f"Expected '>>>{qresult.id}' for the current query,"
