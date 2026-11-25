@@ -30,9 +30,13 @@ def run_python(code):
     """Run code in a child Python that imports this checkout's Bio.
 
     Return the subprocess.CompletedProcess, with stdout and stderr as text.
-    A child that takes more than 60 seconds raises subprocess.TimeoutExpired,
+    A child that takes more than 20 seconds raises subprocess.TimeoutExpired,
     which fails the calling test, so an input that takes the old code many
-    minutes fails the test in one, rather than only slowing the suite.
+    minutes fails the test quickly, rather than only slowing the suite. Each
+    caller takes a few seconds at most on the fixed code. The limit is kept
+    low so that the old code still fails on a machine many times faster than
+    the one it was timed on: the old fasta-m10 code took about 250 seconds on
+    test_long_alignment, only about 4 times a 60 second limit.
     """
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(
@@ -43,7 +47,7 @@ def run_python(code):
     )
     return subprocess.run(
         [sys.executable, "-c", code],
-        timeout=60,
+        timeout=20,
         capture_output=True,
         text=True,
         env=env,

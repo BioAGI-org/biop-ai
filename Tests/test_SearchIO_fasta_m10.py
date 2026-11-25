@@ -3527,7 +3527,7 @@ class LongLineCases(unittest.TestCase):
         # line: 0.5 s for 300 spaces, 7 s for 600, about 3 minutes for 1200.
         # It still rejected the line in the end, so time it in a child
         # process: with 2400 spaces the old pattern would take well over 20
-        # minutes and the new one takes milliseconds, so the 60 second
+        # minutes and the new one takes milliseconds, so the 20 second
         # timeout fails the test on the old pattern.
         filename = os.fspath(get_file("output001.m10"))
         code = f"""\
@@ -3564,7 +3564,7 @@ except ValueError:
         # length of the run: 5 s for 40,000 more, 21 s for 80,000. It still
         # trimmed them correctly, so time it in a child process: with 400,000
         # more the old pattern would take about 9 minutes and the new one
-        # takes milliseconds, so the 60 second timeout fails the test on the
+        # takes milliseconds, so the 20 second timeout fails the test on the
         # old pattern.
         filename = os.fspath(get_file("output001.m10"))
         code = f"""\
@@ -3605,7 +3605,7 @@ print(next(parse(StringIO(text), "fasta-m10")).hsps[0].query_range)
         # 2 million residues, 52 s for 4 million. It still parsed correctly,
         # so time it in a child process: with 10 million the old code would
         # take several minutes and the new one takes about a second, so the
-        # 60 second timeout fails the test on the old code.
+        # 20 second timeout fails the test on the old code.
         filename = os.fspath(get_file("output001.m10"))
         code = f"""\
 from io import StringIO
