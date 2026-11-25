@@ -9283,6 +9283,58 @@ class OutputTests(unittest.TestCase):
             self.assertEqual(old.description, new.description)
             self.assertEqual(old.seq, new.seq)
 
+    def test_record_str_long_sequence_and_comment(self):
+        """Write a GenBank Record with a long sequence and comment quickly."""
+        # str(Record) used to add each sequence chunk and each COMMENT line
+        # to one string. On PyPy that copies the string every time: 600 kb
+        # of sequence took 5 seconds and 40,000 comment lines 12 seconds,
+        # four times as long for each doubling, so these sizes took minutes
+        # and the timeout fails the test. CPython was already fast, so there
+        # this only checks the text.
+        code = """\
+import sys
+from Bio.GenBank.Record import Record
+record = Record()
+record.sequence = "ACGT" * 1_250_000 + "ACG"
+record.comment = "\\n".join(["x" * 60] * 200_000)
+text = str(record)
+seq = record.sequence.lower()
+lines = [
+    "%9d %s\\n" % (i + 1, " ".join(seq[j : j + 10] for j in range(i, i + 60, 10) if j < len(seq)))
+    for i in range(0, len(seq), 60)
+]
+if not text.endswith("\\nORIGIN      \\n" + "".join(lines) + "//"):
+    sys.exit("wrong sequence: %r" % text[-200:])
+if "\\nCOMMENT     " + ("\\n" + " " * 12).join(["x" * 60] * 200_000) + "\\n" not in text:
+    sys.exit("wrong comment")
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_record_str_non_string_list_items(self):
+        """Format accession, keyword and taxonomy items that are not strings."""
+        record = Record.Record()
+        record.accession = ["X1", 42]
+        record.keywords = [7, "k"]
+        record.taxonomy = ["Bacteria", 3]
+        lines = str(record).splitlines()
+        self.assertIn("ACCESSION   X1 42", lines)
+        self.assertIn("KEYWORDS    7; k.", lines)
+        self.assertIn("            Bacteria; 3.", lines)
+
     def test_seqrecord_default_description(self):
         """Read in file using SeqRecord default description."""
         old = SeqRecord(

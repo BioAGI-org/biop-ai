@@ -70,11 +70,8 @@ def _wrapped_genbank(information, indent, wrap_space=1, split_char=" "):
         output_parts.append(cur_part)
 
     # now format the information string for return
-    output_info = output_parts[0] + "\n"
-    for output_part in output_parts[1:]:
-        output_info += " " * indent + output_part + "\n"
-
-    return output_info
+    indent_parts = (" " * indent + part + "\n" for part in output_parts[1:])
+    return output_parts[0] + "\n" + "".join(indent_parts)
 
 
 def _indent_genbank(information, indent):
@@ -85,15 +82,8 @@ def _indent_genbank(information, indent):
     appropriate places, and will add the specified indent to the start of
     each line.
     """
-    # split the info into lines based on line breaks
-    info_parts = information.split("\n")
-
     # the first line will have no indent
-    output_info = info_parts[0] + "\n"
-    for info_part in info_parts[1:]:
-        output_info += " " * indent + info_part + "\n"
-
-    return output_info
+    return ("\n" + " " * indent).join(information.split("\n")) + "\n"
 
 
 def _wgs_range(endpoints):
@@ -302,11 +292,7 @@ class Record:
         if self.accession:
             output = Record.BASE_FORMAT % "ACCESSION"
 
-            acc_info = ""
-            for accession in self.accession:
-                acc_info += f"{accession} "
-            # strip off an extra space at the end
-            acc_info = acc_info.rstrip()
+            acc_info = " ".join(f"{accession}" for accession in self.accession).rstrip()
             output += _wrapped_genbank(acc_info, Record.GB_BASE_INDENT)
         else:
             output = ""
@@ -362,12 +348,7 @@ class Record:
         output = ""
         if self.keywords:
             output += Record.BASE_FORMAT % "KEYWORDS"
-            keyword_info = ""
-            for keyword in self.keywords:
-                keyword_info += f"{keyword}; "
-            # replace the ; at the end with a period
-            keyword_info = keyword_info[:-2]
-            keyword_info += "."
+            keyword_info = "; ".join(f"{keyword}" for keyword in self.keywords) + "."
 
             output += _wrapped_genbank(keyword_info, Record.GB_BASE_INDENT)
 
@@ -402,12 +383,7 @@ class Record:
         # Now that species names can be too long, this line can wrap (Bug 2591)
         output += _wrapped_genbank(self.organism, Record.GB_BASE_INDENT)
         output += " " * Record.GB_BASE_INDENT
-        taxonomy_info = ""
-        for tax in self.taxonomy:
-            taxonomy_info += f"{tax}; "
-        # replace the ; at the end with a period
-        taxonomy_info = taxonomy_info[:-2]
-        taxonomy_info += "."
+        taxonomy_info = "; ".join(f"{tax}" for tax in self.taxonomy) + "."
         output += _wrapped_genbank(taxonomy_info, Record.GB_BASE_INDENT)
 
         return output
@@ -467,25 +443,27 @@ class Record:
 
     def _sequence_line(self):
         """Output for all of the sequence (PRIVATE)."""
-        output = ""
+        # Collect the pieces and join them once; adding to one string copies
+        # it every time on PyPy, which is quadratic for a long sequence.
+        output = []
         if self.sequence:
             cur_seq_pos = 0
             while cur_seq_pos < len(self.sequence):
-                output += Record.SEQUENCE_FORMAT % str(cur_seq_pos + 1)
+                output.append(Record.SEQUENCE_FORMAT % str(cur_seq_pos + 1))
 
                 for section in range(6):
                     start_pos = cur_seq_pos + section * 10
                     end_pos = start_pos + 10
                     seq_section = self.sequence[start_pos:end_pos]
-                    output += f" {seq_section.lower()}"
+                    output.append(f" {seq_section.lower()}")
 
                     # stop looping if we are out of sequence
                     if end_pos > len(self.sequence):
                         break
 
-                output += "\n"
+                output.append("\n")
                 cur_seq_pos += 60
-        return output
+        return "".join(output)
 
     def _wgs_line(self):
         output = ""
