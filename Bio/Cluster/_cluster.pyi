@@ -147,8 +147,6 @@ def distancematrix(
     dist: str,
     distancematrix: list[_OutRowT],
 ) -> None: ...
-
-# The C function ignores keyword arguments.
 def pca(
     data: _Buffer,
     columnmean: _OutBuffer,
