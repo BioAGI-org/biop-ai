@@ -13,6 +13,7 @@
 
 import json
 import os.path
+import pickle
 import platform
 import subprocess
 import sys
@@ -2678,6 +2679,29 @@ print(json.dumps([nexus.unaltered_taxlabels, nexus.taxlabels, list(nexus.matrix)
         self.assertEqual(taxlabels, self.renamed(n))
         self.assertEqual(matrix, self.renamed(n))
 
+    def test_add_sequence_many(self):
+        """Adding 20,000 sequences named "a" and 50,000 distinct names."""
+        # add_sequence scanned the list of labels for each name, and for each
+        # repeat of "a" walked the chain of copies from the start again, so
+        # this took over a minute.
+        n, m = 20_000, 50_000
+        code = r"""
+import json
+import sys
+from Bio.Nexus import Nexus
+n, m = map(int, sys.argv[1:])
+nexus = Nexus.Nexus()
+for _ in range(n):
+    nexus.add_sequence("a", "A")
+for i in range(m):
+    nexus.add_sequence(f"s{i}", "A")
+print(json.dumps([nexus.taxlabels, list(nexus.matrix)]))
+"""
+        taxlabels, matrix = parse_in_child(self, code, n, m)
+        expected = self.renamed(n) + [f"s{i}" for i in range(m)]
+        self.assertEqual(taxlabels, expected)
+        self.assertEqual(matrix, expected)
+
     def test_add_sequence_freed_name(self):
         """add_sequence gives again a copy name the caller has removed."""
         nexus = Nexus.Nexus()
@@ -2688,6 +2712,54 @@ print(json.dumps([nexus.unaltered_taxlabels, nexus.taxlabels, list(nexus.matrix)
         del nexus.matrix["a.copy"]
         nexus.add_sequence("a", "A")
         self.assertEqual(nexus.taxlabels, ["a", "a.copy1", "a.copy"])
+
+    def test_add_sequence_replaced_name(self):
+        """add_sequence gives again a copy name the caller has replaced."""
+        nexus = Nexus.Nexus()
+        for _ in range(3):
+            nexus.add_sequence("a", "A")
+        # this keeps the number of rows, but still frees "a.copy"
+        nexus.taxlabels[1] = "b"
+        nexus.matrix["b"] = nexus.matrix.pop("a.copy")
+        nexus.add_sequence("a", "A")
+        self.assertEqual(nexus.taxlabels, ["a", "b", "a.copy1", "a.copy"])
+        self.assertEqual(list(nexus.matrix), ["a", "a.copy1", "b", "a.copy"])
+
+    def test_add_sequence_replaced_matrix(self):
+        """add_sequence gives again a copy name freed by a new matrix."""
+        nexus = Nexus.Nexus()
+        for _ in range(3):
+            nexus.add_sequence("a", "A")
+        # the new matrix has the same size and last name as the old one
+        nexus.taxlabels[1] = "b"
+        nexus.matrix = {"a": Seq("A"), "b": Seq("A"), "a.copy1": Seq("A")}
+        nexus.add_sequence("a", "A")
+        self.assertEqual(nexus.taxlabels, ["a", "b", "a.copy1", "a.copy"])
+
+    def test_add_sequence_cache_released_with_old_matrix(self):
+        """insert_gap does not leave the replaced matrix held by the cache."""
+        nexus = Nexus.Nexus()
+        for _ in range(3):
+            nexus.add_sequence("a", "AC")
+        old = nexus.matrix
+        nexus.insert_gap(1)
+        self.assertIsNot(getattr(nexus, "_add_skip_matrix", None), old)
+        nexus.add_sequence("a", "A-C")
+        self.assertEqual(nexus.taxlabels, ["a", "a.copy", "a.copy1", "a.copy2"])
+
+    def test_add_sequence_after_unpickling_older_object(self):
+        """add_sequence works on a Nexus pickled before it kept a skip dict."""
+        nexus = Nexus.Nexus()
+        nexus.add_sequence("a", "A")
+        # an object of an older version has none of the add_sequence state
+        older = Nexus.Nexus.__new__(Nexus.Nexus)
+        older.__dict__.update(
+            (k, v) for k, v in vars(nexus).items() if not k.startswith("_add_skip")
+        )
+        nexus = pickle.loads(pickle.dumps(older))
+        nexus.add_sequence("a", "A")
+        nexus.add_sequence("a", "A")
+        self.assertEqual(nexus.taxlabels, ["a", "a.copy", "a.copy1"])
 
     def test_add_sequence_empty_first(self):
         """add_sequence takes an empty sequence as the first one."""
