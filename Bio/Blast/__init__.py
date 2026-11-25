@@ -1278,12 +1278,28 @@ def qblast(
         request = Request(url_base, message, {"User-Agent": "BiopythonClient"})
         stream = open_url(request, timeout=timeout)
         data = stream.peek()
-        if format_type == "HTML" and b"<title>NCBI Blast:</title>" in data:
-            continue
-        elif data.startswith(b"<!DOCTYPE html"):
-            continue
-        else:
+        if not (
+            data.startswith(b"<!DOCTYPE html")
+            or (format_type == "HTML" and b"<title>NCBI Blast:</title>" in data)
+        ):
             break
+        # A status page. A search that failed, or an RID that the server
+        # does not know (for example, an expired one), will never finish.
+        with stream:
+            page = stream.read()
+        # The status is on a line of a QBlastInfoBegin ... QBlastInfoEnd
+        # block; "Status=" can also appear elsewhere on the page.
+        status = b""
+        for block in page.split(b"QBlastInfoBegin")[1:]:
+            block = block.partition(b"QBlastInfoEnd")[0]
+            if b"Status=" in block:
+                status = block.partition(b"Status=")[2].split(b"\n", 1)[0]
+                break
+        status = status.strip().upper()
+        if status in (b"FAILED", b"UNKNOWN"):
+            raise RuntimeError(
+                f"BLAST request {rid} has status {status.decode()} on the server"
+            )
     if format_type == "XML":
         expected = b"<?xml "
     elif format_type == "HTML":

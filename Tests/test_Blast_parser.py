@@ -15366,6 +15366,72 @@ class TestBlastMalformedInput(unittest.TestCase):
         )
         self.assertTrue(answer.closed)
 
+    def test_qblast_status_in_info_block(self):
+        """qblast must read the status from the QBlastInfo block of the page."""
+        # "Status=" earlier on the page, outside the QBlastInfo block.
+        page = (
+            b"<!DOCTYPE html><html>\n"
+            b"<script>var url = 'Blast.cgi?CMD=Get&Status=' + status;</script>\n"
+            b"<!--QBlastInfoBegin\n\tStatus=FAILED\nQBlastInfoEnd\n-->"
+        )
+        responses = [
+            io.BytesIO(b"RID = ABC123\nRTOE = 11\n"),
+            io.BufferedReader(io.BytesIO(page)),
+            AssertionError("qblast polled again"),
+        ]
+        with mock.patch.object(Blast, "urlopen", side_effect=responses):
+            with mock.patch.object(Blast.time, "sleep"):
+                with self.assertRaises(RuntimeError) as cm:
+                    Blast.qblast("blastn", "nt", "ACGT")
+        self.assertEqual(
+            str(cm.exception), "BLAST request ABC123 has status FAILED on the server"
+        )
+
+    def test_qblast_closes_status_page_on_read_error(self):
+        """qblast must close a status page that fails while it is being read."""
+
+        class StalledPage(io.BufferedReader):
+            def read(self, size=-1):
+                raise TimeoutError("timed out")
+
+        page = b"<!DOCTYPE html><html>\n<!--QBlastInfoBegin\n\tStatus=WAITING\nQBlastInfoEnd\n-->"
+        stalled = StalledPage(io.BytesIO(page))
+        responses = [io.BytesIO(b"RID = ABC123\nRTOE = 11\n"), stalled]
+        with mock.patch.object(Blast, "urlopen", side_effect=responses):
+            with mock.patch.object(Blast.time, "sleep"):
+                with self.assertRaises(TimeoutError):
+                    Blast.qblast("blastn", "nt", "ACGT")
+        self.assertTrue(stalled.closed)
+
+    def test_qblast_failed_status(self):
+        """qblast must stop polling a search that failed or that NCBI forgot."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", BiopythonDeprecationWarning)
+            from Bio.Blast import NCBIWWW
+
+        page = b"<!DOCTYPE html><html>\n<!--QBlastInfoBegin\n\tStatus=%s\nQBlastInfoEnd\n-->"
+        for qblast in (Blast.qblast, NCBIWWW.qblast):
+            module = sys.modules[qblast.__module__]
+            for status in ("FAILED", "UNKNOWN"):
+                with self.subTest(qblast=qblast.__module__, status=status):
+                    responses = [
+                        io.BytesIO(b"RID = ABC123\nRTOE = 11\n"),
+                        io.BufferedReader(io.BytesIO(page % status.encode())),
+                        # The status will not change, so a qblast that polls
+                        # again would poll forever.
+                        AssertionError("qblast polled again"),
+                    ]
+                    with (
+                        mock.patch.object(module, "urlopen", side_effect=responses),
+                        mock.patch("time.sleep"),
+                    ):
+                        with self.assertRaises(RuntimeError) as cm:
+                            qblast("blastn", "nt", "ACGT")
+                    self.assertEqual(
+                        str(cm.exception),
+                        f"BLAST request ABC123 has status {status} on the server",
+                    )
+
     def test_qblast_password_keeps_global_opener(self):
         """Using qblast with a password must not replace urllib's global opener."""
         with warnings.catch_warnings():
