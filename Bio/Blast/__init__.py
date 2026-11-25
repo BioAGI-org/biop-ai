@@ -1122,7 +1122,7 @@ def qblast(
                       to read large results over a slow connection. Default
                       None, which uses socket.getdefaulttimeout() (no limit
                       unless set).
-     - max_wait      Total time in seconds to wait for the results. Once
+     - max_wait       Total time in seconds to wait for the results. Once
                       this has passed and the search is still running,
                       raise TimeoutError; the message gives the RID, so the
                       results can be fetched later. Default None, which
