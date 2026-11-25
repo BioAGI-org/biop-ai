@@ -4943,10 +4943,10 @@ If a memory error occurs, or interrupt stops it, somcluster returns 0.
 
     if (lcelldata == 0) {
         /* Pointers not allocated stay NULL, for the clean-up below */
-        celldata = CALLOC((size_t)nxgrid*nygrid*ndata, sizeof(double**));
+        celldata = CALLOC(nxgrid, sizeof(double**));
         if (!celldata) return 0;
         for (i = 0; ok && i < nxgrid; i++) {
-            celldata[i] = CALLOC((size_t)nygrid*ndata, sizeof(double*));
+            celldata[i] = CALLOC(nygrid, sizeof(double*));
             ok = (celldata[i] != NULL);
             for (j = 0; ok && j < nygrid; j++) {
                 celldata[i][j] = MALLOC(ndata*sizeof(double));
