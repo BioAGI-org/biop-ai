@@ -72,7 +72,11 @@ Field = namedtuple("Field", ("as_type", "name", "comment"))
 # header gives the size of its largest block (uncompressBufSize), but a
 # crafted file can set that to up to 4 GB and make a small zlib block expand
 # about 1000-fold. Real blocks are far smaller: UCSC's example bigMaf file
-# has blocks of at most 635 kB, so this leaves plenty of room.
+# has blocks of at most 635 kB, so this leaves plenty of room. The size of a
+# bigMaf block grows with the number of species times the alignment width
+# times itemsPerSlot, so a much lower limit could reject a valid, very wide
+# alignment. A crafted file can still make the reader use about twice this
+# much memory before it is rejected.
 _MAX_UNCOMPRESS_BUF_SIZE = 256 * 1024 * 1024
 
 
@@ -797,9 +801,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             self._compressed = True
         else:
             self._compressed = False
-        self._uncompressBufSize = min(
-            header.uncompressBufSize, _MAX_UNCOMPRESS_BUF_SIZE
-        )
+        self._uncompressBufSize = header.uncompressBufSize
         formatter = _BPlusTreeFormatter(byteorder)
         seek(
             header.chromosomeTreeOffset,
@@ -904,7 +906,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
         stream.seek(offset)
         remaining = size
         if self._compressed:
-            uncompressBufSize = self._uncompressBufSize
+            uncompressBufSize = min(self._uncompressBufSize, _MAX_UNCOMPRESS_BUF_SIZE)
             decompressor = zlib.decompressobj()
             total = 0  # bytes decompressed so far
         data = b""
@@ -937,6 +939,14 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             data = decompressor.unconsumed_tail
             total += len(piece)
             if total > uncompressBufSize:
+                if uncompressBufSize < self._uncompressBufSize:
+                    # Say so when Biopython's limit, not the file, applies.
+                    raise ValueError(
+                        f"The data block at offset {offset} decompresses to "
+                        f"more than {uncompressBufSize} bytes, the largest "
+                        "block Biopython reads (the file header gives "
+                        f"uncompressBufSize = {self._uncompressBufSize})"
+                    )
                 raise ValueError(
                     f"The data block at offset {offset} decompresses to more "
                     f"than uncompressBufSize ({uncompressBufSize}) bytes"
