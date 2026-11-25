@@ -1971,6 +1971,22 @@ class TestUnclosedQuote(unittest.TestCase):
                     Nexus.Nexus("#NEXUS\n" + text)
 
 
+class TestCharBufferWhitespace(unittest.TestCase):
+    def test_peek_and_next_skip_the_same_whitespace(self):
+        """next_nonwhitespace returns the character peek_nonwhitespace saw."""
+        # Before the fix next_nonwhitespace skipped only " \t\n" and so
+        # returned the \v, \f, no-break space or \r itself.
+        for text in ("\v=", "\f(", "\xa0-", "\r*"):
+            with self.subTest(text=text):
+                buffer = Nexus.CharBuffer(text)
+                self.assertEqual(buffer.peek_nonwhitespace(), text[-1])
+                self.assertEqual(buffer.next_nonwhitespace(), text[-1])
+                self.assertIsNone(buffer.next_nonwhitespace())
+        self.assertEqual(
+            Nexus._split_tree_command("\f* t1 = (a,b)"), ("t1", 1.0, False, "(a,b)")
+        )
+
+
 class TestPartitionQuotes(unittest.TestCase):
     """A comma inside a quoted name does not split a partition."""
 
