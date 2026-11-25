@@ -7,6 +7,11 @@
 
 See https://www.expasy.org/
 
+Variables:
+ - timeout   Socket timeout in seconds for connecting and for each read of
+             a request; it does not limit the whole download. A server that
+             stays silent for longer raises TimeoutError. Default None,
+             which uses socket.getdefaulttimeout() (no limit unless set).
 
 Functions:
  - get_prodoc_entry  Interface to the get-prodoc-entry CGI script.
@@ -21,11 +26,15 @@ __all__ = [
     "get_prosite_entry",
     "get_prosite_raw",
     "get_sprot_raw",
+    "timeout",
 ]
 
 import io
+import socket
 from urllib.error import HTTPError
 from urllib.request import urlopen
+
+timeout = None
 
 
 def get_prodoc_entry(
@@ -139,7 +148,9 @@ def get_sprot_raw(id):
 
 def _open(url):
     """Open URL and convert to text assuming UTF-8 encoding (PRIVATE)."""
-    handle = urlopen(url)
+    handle = urlopen(
+        url, timeout=socket.getdefaulttimeout() if timeout is None else timeout
+    )
     text_handle = io.TextIOWrapper(handle, encoding="UTF-8")
     text_handle.url = handle.url
     return text_handle

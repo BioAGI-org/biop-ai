@@ -41,6 +41,21 @@ from Bio.Seq import Seq
 class TestBasic(unittest.TestCase):
     """Basic motif tests."""
 
+    def test_weblogo_timeout(self):
+        """A silent server must not block weblogo forever."""
+        support.assert_client_times_out(
+            self,
+            """
+            import os
+            from urllib.request import urlopen
+            from Bio import motifs
+            from Bio.Seq import Seq
+            motifs.urlopen = lambda request, **kwargs: urlopen(url, **kwargs)
+            m = motifs.create([Seq("ACGT")])
+            m.weblogo(os.devnull, timeout=0.5)
+            """,
+        )
+
     def test_format(self):
         m = motifs.create([Seq("ATATA")])
         m.name = "Foo"

@@ -22,6 +22,12 @@ Currently TogoWS does not provide any usage guidelines (unlike the NCBI whose
 requirements are reasonably clear). To avoid risking overloading the service,
 Biopython will only allow three calls per second.
 
+Set the module variable ``timeout`` to a number of seconds to stop waiting
+for a silent server: it applies to connecting and to each read of a request,
+not to the whole download, and a server that stays silent for longer raises
+TimeoutError. The default, None, uses socket.getdefaulttimeout() (no limit
+unless set).
+
 The TogoWS SOAP service offers a more complex API for calling web services
 (essentially calling remote functions) provided by DDBJ, KEGG and PDBj. For
 example, this allows you to run a remote BLAST search at the DDBJ. This is
@@ -37,9 +43,11 @@ __all__ = [
     "search",
     "search_count",
     "search_iter",
+    "timeout",
 ]
 
 import io
+import socket
 import time
 from urllib.parse import quote
 from urllib.request import urlopen
@@ -48,6 +56,8 @@ from Bio._utils import function_with_previous
 
 # Constant
 _BASE_URL = "http://togows.dbcls.jp"
+
+timeout = None
 
 # Caches:
 _search_db_names = None
@@ -363,10 +373,11 @@ def _open(url, post=None):
     else:
         _open.previous = current
 
+    seconds = socket.getdefaulttimeout() if timeout is None else timeout
     if post:
-        handle = urlopen(url, post.encode())
+        handle = urlopen(url, post.encode(), timeout=seconds)
     else:
-        handle = urlopen(url)
+        handle = urlopen(url, timeout=seconds)
 
     # We now trust TogoWS to have set an HTTP error code, that
     # suffices for my current unit tests. Previously we would

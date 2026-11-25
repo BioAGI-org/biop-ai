@@ -69,6 +69,10 @@ Variables:
       automatically retried on error (default is 3).
     - sleep_between_tries   The delay, in seconds, before retrying a request on
       error (default is 15).
+    - timeout      Socket timeout in seconds for connecting and for each read
+      of a request; it does not limit the whole download. A server that
+      stays silent for longer raises TimeoutError. Default None, which uses
+      socket.getdefaulttimeout() (no limit unless set).
 
 Functions:
 
@@ -143,10 +147,12 @@ __all__ = [
     "parse",
     "read",
     "sleep_between_tries",
+    "timeout",
     "tool",
 ]
 
 import io
+import socket
 import time
 import warnings
 from urllib.error import HTTPError
@@ -160,6 +166,7 @@ from Bio._utils import function_with_previous
 email = None
 max_tries = 3
 sleep_between_tries = 15
+timeout = None
 tool = "biopython"
 api_key = None
 local_cache = None
@@ -609,7 +616,10 @@ def _open(request):
 
     for i in range(max_tries):
         try:
-            handle = urlopen(request)
+            handle = urlopen(
+                request,
+                timeout=socket.getdefaulttimeout() if timeout is None else timeout,
+            )
         except HTTPError as exception:
             # Reraise if the final try fails
             if i >= max_tries - 1:

@@ -19,12 +19,23 @@ rather than assume the process already started in ``Tests/``.
 
 :func:`import_fresh_with_warnings` re-executes an already-imported module
 to capture its module-level warnings, and puts the original back afterwards.
+
+:func:`silent_server` serves a local URL that accepts requests and never
+answers them, and :func:`assert_client_times_out` checks in a child process
+that a network client gives up on it with TimeoutError.
 """
 
+import contextlib
 import importlib
+import os
 import pathlib
+import socket
+import subprocess
 import sys
+import textwrap
+import threading
 import warnings
+from unittest import mock
 
 DATA = pathlib.Path(__file__).parent
 
@@ -68,3 +79,78 @@ def import_fresh_with_warnings(module_name):
             else:
                 setattr(parent, child_name, old_attribute)
     return module, caught
+
+
+@contextlib.contextmanager
+def silent_server():
+    """Yield the base URL of a local HTTP server that never answers.
+
+    The server accepts each connection and reads the request until the
+    client hangs up, but sends nothing back. A client without a timeout
+    would wait forever, so the server hangs up itself after 10 seconds:
+    such a client then fails with a dropped connection instead of hanging
+    the test run. Requests to it bypass any proxy set in the environment.
+    """
+    server = socket.create_server(("127.0.0.1", 0))
+    server.settimeout(0.1)
+    done = threading.Event()
+
+    def serve():
+        while not done.is_set():
+            try:
+                connection, address = server.accept()
+            except TimeoutError:
+                continue
+            with connection:
+                connection.settimeout(10)
+                try:
+                    while connection.recv(65536):
+                        pass
+                except OSError:
+                    pass
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    no_proxy = {"no_proxy": "127.0.0.1", "NO_PROXY": "127.0.0.1"}
+    try:
+        with mock.patch.dict(os.environ, no_proxy):
+            yield "http://127.0.0.1:%d" % server.getsockname()[1]
+    finally:
+        done.set()
+        thread.join(15)
+        server.close()
+
+
+def assert_client_times_out(testcase, client_code):
+    """Check that client_code raises TimeoutError against a silent server.
+
+    client_code runs in a child process, inside ``with silent_server() as
+    url:``, so it can use ``url``. The child is killed after 60 seconds,
+    so a client that blocks anyway fails the test (subprocess.TimeoutExpired)
+    rather than hanging the test run.
+    """
+    import Bio
+
+    code = (
+        "import support\n"
+        "with support.silent_server() as url:\n"
+        "    try:\n"
+        + textwrap.indent(textwrap.dedent(client_code).strip(), " " * 8)
+        + "\n"
+        "    except TimeoutError:\n"
+        "        print('TimeoutError')\n"
+        "    else:\n"
+        "        raise SystemExit('the client returned without TimeoutError')\n"
+    )
+    paths = [str(pathlib.Path(Bio.__file__).parent.parent), str(DATA)]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [*paths, env.get("PYTHONPATH")]))
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        timeout=60,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    testcase.assertEqual(result.returncode, 0, result.stderr)
+    testcase.assertEqual(result.stdout, "TimeoutError\n", result.stderr)

@@ -7,6 +7,7 @@
 
 (1) the URL construction of NCBI's Entrez services.
 (2) setting a custom directory for DTD and XSD downloads.
+(3) the timeout for a server that never answers.
 """
 
 import unittest
@@ -16,6 +17,8 @@ from unittest import mock
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
 from urllib.request import Request
+
+import support
 
 from Bio import Entrez
 from Bio.Entrez import Parser
@@ -85,7 +88,7 @@ def get_patched_request(patched_urlopen, testcase=None):
     """Get the Request object passed to the patched urlopen() function.
 
     Expects that the patched function should have been called a single time with a Request instance
-    as the only positional argument and no keyword arguments.
+    as the only positional argument and timeout as the only keyword argument.
 
     :param patched_urlopen: value returned when entering the context manager created by patch_urlopen.
     :type patched_urlopen: unittest.mock.Mock
@@ -98,7 +101,7 @@ def get_patched_request(patched_urlopen, testcase=None):
     if testcase is not None:
         testcase.assertEqual(patched_urlopen.call_count, 1)
         testcase.assertEqual(len(args), 1)
-        testcase.assertEqual(len(kwargs), 0)
+        testcase.assertEqual(list(kwargs), ["timeout"])
         testcase.assertIsInstance(args[0], Request)
 
     return args[0]
@@ -469,6 +472,20 @@ class CustomDirectoryTest(unittest.TestCase):
         self.assertTrue(os.path.isdir(handler.local_dtd_dir))
         self.assertTrue(os.path.isdir(handler.local_xsd_dir))
         shutil.rmtree(tmpdir)
+
+
+class TimeoutTest(unittest.TestCase):
+    def test_timeout(self):
+        """A silent server must not block an Entrez request forever."""
+        support.assert_client_times_out(
+            self,
+            """
+            from urllib.request import Request
+            from Bio import Entrez
+            Entrez.timeout = 0.5
+            Entrez._open(Request(url, method="GET"))
+            """,
+        )
 
 
 if __name__ == "__main__":

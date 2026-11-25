@@ -5,6 +5,7 @@
 
 """Code for calling and parsing ScanProsite from ExPASy."""
 
+import socket
 from urllib.parse import urlencode
 from urllib.request import urlopen
 from xml.sax import handler
@@ -33,7 +34,7 @@ class Record(list):
         self.warning = None
 
 
-def scan(seq="", mirror=PROSITE_URL, output="xml", **keywords):
+def scan(seq="", mirror=PROSITE_URL, output="xml", timeout=None, **keywords):
     """Execute a ScanProsite search.
 
     Arguments:
@@ -43,6 +44,10 @@ def scan(seq="", mirror=PROSITE_URL, output="xml", **keywords):
                  TrEMBL) accession
      - output:   Format of the search results
                  (default: xml)
+     - timeout:  Socket timeout in seconds for connecting and for each
+                 read; a server that stays silent for longer raises
+                 TimeoutError (default: None, which uses
+                 socket.getdefaulttimeout(), no limit unless set)
 
     Further search parameters can be passed as keywords; see the
     documentation for programmatic access to ScanProsite at
@@ -62,7 +67,9 @@ def scan(seq="", mirror=PROSITE_URL, output="xml", **keywords):
             parameters[key] = value
     command = urlencode(parameters)
     url = f"{mirror}/cgi-bin/prosite/scanprosite/PSScan.cgi?{command}"
-    handle = urlopen(url)
+    if timeout is None:
+        timeout = socket.getdefaulttimeout()
+    handle = urlopen(url, timeout=timeout)
     return handle
 
 
