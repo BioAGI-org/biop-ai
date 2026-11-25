@@ -9,6 +9,8 @@
 """Tests for SearchIO InfernalIO infernal-text indexing"""
 
 import io
+import os
+import tempfile
 import unittest
 from unittest import mock
 
@@ -16,6 +18,7 @@ import support
 from search_tests_common import CheckIndex
 from search_tests_common import CheckRaw
 from search_tests_common import EndOfFileGuard
+from search_tests_common import sqlite3
 
 from Bio import SearchIO
 
@@ -538,6 +541,31 @@ class Hmmer3TextIndexCases(CheckIndex):
         """Test infernal-text indexing, cmsearch, multiple queries"""
         filename = support.DATA / "Infernal" / "cmsearch_114_IRES_5S_U2_Yeast.txt"
         self.check_index(filename, self.fmt)
+
+    def test_infernal_text_data_after_ok(self):
+        """Test infernal-text parsing and indexing both stop at '[ok]'"""
+        filename = support.DATA / "Infernal" / "cmsearch_114_IRES_5S_U2_Yeast.txt"
+        data = filename.read_bytes()
+        # the header and '[ok]' line of a search with no queries
+        empty = data[: data.index(b"\nQuery:") + 1] + b"[ok]\n"
+        # each file has more results after its '[ok]' line
+        for joined, keys in (
+            (data + data, ["IRES_HCV", "5S_rRNA", "U2"]),
+            (empty + data, []),
+        ):
+            with self.subTest(keys=keys), tempfile.TemporaryDirectory() as tmpdir:
+                path = os.path.join(tmpdir, "joined.txt")
+                with open(path, "wb") as handle:
+                    handle.write(joined)
+                parsed = [qresult.id for qresult in SearchIO.parse(path, self.fmt)]
+                self.assertEqual(parsed, keys)
+                index = SearchIO.index(path, self.fmt)
+                self.assertEqual(list(index), keys)
+                index.close()
+                if sqlite3 is not None:
+                    index = SearchIO.index_db(":memory:", path, self.fmt)
+                    self.assertEqual(sorted(index), sorted(keys))
+                    index.close()
 
 
 class TruncatedCases(unittest.TestCase):

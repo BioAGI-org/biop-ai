@@ -123,7 +123,11 @@ class InfernalTextParser(_BaseInfernalParser):
 
     def _parse_qresult(self):
         """Parse a Infernal query block (PRIVATE)."""
-        self._read_until(lambda line: line.startswith((_DIV_QUERY_START, _DIV_QUERY_END)))
+        # '[ok]' ends the results, as in the indexer
+        self._read_until(
+            lambda line: line.startswith((_DIV_QUERY_START, _DIV_QUERY_END))
+            or line.strip() == "[ok]"
+        )
         if self.line.startswith(_DIV_QUERY_END):
             raise ValueError("Found a '//' line before any 'Query:' line")
 
@@ -540,7 +544,8 @@ class InfernalTextIndexer(SearchIndexer):
                     raise ValueError("Found a '//' line before any 'Query:' line")
                 yield qresult_key.decode(), start_offset, 0
                 start_offset = end_offset
-            elif not line:
+            elif not line or line.strip() == b"[ok]":
+                # '[ok]' ends the results, as in the parser
                 break
 
     def get_raw(self, offset):
