@@ -291,6 +291,11 @@ class Scop:
                             f"Incomplete data? sunid {record.sunid} in CLA file is missing from DES file"
                         )
                     n = sunidDict[record.sunid]
+                    if not isinstance(n, Domain):
+                        raise ValueError(
+                            f"CLA file gives sunid {record.sunid}, but DES file "
+                            f"lists it as a {n.type!r} node, not a domain ('px')"
+                        )
                     if n.sccs != record.sccs:
                         raise ValueError(
                             f"CLA file gives sccs {record.sccs} for sunid "
