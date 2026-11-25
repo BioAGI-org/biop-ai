@@ -601,6 +601,18 @@ class AffyTest(unittest.TestCase):
             with open(self.affy4) as f:
                 record = CelFile.read(f, version=4)
 
+    def testAffyVersionArgumentChecked(self):
+        # read() used to ignore its version argument (issue #521).
+        with open(self.affy3) as f:
+            with self.assertRaisesRegex(ValueError, "expected CEL version 4"):
+                CelFile.read(f, version=4)
+        with open(self.affy4, "rb") as f:
+            with self.assertRaisesRegex(ValueError, "expected CEL version 3"):
+                CelFile.read(f, version=3)
+        with open(self.affy3) as f:
+            with self.assertRaisesRegex(ValueError, "should be None, 3 or 4"):
+                CelFile.read(f, version=5)
+
     # Writes a small example Affymetrix V4 CEL File
     def writeExampleV4(self, f, bad=False):
         preHeaders = {
