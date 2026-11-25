@@ -15406,14 +15406,33 @@ class TestBlastMalformedInput(unittest.TestCase):
     def run_qblast_with_timeout(self, serve):
         """Run qblast with timeout=0.5 in a child process against serve.
 
-        serve(server) answers on a listening socket in a thread of this
-        process. qblast runs in a child process, so a qblast that ignores its
-        timeout is killed after 60 seconds instead of hanging the test run.
-        Return the name of the exception qblast raised.
+        serve(accept) answers qblast in a thread of this process; accept()
+        returns the next connection from the child, or raises
+        ConnectionAbortedError once the child has exited. qblast runs in a
+        child process, so a qblast that ignores its timeout is killed after
+        60 seconds instead of hanging the test run. Return the name of the
+        exception qblast raised.
         """
         server = socket.create_server(("127.0.0.1", 0))
-        # Bound every wait in the server thread, so the thread always ends.
-        server.settimeout(60)
+        # Wait in short steps, so the server thread sees when the child exits.
+        # Closing the socket does not wake a blocked accept() on Linux.
+        server.settimeout(0.5)
+        done = threading.Event()
+
+        def accept():
+            while not done.is_set():
+                try:
+                    return server.accept()[0]
+                except TimeoutError:
+                    pass
+            raise ConnectionAbortedError("the child process has exited")
+
+        def run():
+            try:
+                serve(accept)
+            except ConnectionAbortedError:
+                pass
+
         url_base = "http://127.0.0.1:%d/Blast.cgi" % server.getsockname()[1]
         code = f"""\
 from unittest import mock
@@ -15434,7 +15453,7 @@ with mock.patch.object(Blast.time, "sleep"):
         # Talk to the local server directly, even if a proxy is configured
         for name in ("no_proxy", "NO_PROXY"):
             env[name] = "127.0.0.1"
-        thread = threading.Thread(target=serve, args=(server,), daemon=True)
+        thread = threading.Thread(target=run, daemon=True)
         thread.start()
         try:
             result = subprocess.run(
@@ -15447,8 +15466,9 @@ with mock.patch.object(Blast.time, "sleep"):
         except subprocess.TimeoutExpired:
             self.fail("qblast was still waiting for the server after 60 seconds")
         finally:
-            server.close()
+            done.set()
             thread.join(15)
+            server.close()
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout.strip()
 
@@ -15463,23 +15483,24 @@ with mock.patch.object(Blast.time, "sleep"):
         try:
             while connection.recv(65536):
                 pass
-        except TimeoutError:
+        except OSError:  # a timeout, or the client reset the connection
             pass
-        connection.close()
+        finally:
+            connection.close()
 
     def test_qblast_timeout(self):
         """A server that stops answering must not block qblast forever."""
         connections = []
 
-        def serve(server):
+        def serve(accept):
             # Answer the submit request with a reference page, then accept
             # the poll request and never reply to it.
-            connection, address = server.accept()
+            connection = accept()
             connections.append(connection)
             connection.sendall(b"HTTP/1.0 200 OK\r\n\r\nRID = ABC123\nRTOE = 11\n")
             connection.shutdown(socket.SHUT_WR)
             self.read_until_hangup(connection)
-            connection, address = server.accept()
+            connection = accept()
             connections.append(connection)
             self.read_until_hangup(connection)
 
@@ -15490,14 +15511,32 @@ with mock.patch.object(Blast.time, "sleep"):
         """A server that never answers the submit request must not block qblast."""
         connections = []
 
-        def serve(server):
+        def serve(accept):
             # Accept the submit request and never reply to it.
-            connection, address = server.accept()
+            connection = accept()
             connections.append(connection)
             self.read_until_hangup(connection)
 
         self.assertEqual(self.run_qblast_with_timeout(serve), "TimeoutError")
         self.assertEqual(len(connections), 1)
+
+    def test_qblast_timeout_server_stops(self):
+        """The test server must stop cleanly if the child never connects."""
+        aborted = []
+
+        def serve(accept):
+            try:
+                accept()
+            except ConnectionAbortedError:
+                aborted.append(True)
+                raise
+
+        # A child that exits at once, for example on an import error.
+        exited = subprocess.CompletedProcess([], 0, "", "")
+        with mock.patch.object(subprocess, "run", return_value=exited):
+            self.assertEqual(self.run_qblast_with_timeout(serve), "")
+        # The server thread saw the child exit before the helper returned.
+        self.assertEqual(aborted, [True])
 
 
 if __name__ == "__main__":
