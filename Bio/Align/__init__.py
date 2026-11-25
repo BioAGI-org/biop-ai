@@ -1272,11 +1272,15 @@ class Alignment:
 
         msa_coordinates = []
         # Initialize positions and next_positions arrays
-        positions = np.array([next(c) for c in coordinates])
+        # Use np.intp, whatever the input coordinates' integer type (such as
+        # int32 or uint32), so that the steps can be added to the positions.
+        positions = np.array([next(c) for c in coordinates], dtype=np.intp)
         # A pairwise alignment with a single column (e.g. of two empty
-        # sequences) has no next position.
+        # sequences) has no next position. Use np.intp so that sys.maxsize,
+        # which marks a used-up pairwise alignment, fits even if the input
+        # coordinates are int32.
         next_positions = np.array(
-            [next(c, (sys.maxsize, sys.maxsize)) for c in coordinates]
+            [next(c, (sys.maxsize, sys.maxsize)) for c in coordinates], dtype=np.intp
         )
         # Add initial positions
         msa_coordinates.append([reference_position] + list(positions[:, 1]))

@@ -16,12 +16,16 @@ Right now we've got tests for:
 """
 
 # standard library
+import os
+import subprocess
+import sys
 import unittest
 from io import StringIO
 
 import numpy as np
 import support
 
+import Bio
 from Bio import Align
 from Bio import AlignIO
 
@@ -1043,6 +1047,47 @@ class TestFromAlignmentsWithSameReference(unittest.TestCase):
         msa = Alignment.from_alignments_with_same_reference([empty, insertion])
         self.assertEqual(msa.coordinates.tolist(), [[0, 0], [0, 0], [0, 2]])
         self.assertEqual(str(msa[2]), "AC")
+
+    def test_int32_coordinates(self):
+        """Test input alignments with int32 and uint32 coordinates."""
+        # Older NumPy stored the used-up marker sys.maxsize in an int32 array
+        # without an error, and the merge loop never ended, so run this in a
+        # child process that is stopped after 60 seconds.
+        code = """\
+import numpy as np
+from Bio.Align import Alignment
+reference = "ACGTACGT"
+for dtype in (np.int32, np.uint32):
+    alignment1 = Alignment(
+        [reference, "ACGTACGT"], np.array([[0, 8], [0, 8]], dtype=dtype)
+    )
+    alignment2 = Alignment(
+        [reference, "ACGACGT"], np.array([[0, 3, 4, 8], [0, 3, 3, 7]], dtype=dtype)
+    )
+    msa = Alignment.from_alignments_with_same_reference([alignment1, alignment2])
+    print(msa.coordinates.tolist())
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                timeout=60,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("Merging int32 alignments did not end within 60 seconds")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout, "[[0, 3, 4, 8], [0, 3, 4, 8], [0, 3, 3, 7]]\n" * 2
+        )
 
     def test_input_with_three_sequences(self):
         """Test that the method works with input Alignments of three sequences"""
