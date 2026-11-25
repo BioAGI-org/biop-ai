@@ -8729,8 +8729,15 @@ class TestAlign_malformed_data_block(unittest.TestCase):
         limit = 1024
         block = zlib.compress(self.items + bytes(limit + 1 - len(self.items)))
         stream, offset = self.make_stream(block, 0xFFFFFFFF)
+        # The message used to give the limit as the header's uncompressBufSize,
+        # so a valid but very large file looked corrupt.
+        message = (
+            f"The data block at offset {offset} decompresses to more than "
+            f"{limit} bytes, the largest block Biopython reads (the file "
+            "header gives uncompressBufSize = 4294967295)"
+        )
         with mock.patch.object(bigbed, "_MAX_UNCOMPRESS_BUF_SIZE", limit):
-            self.check_message(stream, self.too_large.format(offset, limit))
+            self.check_message(stream, message)
 
     def test_incomplete(self):
         # These used to raise zlib.error.
