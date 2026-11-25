@@ -189,8 +189,9 @@ _DTD_OPT = (
 # for capturing BLAST version; the lookbehind stops a match from starting
 # inside a run of digits, which would make the search quadratic
 _RE_VERSION = re.compile(r"(?<!\d)\d+\.\d+\.\d+\+?")
-# for splitting ID-description pairs
-_RE_ID_DESC_PAIRS_PATTERN = re.compile(" +>")
+# for splitting ID-description pairs; the lookbehind stops a match from
+# starting inside a run of spaces, which would make the split quadratic
+_RE_ID_DESC_PAIRS_PATTERN = re.compile(r"(?<! ) +>")
 # for splitting ID and description (must be used with maxsplit = 1)
 _RE_ID_DESC_PATTERN = re.compile(" +")
 
