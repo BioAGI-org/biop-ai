@@ -79,11 +79,11 @@ typedef struct {
 static int
 Point_init(Point *self, PyObject *args, PyObject *kwds)
 {
-    int index;
+    Py_ssize_t index;
     double radius = 0.0;
     static char *kwlist[] = {"index", "radius", NULL};
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "i|d", kwlist,
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "n|d", kwlist,
                                      &index, &radius))
         return -1;
 
@@ -154,11 +154,11 @@ typedef struct {
 static int
 Neighbor_init(Neighbor *self, PyObject *args, PyObject *kwds)
 {
-    int index1, index2;
+    Py_ssize_t index1, index2;
     double radius = 0.0;
     static char *kwlist[] = {"index1", "index2", "radius", NULL};
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "ii|d", kwlist,
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "nn|d", kwlist,
                                      &index1, &index2, &radius))
         return -1;
     self->index1 = index1;
