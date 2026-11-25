@@ -349,7 +349,7 @@ def _next_label(label):
     return f"{'.'.join(label_split[:-1])}.copy{copy_num}"
 
 
-def _unique_label(previous_labels, label, skip=None):
+def _unique_label(previous_labels, label, skip):
     """Return a unique name if label is already in previous_labels (PRIVATE).
 
     The name is the first of label, _next_label(label), its next label and
@@ -358,19 +358,7 @@ def _unique_label(previous_labels, label, skip=None):
     label passed over, the name found after it, so that a later call
     meeting that label, from whatever label it started, carries on from
     there instead of walking the same chain again.
-
-    Without skip, each name after the first is built from its number
-    instead of by _next_label; the names are the same.
     """
-    if skip is None:
-        if label in previous_labels:
-            label = _next_label(label)
-            base, _, last = label.rpartition(".")
-            number = 0 if last == "copy" else int(last[4:])
-            while label in previous_labels:
-                number += 1
-                label = f"{base}.copy{number}"
-        return label
     passed = []
     while label in previous_labels:
         passed.append(label)
@@ -1112,6 +1100,7 @@ class Nexus:
         if not self.ntax or not self.nchar:
             raise NexusError("Dimensions must be specified before matrix!")
         self.matrix = {}
+        self._drop_add_skip()
         taxcount = 0
         first_matrix_block = True
         # the labels a repeated label must not take in this block, and the
@@ -2117,26 +2106,36 @@ class Nexus:
         elif diff > 0:
             sequence += self.missing * diff
 
-        if name in self.taxlabels:
-            unique_name = _unique_label(set(self.taxlabels), name)
-            # print("WARNING: Sequence name %s is already present. Sequence was added as %s." % (name,unique_name))
-        else:
-            unique_name = name
-
         if self.matrix is None:
             # A new Nexus() has no matrix until insert_gap makes one, which
             # it does not do for an empty first sequence.
             self.matrix = {}
-        if unique_name in self.matrix:
-            raise ValueError(
-                "ERROR. There is a discrepancy between taxlabels "
-                "and matrix keys. Report this as a bug."
-            )
+        # The matrix has the same names as taxlabels, as a dict, so looking
+        # one up does not scan the list. The skip dict lets repeats of a name
+        # carry on from the last copy found, but only while names are just
+        # added: if the matrix has been replaced, changed size, or its last
+        # name is not the one this method added, since the last call (or this
+        # object has no skip dict yet, as when unpickled from an older
+        # version), a name may have been removed, so start afresh.
+        state = (len(self.matrix), next(reversed(self.matrix), None))
+        if (
+            getattr(self, "_add_skip_matrix", None) is not self.matrix
+            or getattr(self, "_add_skip_state", None) != state
+        ):
+            self._add_skip = {}
+        unique_name = _unique_label(self.matrix, name, self._add_skip)
 
         self.matrix[unique_name] = Seq(sequence)
+        self._add_skip_matrix = self.matrix
+        self._add_skip_state = (len(self.matrix), unique_name)
         self.ntax += 1
         self.taxlabels.append(unique_name)
         self.unaltered_taxlabels.append(name)
+
+    def _drop_add_skip(self):
+        """Forget add_sequence's cache of names, and the matrix it holds (PRIVATE)."""
+        for name in ("_add_skip", "_add_skip_matrix", "_add_skip_state"):
+            self.__dict__.pop(name, None)
 
     def insert_gap(self, pos, n=1, leftgreedy=False):
         """Add a gap into the matrix and adjust charsets and partitions.
@@ -2175,6 +2174,7 @@ class Nexus:
         mapped = ["".join(x) for x in zip(*sitesm)]
         listed = [(taxon, Seq(mapped[i])) for i, taxon in enumerate(self.taxlabels)]
         self.matrix = dict(listed)
+        self._drop_add_skip()
         self.nchar += n
         # now adjust character sets
         for i, s in self.charsets.items():
