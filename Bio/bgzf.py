@@ -645,7 +645,13 @@ class BgzfReader:
         self._buffers = {}
         self._block_start_offset = None
         self._block_raw_length = None
-        self._load_block(handle.tell())
+        try:
+            self._load_block(handle.tell())
+        except BaseException:
+            # Close the file if we opened it; a fileobj is the caller's
+            if handle is not fileobj:
+                handle.close()
+            raise
 
     def _load_block(self, start_offset=None):
         if start_offset is None:

@@ -18,6 +18,7 @@ import tempfile
 import unittest
 import zlib
 from random import shuffle
+from unittest import mock
 
 import support
 
@@ -690,6 +691,30 @@ class BgzfTests(unittest.TestCase):
             if not was_tracing:
                 tracemalloc.stop()
         self.assertLess(peak, 2**20)
+
+    def test_reader_closes_its_file_on_bad_first_block(self):
+        """A BgzfReader closes the file it opened if the first block is bad.
+
+        A file object passed in by the caller is left open.
+        """
+        data = b"not a bgzf file at all, just text\n"
+        with open(self.temp_file, "wb") as handle:
+            handle.write(data)
+        opened = []
+
+        def recording_open(*args, real_open=bgzf._open):
+            opened.append(real_open(*args))
+            return opened[-1]
+
+        with mock.patch.object(bgzf, "_open", recording_open):
+            with self.assertRaisesRegex(ValueError, "should start with"):
+                bgzf.BgzfReader(self.temp_file)
+        self.assertEqual(len(opened), 1)
+        self.assertTrue(opened[0].closed)
+        handle = io.BytesIO(data)
+        with self.assertRaisesRegex(ValueError, "should start with"):
+            bgzf.BgzfReader(fileobj=handle)
+        self.assertFalse(handle.closed)
 
     def test_reader_with_binary_fileobj(self):
         """A BgzfReader must accept a binary mode file object."""
