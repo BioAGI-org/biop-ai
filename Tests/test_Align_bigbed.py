@@ -8144,6 +8144,38 @@ class TestAlign_no_zoom_levels(unittest.TestCase):
             self.assertEqual(len(list(alignments.search("chr22"))), 2)
 
 
+class TestAlign_search_blocks_read(unittest.TestCase):
+    """Searching reads only the data blocks that overlap the query."""
+
+    def test_search(self):
+        # After reading a leaf, search() moved on to the next sibling leaf
+        # without checking its bounds, so it used to read every later data
+        # block under the same parent: 20 blocks for the first query.
+        lines = "".join(f"chr1\t{i * 100}\t{i * 100 + 50}\tf{i}\n" for i in range(20))
+        alignments = Alignments(list(Align.parse(StringIO(lines), "bed")))
+        chromosome = SeqRecord(Seq(None, length=10000), id="chr1")
+        for alignment in alignments:
+            alignment.sequences[0] = chromosome
+        alignments.targets = [chromosome]
+        with tempfile.TemporaryFile() as stream:
+            Align.write(alignments, stream, "bigbed", bedN=4, itemsPerSlot=1)
+            for start, end, names in (
+                (0, 150, ["f0", "f1"]),
+                (950, 1050, ["f10"]),
+                (1900, 2000, ["f19"]),
+            ):
+                with self.subTest(start=start, end=end):
+                    stream.seek(0)
+                    alignments = Align.parse(stream, "bigbed")
+                    with mock.patch.object(
+                        alignments, "_read_block", wraps=alignments._read_block
+                    ) as read_block:
+                        found = alignments.search("chr1", start, end)
+                        found = [alignment.query.id for alignment in found]
+                    self.assertEqual(found, names)
+                    self.assertLessEqual(read_block.call_count, 2)
+
+
 class TestAlign_header_offsets(unittest.TestCase):
     """File header offsets that point past the end of the file."""
 

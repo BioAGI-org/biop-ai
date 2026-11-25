@@ -1093,8 +1093,14 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     node = parent.children[node.index + 1]
                 except IndexError:
                     node = parent
-                else:
-                    break
+                    continue
+                # Skip a sibling that does not overlap the query, as when
+                # going down, so that its data block is not read.
+                if (node.endChromIx, node.endBase) < (chromIx, padded_start):
+                    continue
+                if (chromIx, padded_end) < (node.startChromIx, node.startBase):
+                    continue
+                break
 
     def _read_next_alignment(self, stream):
         try:
