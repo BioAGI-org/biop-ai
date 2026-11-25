@@ -194,11 +194,12 @@ class ExonerateVulgarIndexer(_BaseExonerateIndexer):
         lines = []
 
         while True:
+            # tell() before readline(), as BGZF offsets are virtual
+            cur_pos = handle.tell()
             line = handle.readline()
             if not line:
                 break
             elif line.startswith(self._query_mark):
-                cur_pos = handle.tell() - len(line)
                 if qresult_key is None:
                     qresult_key = self.get_qresult_id(cur_pos)
                 else:

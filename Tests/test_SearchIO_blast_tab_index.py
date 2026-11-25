@@ -21,6 +21,15 @@ class BlastTabRawCases(CheckRaw):
 
     fmt = "blast-tab"
 
+    def test_multi_block_bgzf(self):
+        """Test get_raw on a BGZF copy with many blocks, as on the plain file."""
+        self.check_raw_multi_block_bgzf(
+            support.DATA / "Blast" / "tab_2226_tblastn_001.txt"
+        )
+        self.check_raw_multi_block_bgzf(
+            support.DATA / "Blast" / "tab_2226_tblastn_005.txt", comments=True
+        )
+
     def test_blasttab_2226_multiple_first(self):
         """Test blast-tab raw string retrieval, BLAST 2.2.26+, multiple queries, first (tab_2226_tblastn_001.txt)."""
         filename = support.DATA / "Blast" / "tab_2226_tblastn_001.txt"

@@ -26,6 +26,12 @@ from Bio import SearchIO
 class InfernalTabRawCases(CheckRaw):
     fmt = "infernal-text"
 
+    def test_multi_block_bgzf(self):
+        """Test get_raw on a BGZF copy with many blocks, as on the plain file."""
+        self.check_raw_multi_block_bgzf(
+            support.DATA / "Infernal" / "cmscan_115_IRES_5S_U2_Yeast.txt"
+        )
+
     def test_infernal_text_1q(self):
         """Test infernal-text raw string retrieval, cmsearch, one query (U2_Yeast)."""
         filename = support.DATA / "Infernal" / "cmsearch_114_U2_Yeast.txt"

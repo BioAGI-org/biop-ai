@@ -662,10 +662,11 @@ class BlatPslIndexer(SearchIndexer):
             if not line:
                 return
 
-        # and index the qresults
+        # and index the qresults; BGZF offsets are virtual, so take each
+        # line's offset from tell() before readline() and add up lengths
+        line_start = start_offset
+        length = 0
         while True:
-            end_offset = handle.tell()
-
             cols = [x for x in line.strip().split(tab_char) if x]
             if qresult_key is None:
                 qresult_key = cols[query_id_idx]
@@ -673,13 +674,16 @@ class BlatPslIndexer(SearchIndexer):
                 curr_key = cols[query_id_idx]
 
                 if curr_key != qresult_key:
-                    yield qresult_key.decode(), start_offset, end_offset - start_offset
+                    yield qresult_key.decode(), start_offset, length
                     qresult_key = curr_key
-                    start_offset = end_offset - len(line)
+                    start_offset = line_start
+                    length = 0
 
+            length += len(line)
+            line_start = handle.tell()
             line = handle.readline()
             if not line:
-                yield qresult_key.decode(), start_offset, end_offset - start_offset
+                yield qresult_key.decode(), start_offset, length
                 break
 
     def get_raw(self, offset):

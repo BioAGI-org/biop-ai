@@ -569,24 +569,31 @@ class _BaseExonerateIndexer(SearchIndexer):
         handle = self._handle
         handle.seek(0)
         qresult_key = None
+        # BGZF offsets are virtual, so add up line lengths rather than
+        # subtracting offsets
+        length = 0
 
         while True:
             start_offset = handle.tell()
             line = handle.readline()
             if line.startswith(self._query_mark):
+                next_offset = handle.tell()
+                curr_key = self.get_qresult_id(start_offset)
+                # get_qresult_id moved the handle; go back to the next line
+                handle.seek(next_offset)
                 if qresult_key is None:
-                    qresult_key = self.get_qresult_id(start_offset)
+                    qresult_key = curr_key
                     qresult_offset = start_offset
-                else:
-                    curr_key = self.get_qresult_id(start_offset)
-                    if curr_key != qresult_key:
-                        yield qresult_key, qresult_offset, start_offset - qresult_offset
-                        qresult_key = curr_key
-                        qresult_offset = start_offset
-                        handle.seek(qresult_offset)
+                    length = 0
+                elif curr_key != qresult_key:
+                    yield qresult_key, qresult_offset, length
+                    qresult_key = curr_key
+                    qresult_offset = start_offset
+                    length = 0
             elif not line:
-                yield qresult_key, qresult_offset, start_offset - qresult_offset
+                yield qresult_key, qresult_offset, length
                 break
+            length += len(line)
 
 
 # if not used as a module, run the doctest

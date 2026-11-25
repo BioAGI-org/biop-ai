@@ -373,9 +373,9 @@ class EmblRandomAccess(SequentialSeqFileRandomAccess):
             else:
                 raise ValueError(f"Did not recognise the ID line layout:\n{line!r}")
             while True:
+                end_offset = handle.tell()
                 line = handle.readline()
                 if marker_re.match(line) or not line:
-                    end_offset = handle.tell() - len(line)
                     yield key.decode(), start_offset, length
                     start_offset = end_offset
                     break

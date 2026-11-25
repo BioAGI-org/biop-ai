@@ -10,6 +10,7 @@ import gzip
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from io import BytesIO
 from unittest import mock
@@ -20,6 +21,7 @@ except ImportError:
     sqlite3 = None
 
 import Bio
+from Bio import bgzf
 from Bio import SearchIO
 from Bio.SeqRecord import SeqRecord
 
@@ -190,6 +192,46 @@ class CheckRaw(unittest.TestCase):
             # Do the tests again with the BGZF compressed file
             print(f"[BONUS {filename}.bgz]")
             self.check_raw(filename + ".bgz", id, raw, **kwargs)
+
+    def check_raw_multi_block_bgzf(self, filename, **kwargs):
+        """Check get_raw on filename written as BGZF with many small blocks.
+
+        In a BGZF file tell() is a virtual offset (block start << 16 plus
+        the offset in the block), not a byte count. Indexers used to work
+        out a record's offset as tell() - len(line), and its length as the
+        difference of two offsets, which breaks once a line crosses a block
+        boundary: get_raw raised "A BGZF block should start with ..." or,
+        from index_db, returned the wrong bytes. Every record must come
+        back the same as from the plain file, with blocks of several sizes
+        so that some record boundary falls across a block edge.
+        """
+        filename = os.fspath(filename)
+        with open(filename, "rb") as handle:
+            data = handle.read()
+        expected = SearchIO.index(filename, self.fmt, **kwargs)
+        self.addCleanup(expected.close)
+        if sqlite3:
+            expected_db = SearchIO.index_db(":memory:", filename, self.fmt, **kwargs)
+            self.addCleanup(expected_db.close)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        for size in (53, 97, 200):
+            with self.subTest(block_size=size):
+                path = os.path.join(tmp.name, f"{size}.bgz")
+                with bgzf.BgzfWriter(path, "wb") as handle:
+                    for i in range(0, len(data), size):
+                        handle.write(data[i : i + size])
+                        handle.flush()  # one BGZF block per size bytes
+                index = SearchIO.index(path, self.fmt, **kwargs)
+                self.addCleanup(index.close)
+                self.assertEqual(list(index), list(expected))
+                for key in expected:
+                    self.assertEqual(index.get_raw(key), expected.get_raw(key))
+                if sqlite3:
+                    index = SearchIO.index_db(":memory:", path, self.fmt, **kwargs)
+                    self.addCleanup(index.close)
+                    for key in expected:
+                        self.assertEqual(index.get_raw(key), expected_db.get_raw(key))
 
     def check_raw_repeated(self, filename, id, start, end, count, **kwargs):
         """Check get_raw(id) on filename with some lines of record id repeated.

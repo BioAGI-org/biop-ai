@@ -496,7 +496,9 @@ class Hmmer3TextIndexer(_BaseHmmerTextIndexer):
         qresult_key = None
 
         while True:
-            line = read_forward(handle)
+            # tell() before readline(), as BGZF offsets are virtual
+            line_start = handle.tell()
+            line = handle.readline()
             end_offset = handle.tell()
 
             if line.startswith(self.qresult_start):
@@ -509,7 +511,7 @@ class Hmmer3TextIndexer(_BaseHmmerTextIndexer):
                 qresult_key = regx.group(1).strip()
                 # qresult start offset is the offset of this line
                 # (starts with the start mark)
-                start_offset = end_offset - len(line)
+                start_offset = line_start
             elif line.startswith(self.qresult_end):
                 if qresult_key is None:
                     raise ValueError("Found a '//' line before any 'Query:' line")
