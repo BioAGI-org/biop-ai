@@ -19,6 +19,7 @@ import support
 import Bio
 from Bio import Align
 from Bio import SeqIO
+from Bio.Align import Alignments
 from Bio.Align import bigbed
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -8060,6 +8061,71 @@ class TestAlign_undeclared_fields(unittest.TestCase):
             list(Align.parse(BytesIO(data), "bigbed"))
 
 
+class TestAlign_no_alignments(unittest.TestCase):
+    """Writing and reading a bigBed file without alignments."""
+
+    def test_round_trip(self):
+        # Writing used to raise AttributeError. As bedToBigBed does, the file
+        # has no zoom levels and its R tree index is a header without nodes.
+        for kwargs in ({}, {"compress": False}, {"bedN": 4, "extraIndex": ["name"]}):
+            with self.subTest(**kwargs):
+                alignments = Alignments([])
+                alignments.targets = [SeqRecord(Seq(None, length=1000), id="chr1")]
+                stream = BytesIO()
+                Align.write(alignments, stream, "bigbed", **kwargs)
+                data = stream.getvalue()
+                # The zoom level count is at byte 6 of the file header, and
+                # the offset of the R tree index at byte 24. The index header
+                # of 48 bytes is followed by the signature closing the file
+                # when there are no extra indices.
+                self.assertEqual(struct.unpack_from("<H", data, 6), (0,))
+                (index_offset,) = struct.unpack_from("<Q", data, 24)
+                if "extraIndex" not in kwargs:
+                    self.assertEqual(len(data), index_offset + 48 + 4)
+                stream.seek(0)
+                with Align.parse(stream, "bigbed") as alignments:
+                    self.assertEqual(len(alignments), 0)
+                    self.assertEqual(alignments.targets, [])
+                    self.assertEqual(list(alignments), [])
+                    self.assertEqual(list(alignments.search()), [])
+
+    def test_empty_chromosome_index(self):
+        # The chromosome index of a file with no alignments is its 32-byte
+        # header alone. Reading it used to read a root node after the header;
+        # in a bigBed file the item count 0 that starts the data section made
+        # that node look like an empty one, but other bytes there failed.
+        dtype = [("name", "S1"), ("id", "=i4"), ("size", "=i4")]
+        for after in (b"", b"\xff" * 16):
+            with self.subTest(after=after):
+                stream = BytesIO()
+                bigbed._BPlusTreeFormatter().write(np.zeros(0, dtype), 0, stream)
+                self.assertEqual(stream.tell(), 32)
+                stream.write(after)
+                stream.seek(0)
+                self.assertEqual(bigbed._BPlusTreeFormatter().read(stream), [])
+
+    def test_counts_disagree(self):
+        # The item count of the file starts the data section (its offset is
+        # at byte 16 of the file header); the item count of the R tree index
+        # is at byte 8 of its header (its offset is at byte 24). A file of 2
+        # items whose index claimed none used to read as empty.
+        with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
+            data = bytes(stream.read())
+        (data_offset,) = struct.unpack_from("<Q", data, 16)
+        (index_offset,) = struct.unpack_from("<Q", data, 24)
+        no_blocks = bytearray(data)
+        struct.pack_into("<Q", no_blocks, index_offset + 8, 0)
+        no_items = bytearray(data)
+        struct.pack_into("<Q", no_items, data_offset, 0)
+        for bad, message in (
+            (no_blocks, "declares 2 items, but its R tree index has no data blocks"),
+            (no_items, "declares 0 items, but its R tree index has some data blocks"),
+        ):
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, f"^The file {message}$"):
+                    Align.parse(BytesIO(bytes(bad)), "bigbed")
+
+
 class SeekGuard(BytesIO):
     """A binary stream that fails the test if seeked on and on."""
 
@@ -8223,8 +8289,9 @@ class TestAlign_malformed_data_index(unittest.TestCase):
         # bed3.bb the root is a leaf holding one data block in 32 bytes.
         index_header = data[index_offset : index_offset + 48]
         leaf = data[index_offset + 48 : index_offset + 48 + 4 + 32]
-        # The item count in the header is the number of data blocks.
-        struct.pack_into("<Q", index_header, 8, nodes.count(None))
+        # The item count in the header is the number of data blocks, but at
+        # least 1, as an index with no items has no nodes to read.
+        struct.pack_into("<Q", index_header, 8, max(nodes.count(None), 1))
         offsets = []
         offset = len(data) + len(index_header)
         for children in nodes:
@@ -8284,10 +8351,15 @@ class TestAlign_malformed_data_index(unittest.TestCase):
         for nodes in ([None], [[1], None]):
             stream, offsets = self.make_stream(nodes)
             data = bytearray(stream.getvalue())
-            # Set the item count in the index header (48 bytes before the
-            # root), and the count of the leaf (byte 2 of the node), to 0.
-            struct.pack_into("<Q", data, offsets[0] - 48 + 8, 0)
+            # Set the count of the leaf (byte 2 of the node) to 0, and for a
+            # lone root also the item count in the index header (48 bytes
+            # before the root) and the item count of the file, which starts
+            # the data section (its offset is at byte 16 of the file header).
             struct.pack_into("<H", data, offsets[-1] + 2, 0)
+            if len(nodes) == 1:
+                struct.pack_into("<Q", data, offsets[0] - 48 + 8, 0)
+                (data_offset,) = struct.unpack_from("<Q", data, 16)
+                struct.pack_into("<Q", data, data_offset, 0)
             stream = SeekGuard(bytes(data))
             with self.subTest(nodes=nodes):
                 if len(nodes) == 1:

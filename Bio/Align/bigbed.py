@@ -456,6 +456,7 @@ class AlignmentWriter(interfaces.AlignmentWriter):
         zoomList = _ZoomLevels()
         totalSum = _Summary()
         if len(alignments) == 0:
+            zoomList.clear()
             totalSum.minVal = 0.0
             totalSum.maxVal = 0.0
         else:
@@ -668,6 +669,9 @@ class AlignmentWriter(interfaces.AlignmentWriter):
             try:
                 alignment = next(alignments)
             except StopIteration:
+                if region is None:
+                    # No alignments, so no data blocks to write.
+                    break
                 itemIx = itemsPerSlot
                 done = True
             else:
@@ -786,6 +790,12 @@ class AlignmentIterator(interfaces.AlignmentIterator):
 
         stream.seek(header.fullIndexOffset)
         self.tree = _RTreeFormatter(byteorder).read(stream)
+        # The R tree index of a file with no items has no data blocks.
+        if (dataCount == 0) != (not self.tree.children):
+            raise ValueError(
+                f"The file declares {dataCount} items, but its R tree index has "
+                f"{'no' if dataCount else 'some'} data blocks"
+            )
         self._data = self._iterate_index(stream)
 
     def _read_autosql(self, stream, header):
@@ -1406,8 +1416,6 @@ class _ExtraIndices(list):
         return self.formatter.size + _ExtraIndex.formatter.size * len(self)
 
     def initialize(self, bedCount):
-        if bedCount == 0:
-            return
         for extra_index in self:
             keySize = extra_index.maxFieldSize
             # bbiFile.h: bbNamedFileChunk
@@ -1992,6 +2000,9 @@ class _RTreeFormatter:
         formatter_leaf = self.formatter_leaf
 
         root = NonLeaf(None, 0, [], startChromIx, startBase, endChromIx, endBase, None)
+        if itemCount == 0:
+            # UCSC writes no nodes at all for an empty tree.
+            return root
         node = root
         itemsCounted = 0
         # Offsets of the nodes reached so far, starting with the root. In a
@@ -2262,23 +2273,25 @@ class _RTreeFormatter:
         return offset
 
     def write(self, items, blockSize, itemsPerSlot, endFileOffset, output):
-        root, levelCount = self.rTreeFromChromRangeArray(
-            blockSize, items, endFileOffset
-        )
+        tree = self.rTreeFromChromRangeArray(blockSize, items, endFileOffset)
+        if tree is None:
+            # As UCSC does for empty input, write the header with zero
+            # bounds, and no nodes.
+            bounds = (0, 0, 0, 0)
+        else:
+            root, levelCount = tree
+            bounds = (root.startChromId, root.startBase, root.endChromId, root.endBase)
         data = self.formatter_header.pack(
             _RTreeFormatter.signature,
             blockSize,
             len(items),
-            root.startChromId,
-            root.startBase,
-            root.endChromId,
-            root.endBase,
+            *bounds,
             endFileOffset,
             itemsPerSlot,
         )
         output.write(data)
 
-        if root is None:
+        if tree is None:
             return
 
         levelSizes = np.zeros(levelCount, int)
@@ -2336,6 +2349,9 @@ class _BPlusTreeFormatter:
                 f"Expected a value size of 8 bytes (chromosome ID and size) in "
                 f"the chromosome index, found {valSize}"
             )
+        if itemCount == 0:
+            # The writer, like UCSC's, writes no nodes at all for an empty tree.
+            return []
 
         formatter_node = self.formatter_node
         formatter_nonleaf = struct.Struct(self.fmt_nonleaf.format(keySize=keySize))
