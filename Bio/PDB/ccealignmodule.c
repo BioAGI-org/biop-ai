@@ -91,9 +91,9 @@
 
 #define MAX_PATHS 20
 
-// findPath checks for signals after about this much work, a few
-// milliseconds: one unit per candidate AFP looked at, start or gap, plus
-// one per similarityI call.
+// calcDM, calcS and findPath check for signals after about this much work,
+// a few milliseconds: one unit per distance, per similarityII term, per
+// candidate AFP looked at, start or gap, and per similarityI call.
 #define CHECK_SIGNALS_WORK (1 << 20)
 
 // Typical XYZ point and array of points
@@ -110,13 +110,30 @@ typedef struct {
 } afp, *path;
 
 // calcDM, calcS and findPath run without the GIL, so they call no Python
-// API (findPath only briefly takes the GIL back to check for signals). They
-// report running out of memory by returning NULL or -1, and PyCealign raises
-// MemoryError once it holds the GIL again.
+// API (they only briefly take the GIL back to check for signals, through
+// checkSignals). They report failure by returning NULL or -1: if a signal
+// handler raised, its exception is set, else PyCealign raises MemoryError
+// once it holds the GIL again.
+
+// Add done to *work. Once that reaches CHECK_SIGNALS_WORK, take the GIL
+// back briefly, so that Ctrl-C can stop a long search, and reset *work.
+// Return -1 if a signal handler raised, with its exception set, else 0.
+static int
+checkSignals(size_t *work, const size_t done, PyThreadState **save)
+{
+    *work += done;
+    if (*work < CHECK_SIGNALS_WORK)
+        return 0;
+    *work = 0;
+    PyEval_RestoreThread(*save);
+    const int status = PyErr_CheckSignals();
+    *save = PyEval_SaveThread();
+    return status;
+}
 
 // Calculate distance matrix
 static double **
-calcDM(pcePoint coords, int len)
+calcDM(pcePoint coords, int len, PyThreadState **save)
 {
     double **dm = (double **)PyMem_RawMalloc(sizeof(double *) * len);
 
@@ -134,6 +151,8 @@ calcDM(pcePoint coords, int len)
             return NULL;
         }
     }
+    size_t work = 0;
+
     for (int row = 0; row < len; row++) {
         for (int col = row; col < len; col++) {
             double xd = coords[row].x - coords[col].x;
@@ -142,6 +161,13 @@ calcDM(pcePoint coords, int len)
             double distance = sqrt(xd * xd + yd * yd + zd * zd);
 
             dm[row][col] = dm[col][row] = distance;
+        }
+        if (checkSignals(&work, len - row, save) < 0) {
+            for (int i = 0; i < len; i++) {
+                PyMem_RawFree(dm[i]);
+            }
+            PyMem_RawFree(dm);
+            return NULL;
         }
     }
 
@@ -210,7 +236,8 @@ calcS(
     double **dB,
     const int lenA,
     const int lenB,
-    const int fragmentSize)
+    const int fragmentSize,
+    PyThreadState **save)
 {
     // Initialize the 2D similarity matrix
     const int rowCount = lenA - fragmentSize + 1;
@@ -232,6 +259,18 @@ calcS(
         }
     }
 
+    // similarityII sums about fragmentSize * fragmentSize / 2 terms a cell.
+    // Count them cell by cell, as one row can hold billions of terms; the
+    // + 1 makes even the smallest fragments count. The count is capped at
+    // CHECK_SIGNALS_WORK, where one cell alone is due a check; working it
+    // out in 64 bits first keeps it from overflowing a 32-bit size_t.
+    const uint64_t cellTerms =
+        (uint64_t)fragmentSize * (uint64_t)fragmentSize / 2 + 1;
+    const size_t cellWork = (cellTerms < CHECK_SIGNALS_WORK)
+        ? (size_t)cellTerms
+        : CHECK_SIGNALS_WORK;
+    size_t work = 0;
+
     //
     // This is where the magic of CE comes out. In the similarity matrix,
     // for each i and j, the value of S[i][j] is how well the fragment starting
@@ -241,6 +280,13 @@ calcS(
     for (int iA = 0; iA < rowCount; iA++) {
         for (int iB = 0; iB < colCount; iB++) {
             S[iA][iB] = similarityII(dA, dB, (afp) {iA, iB}, fragmentSize);
+            if (checkSignals(&work, cellWork, save) < 0) {
+                for (int i = 0; i < rowCount; i++) {
+                    PyMem_RawFree(S[i]);
+                }
+                PyMem_RawFree(S);
+                return NULL;
+            }
         }
     }
 
@@ -558,22 +604,6 @@ error:
     return NULL;
 }
 
-// Add done to *work. Once that reaches CHECK_SIGNALS_WORK, take the GIL
-// back briefly, so that Ctrl-C can stop a long search, and reset *work.
-// Return -1 if a signal handler raised, with its exception set, else 0.
-static int
-checkSignals(size_t *work, const size_t done, PyThreadState **save)
-{
-    *work += done;
-    if (*work < CHECK_SIGNALS_WORK)
-        return 0;
-    *work = 0;
-    PyEval_RestoreThread(*save);
-    const int status = PyErr_CheckSignals();
-    *save = PyEval_SaveThread();
-    return status;
-}
-
 // Find the best N alignment paths. On success, return the number of paths
 // stored in pathBuffer, lenBuffer and zScoreBuffer; the caller frees the
 // paths. On failure, free them and return -1: either memory ran out, or a
@@ -879,8 +909,8 @@ PyCealign(PyObject *Py_UNUSED(self), PyObject *args)
 
     /* The search below reads only the C buffers, so it runs without the
        GIL, letting other threads run. Each step can fail on an
-       out-of-memory condition, after which everything allocated before it
-       still has to be released. */
+       out-of-memory condition or a signal handler that raised, after
+       which everything allocated before it still has to be released. */
     double **dA = NULL, **dB = NULL, **S = NULL;
     path pathBuffer[MAX_PATHS];
     int lenBuffer[MAX_PATHS];
@@ -892,13 +922,13 @@ PyCealign(PyObject *Py_UNUSED(self), PyObject *args)
     PyThreadState *save = PyEval_SaveThread();
 
     /* calculate the distance matrix for each protein */
-    dA = calcDM(coordsA, lenA);
+    dA = calcDM(coordsA, lenA, &save);
     if (dA)
-        dB = calcDM(coordsB, lenB);
+        dB = calcDM(coordsB, lenB, &save);
 
     /* calculate the CE Similarity matrix */
     if (dB)
-        S = calcS(dA, dB, lenA, lenB, fragmentSize);
+        S = calcS(dA, dB, lenA, lenB, fragmentSize, &save);
 
     // Calculate Top N Paths
     if (S)

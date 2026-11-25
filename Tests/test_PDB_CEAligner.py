@@ -367,6 +367,7 @@ class RunCEAlignThreadTests(unittest.TestCase):
 # The start of each child process run by RunCEAlignGILTests.
 GIL_CHILD = """\
 import math
+import random
 from Bio.PDB.ccealign import run_cealign
 
 def helix(n):
@@ -374,6 +375,11 @@ def helix(n):
         [2.3 * math.cos(i * 1.75), 2.3 * math.sin(i * 1.75), 1.5 * i]
         for i in range(n)
     ]
+
+def cloud(n):
+    # Random points: almost every fragment pair scores badly, so the
+    # path search has almost nothing to do.
+    return [[random.uniform(0, 1000) for _ in range(3)] for _ in range(n)]
 
 """
 
@@ -450,19 +456,30 @@ def handler(signum, frame):
 signal.signal(signal.SIGALRM, handler)
 signal.setitimer(signal.ITIMER_REAL, 0.001, 0.001)
 try:
-    run_cealign(coords, coords, 8, gap_max)
+    run_cealign(*args)
 except KeyboardInterrupt:
     print("interrupted")
 else:
     print("returned")
 signal.setitimer(signal.ITIMER_REAL, 0)
 """
-        # Each takes about a second: a 400-point helix aligned on itself,
-        # with many start points, and 8 points with a huge maximum gap,
-        # with one start point and a long search for the next fragment.
-        for n, gap_max in ((400, 30), (8, 300_000_000)):
-            with self.subTest(n=n, gap_max=gap_max):
-                setup = f"coords = helix({n})\ngap_max = {gap_max}\n"
+        # The path search takes about a second each for a 400-point helix
+        # aligned on itself, with many start points, and for 8 points with
+        # a huge maximum gap, with one start point and a long search for the
+        # next fragment. In the last three, random points leave the path
+        # search too little work to check for signals, and the time goes
+        # to the distance matrix of 4000 points (128 MB), then to the
+        # similarity matrix with long fragments, and last to a similarity
+        # matrix of a single row, which must be checked within the row.
+        for args in (
+            "helix(400), helix(400), 8, 30",
+            "helix(8), helix(8), 8, 300_000_000",
+            "cloud(4000), cloud(8), 8, 30",
+            "cloud(1000), cloud(300), 30, 30",
+            "cloud(400), cloud(1400), 400, 30",
+        ):
+            with self.subTest(args=args):
+                setup = f"random.seed(1)\nargs = {args}\n"
                 # Without signal checks the ticks during the call ran the
                 # handler only once, after the call returned.
                 self.assertEqual(self.run_child(setup + code), "interrupted")
