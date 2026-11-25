@@ -116,11 +116,12 @@ class WriterTests(unittest.TestCase):
         # Using Phylo.parse/write, using filenames
         msg = f"Failed Phylo API writer test for {path}"
         t1 = next(Phylo.parse(path, "nexml"))
-        tmp = tempfile.NamedTemporaryFile().name
-        Phylo.write([t1], tmp, "nexml")
-        t2 = next(Phylo.parse(tmp, "nexml"))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = os.path.join(tmpdir, "tree.xml")
+            Phylo.write([t1], tmp, "nexml")
+            with open(tmp, "rb") as handle:
+                t2 = next(Phylo.parse(handle, "nexml"))
         self.compare(t1, t2, msg)
-        os.remove(tmp)
 
     def compare(self, t1, t2, msg=None):
         """Compare two trees."""
