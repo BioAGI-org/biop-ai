@@ -90,6 +90,27 @@ class ScopTests(unittest.TestCase):
                 Scop(StringIO(cla), StringIO(des), StringIO(hie))
         self.assertEqual(stdout.getvalue(), "")
 
+    def testHieParentOrChildMissingFromDes(self):
+        with open(support.DATA / "SCOP" / "dir.cla.scop.txt_test") as f:
+            cla = f.read()
+        with open(support.DATA / "SCOP" / "dir.des.scop.txt_test") as f:
+            des = f.read()
+        with open(support.DATA / "SCOP" / "dir.hie.scop.txt_test") as f:
+            hie = f.read()
+        for old, new, message in [
+            (
+                "14984\t46465\t-",
+                "14984\t888888\t-",
+                "parent sunid 888888 of sunid 14984",
+            ),
+            ("0\t-\t46456\n", "0\t-\t46456,999999\n", "child sunid 999999 of sunid 0"),
+        ]:
+            with self.subTest(message=message):
+                self.assertIn(old, hie)
+                broken = StringIO(hie.replace(old, new, 1))
+                with self.assertRaisesRegex(ValueError, message):
+                    Scop(StringIO(cla), StringIO(des), broken)
+
     def testClaSunidMissingFromDes(self):
         with open(support.DATA / "SCOP" / "dir.cla.scop.txt_test") as f:
             cla = f.read() + (
