@@ -2516,25 +2516,25 @@ py_clustercentroids(PyObject* self, PyObject* args, PyObject* keywords)
     }
     if (nclusters == 0) goto exit;
     if (cdata.nrows != nrows) {
-        PyErr_Format(PyExc_RuntimeError,
+        PyErr_Format(PyExc_ValueError,
                      "cdata has incorrect number of rows (%d, expected %d)",
                      cdata.nrows, nrows);
         goto exit;
     }
     if (cdata.ncols != ncols) {
-        PyErr_Format(PyExc_RuntimeError,
+        PyErr_Format(PyExc_ValueError,
                      "cdata has incorrect number of columns (%d, expected %d)",
                      cdata.ncols, ncols);
         goto exit;
     }
     if (cmask.view.shape[0] != nrows) {
-        PyErr_Format(PyExc_RuntimeError,
+        PyErr_Format(PyExc_ValueError,
                      "cmask has incorrect number of rows (%zd, expected %d)",
                      cmask.view.shape[0], nrows);
         goto exit;
     }
     if (cmask.view.shape[1] != ncols) {
-        PyErr_Format(PyExc_RuntimeError,
+        PyErr_Format(PyExc_ValueError,
                      "cmask has incorrect number of columns "
                      "(%zd, expected %d)", cmask.view.shape[1], ncols);
         goto exit;

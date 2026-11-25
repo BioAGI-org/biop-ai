@@ -359,7 +359,9 @@ Changed in biop-ai 1.89 without a deprecation period.
 row with ``transpose=True``), as ``kcluster`` and ``distancematrix`` already
 did. The private ``Bio.Cluster._cluster.somcluster`` likewise raises
 ``ValueError`` when the last dimension of ``celldata`` does not match the
-data. Code catching ``RuntimeError`` for these cases should catch
+data, and the private ``Bio.Cluster._cluster.clustercentroids`` raises
+``ValueError`` when ``cdata`` or ``cmask`` has the wrong number of rows or
+columns. Code catching ``RuntimeError`` for these cases should catch
 ``ValueError`` instead.
 
 Bio.Cluster.treecluster with a single item
