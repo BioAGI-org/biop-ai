@@ -971,7 +971,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 n = len(data)
                 while i < n:
                     j = i + size
-                    if j > n:
+                    k = data.find(0, j)
+                    if k < 0:
                         raise ValueError(
                             f"The data block at offset {node.dataOffset} ends "
                             "with a truncated item"
@@ -983,7 +984,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                             f"{chromId}, which is not in the chromosome index "
                             f"(number of chromosomes: {chromCount})"
                         )
-                    i = data.index(0, j) + 1
+                    i = k + 1
                     rest = data[j:i]
                     yield (chromId, chromStart, chromEnd, rest, 0, len(rest))
                 while True:
@@ -1046,7 +1047,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     n = len(data)
                     while i < n:
                         j = i + size
-                        if j > n:
+                        k = data.find(0, j)
+                        if k < 0:
                             raise ValueError(
                                 f"The data block at offset {node.dataOffset} "
                                 "ends with a truncated item"
@@ -1055,7 +1057,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                             formatter.unpack(data[i:j])
                         )
                         i = j
-                        j = data.index(b"\00", i) + 1
+                        j = k + 1
                         rest = data[i:j]
                         i = j
                         if child_chromIx != chromIx:
