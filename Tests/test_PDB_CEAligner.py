@@ -254,6 +254,33 @@ class RunCEAlignArgumentTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "maximum gap"):
                     run_cealign(coords, coords, 8, gap_max)
 
+    def test_gap_max_beyond_input(self):
+        """Test that a gap longer than both inputs costs nothing extra.
+
+        The path search used to try every gap up to the maximum on each
+        extension step, though any gap longer than what is left of both
+        inputs runs off the end. With the largest maximum allowed, 40 points
+        took hours. The call runs in a child process so that cannot hang the
+        test run.
+        """
+        code = """\
+from Bio.PDB.ccealign import run_cealign
+coords = [[float(i), 0.0, 0.0] for i in range(40)]
+huge = run_cealign(coords, coords, 8, (2**31 - 2) // 2)
+print(huge == run_cealign(coords, coords, 8, 40))
+"""
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("run_cealign took more than 60 seconds")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "True")
+
     def test_length_beyond_int_range(self):
         """Test that a reported length that cannot fit an int is rejected.
 
@@ -463,17 +490,15 @@ else:
     print("returned")
 signal.setitimer(signal.ITIMER_REAL, 0)
 """
-        # The path search takes about a second each for a 400-point helix
-        # aligned on itself, with many start points, and for 8 points with
-        # a huge maximum gap, with one start point and a long search for the
-        # next fragment. In the last three, random points leave the path
-        # search too little work to check for signals, and the time goes
-        # to the distance matrix of 4000 points (128 MB), then to the
-        # similarity matrix with long fragments, and last to a similarity
-        # matrix of a single row, which must be checked within the row.
+        # The path search takes about a second for a 400-point helix
+        # aligned on itself, with many start points. In the last three,
+        # random points leave the path search too little work to check for
+        # signals, and the time goes to the distance matrix of 4000 points
+        # (128 MB), then to the similarity matrix with long fragments, and
+        # last to a similarity matrix of a single row, which must be checked
+        # within the row.
         for args in (
             "helix(400), helix(400), 8, 30",
-            "helix(8), helix(8), 8, 300_000_000",
             "cloud(4000), cloud(8), 8, 30",
             "cloud(1000), cloud(300), 30, 30",
             "cloud(400), cloud(1400), 400, 30",
