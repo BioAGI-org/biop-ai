@@ -801,8 +801,9 @@ typedef struct {
 } PyNode;
 
 static int
-PyNode_init(PyNode *self, PyObject *args, PyObject *kwds)
+PyNode_init(PyObject *op, PyObject *args, PyObject *kwds)
 {
+    PyNode* self = (PyNode*)op;
     int left, right;
     double distance = 0.0;
     static char *kwlist[] = {"left", "right", "distance", NULL};
@@ -817,8 +818,9 @@ PyNode_init(PyNode *self, PyObject *args, PyObject *kwds)
 }
 
 static PyObject*
-PyNode_repr(PyNode* self)
+PyNode_repr(PyObject* op)
 {
+    PyNode* self = (PyNode*)op;
     char string[64];
 
     /* Use PyOS_double_to_string to ensure that the locale does
@@ -837,16 +839,18 @@ static char PyNode_left__doc__[] =
 "integer representing the first member of this node";
 
 static PyObject*
-PyNode_getleft(PyNode* self, void* closure)
+PyNode_getleft(PyObject* op, void* closure)
 {
+    PyNode* self = (PyNode*)op;
     int left = self->node.left;
 
     return PyLong_FromLong((long)left);
 }
 
 static int
-PyNode_setleft(PyNode* self, PyObject* value, void* closure)
+PyNode_setleft(PyObject* op, PyObject* value, void* closure)
 {
+    PyNode* self = (PyNode*)op;
     long left = PyLong_AsLong(value);
 
     if (PyErr_Occurred()) return -1;
@@ -858,16 +862,18 @@ static char PyNode_right__doc__[] =
 "integer representing the second member of this node";
 
 static PyObject*
-PyNode_getright(PyNode* self, void* closure)
+PyNode_getright(PyObject* op, void* closure)
 {
+    PyNode* self = (PyNode*)op;
     int right = self->node.right;
 
     return PyLong_FromLong((long)right);
 }
 
 static int
-PyNode_setright(PyNode* self, PyObject* value, void* closure)
+PyNode_setright(PyObject* op, PyObject* value, void* closure)
 {
+    PyNode* self = (PyNode*)op;
     long right = PyLong_AsLong(value);
 
     if (PyErr_Occurred()) return -1;
@@ -876,14 +882,16 @@ PyNode_setright(PyNode* self, PyObject* value, void* closure)
 }
 
 static PyObject*
-PyNode_getdistance(PyNode* self, void* closure)
+PyNode_getdistance(PyObject* op, void* closure)
 {
+    PyNode* self = (PyNode*)op;
     return PyFloat_FromDouble(self->node.distance);
 }
 
 static int
-PyNode_setdistance(PyNode* self, PyObject* value, void* closure)
+PyNode_setdistance(PyObject* op, PyObject* value, void* closure)
 {
+    PyNode* self = (PyNode*)op;
     const double distance = PyFloat_AsDouble(value);
 
     if (PyErr_Occurred()) return -1;
@@ -896,16 +904,16 @@ static char PyNode_distance__doc__[] =
 
 static PyGetSetDef PyNode_getset[] = {
     {"left",
-     (getter)PyNode_getleft,
-     (setter)PyNode_setleft,
+     PyNode_getleft,
+     PyNode_setleft,
      PyNode_left__doc__, NULL},
     {"right",
-     (getter)PyNode_getright,
-     (setter)PyNode_setright,
+     PyNode_getright,
+     PyNode_setright,
      PyNode_right__doc__, NULL},
     {"distance",
-     (getter)PyNode_getdistance,
-     (setter)PyNode_setdistance,
+     PyNode_getdistance,
+     PyNode_setdistance,
      PyNode_distance__doc__, NULL},
     {NULL, NULL, NULL, NULL, NULL}  /* Sentinel */
 };
@@ -926,7 +934,7 @@ static PyTypeObject PyNodeType = {
     0,                         /* tp_getattr */
     0,                         /* tp_setattr */
     0,                         /* tp_compare */
-    (reprfunc)PyNode_repr,     /* tp_repr */
+    PyNode_repr,               /* tp_repr */
     0,                         /* tp_as_number */
     0,                         /* tp_as_sequence */
     0,                         /* tp_as_mapping */
@@ -952,7 +960,7 @@ static PyTypeObject PyNodeType = {
     0,                         /* tp_descr_get */
     0,                         /* tp_descr_set */
     0,                         /* tp_dictoffset */
-    (initproc)PyNode_init,     /* tp_init */
+    PyNode_init,               /* tp_init */
 };
 
 typedef struct {
@@ -969,8 +977,9 @@ typedef struct {
  * treecluster allocates it in cluster.c with the GIL released. */
 
 static void
-PyTree_dealloc(PyTree* self)
+PyTree_dealloc(PyObject* op)
 {
+    PyTree* self = (PyTree*)op;
     if (self->n) PyMem_RawFree(self->nodes);
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
@@ -1136,8 +1145,9 @@ PyTree_str_impl(PyTree* self)
 }
 
 static PyObject*
-PyTree_str(PyTree* self)
+PyTree_str(PyObject* op)
 {
+    PyTree* self = (PyTree*)op;
     PyObject* result;
 
     Py_BEGIN_CRITICAL_SECTION(self);
@@ -1202,8 +1212,9 @@ PyTree_slice_impl(PyTree* self, Py_ssize_t start, Py_ssize_t stop,
 }
 
 static PyObject*
-PyTree_subscript(PyTree* self, PyObject* item)
+PyTree_subscript(PyObject* op, PyObject* item)
 {
+    PyTree* self = (PyTree*)op;
     PyObject* result;
 
     /* Convert the index or slice first, outside the critical section, as
@@ -1236,7 +1247,7 @@ PyTree_subscript(PyTree* self, PyObject* item)
 
 static PyMappingMethods PyTree_mapping = {
     PyTree_length,                    /* mp_length */
-    (binaryfunc)PyTree_subscript,     /* mp_subscript */
+    PyTree_subscript,                 /* mp_subscript */
 };
 
 static char PyTree_scale__doc__[] =
@@ -1264,8 +1275,9 @@ PyTree_scale_impl(PyTree* self)
 }
 
 static PyObject*
-PyTree_scale(PyTree* self)
+PyTree_scale(PyObject* op, PyObject* Py_UNUSED(ignored))
 {
+    PyTree* self = (PyTree*)op;
     PyObject* result;
 
     Py_BEGIN_CRITICAL_SECTION(self);
@@ -1301,8 +1313,9 @@ PyTree_cut_impl(PyTree* self, Py_buffer* indices, int nclusters)
 }
 
 static PyObject*
-PyTree_cut(PyTree* self, PyObject* args)
+PyTree_cut(PyObject* op, PyObject* args)
 {
+    PyTree* self = (PyTree*)op;
     int ok = -1;
     int nclusters;
     Py_buffer indices = {0};
@@ -1365,8 +1378,9 @@ PyTree_sort_impl(PyTree* self, Py_buffer* indices, Py_buffer* order)
 }
 
 static PyObject*
-PyTree_sort(PyTree* self, PyObject* args)
+PyTree_sort(PyObject* op, PyObject* args)
 {
+    PyTree* self = (PyTree*)op;
     int ok = -1;
     Py_buffer indices = {0};
     Py_buffer order = {0};
@@ -1390,9 +1404,9 @@ exit:
 }
 
 static PyMethodDef PyTree_methods[] = {
-    {"scale", (PyCFunction)PyTree_scale, METH_NOARGS, PyTree_scale__doc__},
-    {"cut", (PyCFunction)PyTree_cut, METH_VARARGS, PyTree_cut__doc__},
-    {"sort", (PyCFunction)PyTree_sort, METH_VARARGS, PyTree_sort__doc__},
+    {"scale", PyTree_scale, METH_NOARGS, PyTree_scale__doc__},
+    {"cut", PyTree_cut, METH_VARARGS, PyTree_cut__doc__},
+    {"sort", PyTree_sort, METH_VARARGS, PyTree_sort__doc__},
     {NULL, NULL, 0, NULL}  /* Sentinel */
 };
 
@@ -1409,7 +1423,7 @@ static PyTypeObject PyTreeType = {
     "_cluster.Tree",             /* tp_name */
     sizeof(PyTree),              /* tp_basicsize */
     0,                           /* tp_itemsize */
-    (destructor)PyTree_dealloc,  /* tp_dealloc */
+    PyTree_dealloc,              /* tp_dealloc */
     0,                           /* tp_print */
     0,                           /* tp_getattr */
     0,                           /* tp_setattr */
@@ -1420,7 +1434,7 @@ static PyTypeObject PyTreeType = {
     &PyTree_mapping,             /* tp_as_mapping */
     0,                           /* tp_hash */
     0,                           /* tp_call */
-    (reprfunc)PyTree_str,        /* tp_str */
+    PyTree_str,                  /* tp_str */
     0,                           /* tp_getattro */
     0,                           /* tp_setattro */
     0,                           /* tp_as_buffer */
@@ -1471,7 +1485,7 @@ static char version__doc__[] =
 "Return the version number of the C Clustering Library as a string.\n";
 
 static PyObject*
-py_version(PyObject* self)
+py_version(PyObject* self, PyObject* Py_UNUSED(ignored))
 {
     return PyUnicode_FromString( CLUSTERVERSION );
 }
@@ -2837,45 +2851,45 @@ exit:
 
 
 static struct PyMethodDef cluster_methods[] = {
-    {"version", (PyCFunction) py_version, METH_NOARGS, version__doc__},
+    {"version", py_version, METH_NOARGS, version__doc__},
     {"kcluster",
-     (PyCFunction) py_kcluster,
+     (PyCFunction)(void(*)(void)) py_kcluster,
      METH_VARARGS | METH_KEYWORDS,
      kcluster__doc__
     },
     {"kmedoids",
-     (PyCFunction) py_kmedoids,
+     (PyCFunction)(void(*)(void)) py_kmedoids,
      METH_VARARGS | METH_KEYWORDS,
      kmedoids__doc__
     },
     {"treecluster",
-     (PyCFunction) py_treecluster,
+     (PyCFunction)(void(*)(void)) py_treecluster,
      METH_VARARGS | METH_KEYWORDS,
      treecluster__doc__
     },
     {"somcluster",
-     (PyCFunction) py_somcluster,
+     (PyCFunction)(void(*)(void)) py_somcluster,
      METH_VARARGS | METH_KEYWORDS,
      somcluster__doc__
     },
     {"clusterdistance",
-     (PyCFunction) py_clusterdistance,
+     (PyCFunction)(void(*)(void)) py_clusterdistance,
      METH_VARARGS | METH_KEYWORDS,
      clusterdistance__doc__
     },
     {"clustercentroids",
-     (PyCFunction) py_clustercentroids,
+     (PyCFunction)(void(*)(void)) py_clustercentroids,
      METH_VARARGS | METH_KEYWORDS,
      clustercentroids__doc__
     },
     {"distancematrix",
-     (PyCFunction) py_distancematrix,
+     (PyCFunction)(void(*)(void)) py_distancematrix,
      METH_VARARGS | METH_KEYWORDS,
      distancematrix__doc__
     },
     {"pca",
-     (PyCFunction) py_pca,
-     METH_VARARGS | METH_KEYWORDS,
+     py_pca,
+     METH_VARARGS,
      pca__doc__
     },
     {NULL, NULL, 0, NULL} /* sentinel */

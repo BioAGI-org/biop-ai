@@ -1368,11 +1368,12 @@ class TestCluster(unittest.TestCase):
         self.assertEqual(tree[2].right, 3)
         self.assertAlmostEqual(tree[2].distance, 0.9)
 
-    def test_tree_length_matches_lenfunc(self):
-        # len(tree) is the C function PyTree_length, installed as a lenfunc,
-        # which returns Py_ssize_t.  Declared to return int, it gave the right
-        # answer on x86-64 and arm64, so only the compiler can see the
-        # mismatch, as a -Wcast-function-type warning.
+    def test_function_pointer_types(self):
+        # Each C function in clustermodule.c must match the slot or method
+        # type CPython calls it through.  For example, len(tree) is
+        # PyTree_length, a lenfunc returning Py_ssize_t; declared to return
+        # int, it gave the right answer on x86-64 and arm64, so only the
+        # compiler can see the mismatch, as a -Wcast-function-type warning.
         source = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             os.pardir,
@@ -1395,13 +1396,53 @@ class TestCluster(unittest.TestCase):
         if platinclude and platinclude != include and os.path.isdir(platinclude):
             includes += ["-I", platinclude]
         result = subprocess.run(
-            [compiler, "-fsyntax-only", "-Wcast-function-type", *includes, source],
+            [
+                compiler,
+                "-fsyntax-only",
+                "-Wcast-function-type",
+                # An uncast slot of the wrong type is an error in gcc 14 and
+                # clang 16, but only a warning in gcc 13.
+                "-Werror=incompatible-pointer-types",
+                *includes,
+                source,
+            ],
             capture_output=True,
             text=True,
             timeout=60,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        lines = [line for line in result.stderr.splitlines() if "PyTree_length" in line]
+        # The keyword-taking module functions are registered as
+        # (PyCFunction)(void(*)(void)) f with METH_VARARGS | METH_KEYWORDS,
+        # as CPython documents.  gcc accepts the cast through void (*)(void);
+        # clang 18 and later flag both of its halves under
+        # -Wcast-function-type-strict.  Allow exactly those two warnings, and
+        # only on such a registration, so that a function of any other type
+        # registered there is still caught.
+        with open(source) as handle:
+            code = handle.read().splitlines()
+        keyword_lines = {
+            number
+            for number, line in enumerate(code[:-1], 1)
+            if "(PyCFunction)(void(*)(void))" in line
+            and "METH_VARARGS | METH_KEYWORDS" in code[number]
+        }
+        keyword_casts = re.compile(
+            r"cast from 'PyObject \*\(\*\)\(PyObject \*, PyObject \*, PyObject \*\)'"
+            r" .*to 'void \(\*\)\(void\)'"
+            r"|cast from 'void \(\*\)\(void\)' to 'PyCFunction'"
+        )
+        lines = []
+        for line in result.stderr.splitlines():
+            if "clustermodule.c" not in line or "-Wcast-function-type" not in line:
+                continue
+            match = re.search(r"clustermodule\.c:(\d+):\d+: warning: (.*)", line)
+            if (
+                match
+                and int(match.group(1)) in keyword_lines
+                and keyword_casts.match(match.group(2))
+            ):
+                continue
+            lines.append(line)
         self.assertEqual(lines, [])
 
     def test_treecluster(self):
@@ -3372,6 +3413,10 @@ class TestCluster(unittest.TestCase):
         message = "^eigenvalues has inconsistent size 3 \\(expected 2\\)$"
         with self.assertRaisesRegex(RuntimeError, message):
             pca(data, columnmean, coordinates, pc, np.zeros(3))
+        # pca takes no keyword arguments; they used to be silently ignored
+        message = "^pca\\(\\) takes no keyword arguments$"
+        with self.assertRaisesRegex(TypeError, message):
+            pca(data, columnmean, coordinates, pc, eigenvalues, bogus=1)
 
     def test_pca(self):
         if TestCluster.module == "Bio.Cluster":
