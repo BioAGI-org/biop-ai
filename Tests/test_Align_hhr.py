@@ -23652,6 +23652,20 @@ class Align_hhr_2uvo_hhblits_onlyheader(unittest.TestCase):
         self.assertEqual(str(cm.exception), "Truncated file.")
 
 
+class Align_hhr_2uvo_hhsearch_noquery(unittest.TestCase):
+    path = support.DATA / "HHsuite" / "2uvo_hhsearch.hhr"
+
+    def test_reading(self):
+        """Raise ValueError if the header has no Query line."""
+        with open(self.path) as stream:
+            lines = stream.readlines()
+        self.assertTrue(lines[0].startswith("Query "))
+        stream = io.StringIO("".join(lines[1:]))
+        with self.assertRaises(ValueError) as cm:
+            Align.parse(stream, "hhr")
+        self.assertEqual(str(cm.exception), "No 'Query' line in .hhr header")
+
+
 class Align_hhr_7rbx_A_hhsearch_trunc(unittest.TestCase):
     path = support.DATA / "HHsuite" / "7rbx_A_hhsearch_trunc.hhr"
 
