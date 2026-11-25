@@ -3270,6 +3270,18 @@ class TruncatedCases(unittest.TestCase):
                     list(parse(truncated(filename, n), FMT))
                 self.assertEqual(str(cm.exception), message)
 
+    def test_malformed_attribute_line_in_hit(self):
+        """Test a ';' line inside a hit block that is not '; name: value'."""
+        # In output002.m10, line 96 is "; fa_frame: f", just after the
+        # first '>>' hit line.
+        with open(get_file("output002.m10")) as handle:
+            lines = handle.readlines()
+        self.assertEqual(lines[95], "; fa_frame: f\n")
+        lines[95] = "; bogus line\n"
+        with self.assertRaises(ValueError) as cm:
+            list(parse(StringIO("".join(lines)), FMT))
+        self.assertEqual(str(cm.exception), "Unexpected line: '; bogus line\\n'")
+
     def test_hit_block_before_first_query_line(self):
         """Test a '>>>' hit block that comes before any query line."""
         # In output001.m10, lines 1 to 7 are the preamble, line 8 is the first
