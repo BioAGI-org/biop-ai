@@ -7277,6 +7277,20 @@ query             0 --TTC-GCTAGC-TG--- 11
         self.assertEqual(format(alignment, "chain"), chain4)
 
 
+class TestAlign_bad_sizes(unittest.TestCase):
+    def test_negative_sizes(self):
+        """Test that a negative block or gap size raises ValueError."""
+        header = "chain 100 chr1 1000 + 100 110 q1 20 + 0 10 1\n"
+        for lines, message in (
+            ("5 3 3\n-2\n\n", "Negative block size -2"),
+            ("5 -3 3\n2\n\n", "Negative gap size -3"),
+            ("5 3 -3\n2\n\n", "Negative gap size -3"),
+        ):
+            with self.subTest(lines=lines):
+                with self.assertRaisesRegex(ValueError, message):
+                    next(Align.parse(StringIO(header + lines), "chain"))
+
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     unittest.main(testRunner=runner)

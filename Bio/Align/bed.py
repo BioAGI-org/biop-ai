@@ -192,6 +192,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 blockStarts = [
                     int(blockStart) for blockStart in words[11].rstrip(",").split(",")
                 ]
+                if min(blockSizes) < 0:
+                    raise ValueError("Negative block size %d" % min(blockSizes))
                 if len(blockSizes) != blockCount:
                     raise ValueError(
                         "Inconsistent number of block sizes (%d found, expected %d)"

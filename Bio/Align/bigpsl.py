@@ -511,6 +511,8 @@ class AlignmentIterator(bigbed.AlignmentIterator):
         blockSizes = [int(blockSize) for blockSize in words[7].rstrip(",").split(",")]
         tStarts = [int(start) for start in words[8].rstrip(",").split(",")]
         qStarts = [int(start) for start in words[13].rstrip(",").split(",")]
+        if min(blockSizes) < 0:
+            raise ValueError("Negative block size %d" % min(blockSizes))
         if len(blockSizes) != blockCount:
             raise ValueError(
                 "Inconsistent number of blocks (%d found, expected %d)"

@@ -12732,6 +12732,14 @@ AlignmentCounts object with
             self.check_alignments(alignments)
 
 
+class TestAlign_bad_block_sizes(unittest.TestCase):
+    def test_negative_block_size(self):
+        """Test that a negative block size raises ValueError."""
+        line = "chr1\t100\t106\tq1\t0\t+\t100\t106\t0\t2\t5,-2,\t0,8,\n"
+        with self.assertRaisesRegex(ValueError, "Negative block size -2"):
+            next(Align.parse(StringIO(line), "bed"))
+
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     unittest.main(testRunner=runner)
