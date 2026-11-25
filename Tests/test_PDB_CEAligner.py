@@ -195,6 +195,72 @@ class CEAlignerTests(unittest.TestCase):
 
         self.assertLess(retained, 128 * 1024)
 
+    def test_ccealign_out_of_memory(self):
+        """Test that run_cealign raises MemoryError when an allocation fails.
+
+        Fail each allocation in turn, in a child process using the C
+        allocator, so that AddressSanitizer (which the CI sanitizer job
+        preloads) catches a double free or a use after free in the cleanup
+        in PyCealign and findPath; Python's own allocator would hide them.
+        That job turns leak checking off, so a leak there goes unnoticed.
+        """
+        version = sys.version_info
+        if sysconfig.get_config_var("Py_GIL_DISABLED") and not (
+            (3, 14, 11) <= version < (3, 15)
+            or (3, 15, 3) <= version < (3, 16)
+            or version >= (3, 16, 0, "alpha", 3)
+        ):
+            self.skipTest(
+                "free-threaded PyList_New crashes or hangs when its item "
+                "array allocation fails (CPython gh-151763)"
+            )
+        try:
+            import _testcapi
+        except ImportError:
+            self.skipTest("needs _testcapi")
+        if not hasattr(_testcapi, "set_nomemory"):
+            self.skipTest("needs _testcapi.set_nomemory")
+        code = """\
+import _testcapi
+import math
+from Bio.PDB.ccealign import run_cealign
+a = [[2.3 * math.cos(i * 1.75), 2.3 * math.sin(i * 1.75), 1.5 * i] for i in range(12)]
+b = [[x + 0.1, y, z] for x, y, z in a]
+expected = run_cealign(a, b, 8, 30)
+outcomes = []
+for start in range(400):
+    _testcapi.set_nomemory(start, start + 1)
+    try:
+        outcome = "ok" if run_cealign(a, b, 8, 30) == expected else "wrong"
+    except MemoryError:
+        outcome = "MemoryError"
+    finally:
+        # Disarm before anything else allocates, such as outcomes growing.
+        _testcapi.remove_mem_hooks()
+    outcomes.append(outcome)
+print(" ".join(outcomes))
+"""
+        env = dict(os.environ)
+        if not sysconfig.get_config_var("Py_GIL_DISABLED"):
+            # The free-threaded build rejects PYTHONMALLOC=malloc.
+            env["PYTHONMALLOC"] = "malloc"
+        child = subprocess.run(
+            [sys.executable, "-c", code],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(child.returncode, 0, child.stderr)
+        outcomes = child.stdout.split()
+        # Reading the coordinates, both distance matrices, the similarity
+        # matrix, the path search and building the result can each fail.
+        failures = outcomes.count("MemoryError")
+        self.assertGreaterEqual(failures, 10, outcomes)
+        # At least one success, so that the sweep passed the last allocation.
+        self.assertLess(failures, 400, "the sweep stopped before the end")
+        self.assertEqual(outcomes[failures:], ["ok"] * (400 - failures), outcomes)
+
 
 class RunCEAlignArgumentTests(unittest.TestCase):
     """Argument validation in run_cealign.
