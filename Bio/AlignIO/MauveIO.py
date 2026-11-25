@@ -242,7 +242,6 @@ class MauveIterator(AlignmentIterator):
 
         seqs: dict[str, str] = {}
         seq_regions = {}
-        passed_end_alignment = False
 
         latest_id = None
         while True:
@@ -287,7 +286,6 @@ class MauveIterator(AlignmentIterator):
                 seqs.setdefault(parsed_id, "")
                 latest_id = parsed_id
             else:
-                assert not passed_end_alignment  # noqa: S101
                 if latest_id is None:
                     raise ValueError("Saw sequence before definition line")
                 seqs[latest_id] += line
@@ -302,21 +300,17 @@ class MauveIterator(AlignmentIterator):
             alignment_length = max(map(len, list(seqs.values())))
             records = []
             for id in self._ids:
-                if id not in seqs or len(seqs[id]) == 0 or len(seqs[id]) == 0:
-                    seq = "-" * alignment_length
-                else:
-                    seq = seqs[id]
-
-                if alignment_length != len(seq):
-                    raise ValueError(
-                        "Sequences have different lengths, or repeated identifier"
-                    )
-
                 # Sometimes we don't see a particular sequence in the
                 # alignment, so we skip that record since it isn't present in
                 # that LCB/alignment
                 if id not in seq_regions:
                     continue
+
+                seq = seqs[id] or "-" * alignment_length
+                if alignment_length != len(seq):
+                    raise ValueError(
+                        "Sequences have different lengths, or repeated identifier"
+                    )
 
                 if seq_regions[id]["start"] != 0 or seq_regions[id]["end"] != 0:
                     suffix = "/{start}-{end}".format(**seq_regions[id])
@@ -341,6 +335,14 @@ class MauveIterator(AlignmentIterator):
                 )
 
                 records.append(record)
+            if (
+                self.records_per_alignment is not None
+                and self.records_per_alignment != len(records)
+            ):
+                raise ValueError(
+                    "Found %i records in this alignment, told to expect %i"
+                    % (len(records), self.records_per_alignment)
+                )
             return MultipleSeqAlignment(records)
         else:
             raise StopIteration
