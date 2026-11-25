@@ -792,6 +792,10 @@ class Nexus:
         # a matrix needs at least one character of input per column, so
         # _dimensions rejects an nchar larger than this
         self._input_length = len(file_contents)
+        # charsets, taxsets and partitions are stored as expanded lists, so
+        # _parse_list stops once all of them together hold more than about
+        # 100 entries per character of input
+        self._set_budget = 100 * max(self._input_length, 10000)
         file_contents = file_contents.strip()
         if file_contents.startswith("#NEXUS"):
             file_contents = file_contents[6:]
@@ -1465,7 +1469,7 @@ class Nexus:
                                 step = int(
                                     options_buffer.next_word()
                                 )  # get backslash and step
-                            items.update(range(start, end + 1, step))
+                            new = range(start, end + 1, step)
                         else:
                             if isinstance(start, list) or isinstance(end, list):
                                 raise NexusError(
@@ -1474,15 +1478,20 @@ class Nexus:
                                 )
                             start = self.taxlabels.index(start)
                             end = self.taxlabels.index(end)
-                            taxrange = self.taxlabels[start : end + 1]
-                            items.update(taxrange)
+                            new = self.taxlabels[start : end + 1]
+                    elif isinstance(start, list):
+                        # start was the name of charset or taxset
+                        new = start
                     else:
-                        if isinstance(start, list):
-                            # start was the name of charset or taxset
-                            items.update(start)
-                        else:
-                            # start was an ordinary identifier
-                            items.add(start)
+                        # start was an ordinary identifier
+                        new = (start,)
+                    self._set_budget -= len(new)
+                    if self._set_budget < 0:
+                        raise NexusError(
+                            "Character sets, taxon sets and partitions are too "
+                            "large for the size of the input."
+                        )
+                    items.update(new)
             except NexusError:
                 raise
             except (ValueError, TypeError):
