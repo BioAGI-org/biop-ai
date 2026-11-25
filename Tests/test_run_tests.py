@@ -716,6 +716,35 @@ class CIWorkflowTests(unittest.TestCase):
         self.assertIsNotNone(needs)
         self.assertEqual(jobs, {job.strip() for job in needs.group(1).split(",")})
 
+    def test_macos_and_windows_install_graphics_dependencies(self):
+        # Without reportlab and Pillow every Bio.Graphics and KGML rendering
+        # test skips, and expected_skips.txt allows that, so nothing warns.
+        path = os.path.join(TESTS_DIR, os.pardir, ".github", "workflows", "ci.yml")
+        if not os.path.isfile(path):
+            self.skipTest("no .github/workflows/ci.yml, e.g. in an sdist")
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        for job in ("test_macos", "test_windows"):
+            with self.subTest(job=job):
+                body = re.search(
+                    rf"^  {job}: *(?:#.*)?\n((?:(?:    .*)?\n)*)", text, re.MULTILINE
+                )
+                self.assertIsNotNone(body)
+                # Active install commands only, not commented-out ones
+                installs = re.findall(
+                    r"^ +(?:run: +)?python -m pip install ([^#\n]*)",
+                    body.group(1),
+                    re.MULTILINE,
+                )
+                # Package names are case-insensitive and may carry quotes, a
+                # version specifier, extras or an environment marker.
+                packages = {
+                    re.split(r"[<>=!~;\[]", pkg.strip("\"'"))[0].lower()
+                    for pkg in " ".join(installs).split()
+                }
+                self.assertIn("reportlab", packages)
+                self.assertIn("pillow", packages)
+
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)

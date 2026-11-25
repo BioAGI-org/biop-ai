@@ -259,9 +259,9 @@ jobs:
   # hosts (thus the three steps and not the single matrix entry).
   #
   # Linux tests install all the dev dependencies, while MacOS and Windows
-  # tests install a lightweight set: numpy on MacOS, and on Windows also
-  # msgpack, plus reportlab and Pillow so that the offline KGML rendering
-  # tests (and the other Bio.Graphics tests that need them) run there.
+  # tests install a lightweight set: numpy, reportlab and Pillow (so that the
+  # Bio.Graphics tests and the offline KGML rendering tests run there), and
+  # on Windows also msgpack.
   # NOTE: PyPy only runs on Linux with minimal dependencies because it's running slowly.
   #
   # Tests trigger only of the style and build steps succeed.
@@ -440,7 +440,7 @@ jobs:
 
     - name: Install minimal Python dependencies
       run: |
-        python -m pip install numpy pytest pytest-xdist pytest-cov
+        python -m pip install numpy reportlab pillow pytest pytest-xdist pytest-cov
 
     - name: Debug Info
       run: |
