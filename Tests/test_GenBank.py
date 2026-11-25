@@ -8306,6 +8306,98 @@ for record in SeqIO.parse(sys.stdin, "genbank"):
         self.assertIn("no key before '::'", str(cm.exception))
         self.assertIn(":: SPAdes v. 3.1", str(cm.exception))
 
+    def test_structured_comment_value_many_lines(self):
+        """A structured comment value over many lines parses quickly."""
+        # Each continuation line used to be added to the value string,
+        # copying it every time. 80,000 lines took 35 seconds, four times
+        # as long for each doubling, so 200,000 lines took minutes and the
+        # timeout fails the test. The new code takes about a second.
+        n = 200_000
+        handle = self.read_noref_with_comment_lines(
+            [
+                "##Assembly-Data-START##",
+                "Assembly Method       :: v1",
+                *["x" * 60] * n,
+                "##Assembly-Data-END##",
+            ]
+        )
+        code = f"""\
+import sys
+from Bio import SeqIO
+record = SeqIO.read(sys.stdin, "genbank")
+value = record.annotations["structured_comment"]["Assembly-Data"]["Assembly Method"]
+if value != " ".join(["v1"] + ["x" * 60] * {n}):
+    sys.exit("wrong value: %r..." % value[:70])
+"""
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(
+                None,
+                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
+            )
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            input=handle.getvalue(),
+            timeout=60,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_structured_comment_reopened_block_warns(self):
+        """A continuation line in a reopened block warns, not KeyError."""
+        # Here "field" still names B's last field when A is reopened, and
+        # A has no such field. This used to raise a bare KeyError.
+        handle = self.read_noref_with_comment_lines(
+            [
+                "##A-START##",
+                "f1 :: one",
+                "##A-END##",
+                "##B-START##",
+                "f2 :: two",
+                "##B-END##",
+                "##A-START##",
+                "more",
+                "##A-END##",
+            ]
+        )
+        with self.assertWarnsRegex(
+            BiopythonParserWarning, "Structured comment not parsed"
+        ):
+            record = SeqIO.read(handle, "genbank")
+        self.assertEqual(
+            record.annotations["structured_comment"],
+            {"A": {"f1": "one"}, "B": {"f2": "two"}},
+        )
+
+    def test_structured_comment_reopened_block_same_field_warns(self):
+        """A reopened block does not add to a field from an earlier block."""
+        # Here "field" names B's last field, f1, when A is reopened, and A
+        # also has an f1. The orphan line used to be added to A's f1.
+        handle = self.read_noref_with_comment_lines(
+            [
+                "##A-START##",
+                "f1 :: one",
+                "##A-END##",
+                "##B-START##",
+                "f1 :: two",
+                "##B-END##",
+                "##A-START##",
+                "more",
+                "##A-END##",
+            ]
+        )
+        with self.assertWarnsRegex(
+            BiopythonParserWarning, "Structured comment not parsed"
+        ):
+            record = SeqIO.read(handle, "genbank")
+        self.assertEqual(
+            record.annotations["structured_comment"],
+            {"A": {"f1": "one"}, "B": {"f1": "two"}},
+        )
+
     def test_unknown_description_genbank(self):
         """Read a DEFINITION line that is literally the SeqRecord default.
 
