@@ -187,6 +187,17 @@ def _set_hsp_seqs(hsp, parsed, program):
     :type program: string
 
     """
+    # a truncated or malformed HSP block may lack some of these
+    required = {"seq", "_start", "_stop", "_type"}
+    if "tfast" not in program:
+        required.add("_display_start")
+    for seq_type in ("query", "hit"):
+        missing = sorted(required - parsed[seq_type].keys())
+        if missing:
+            raise ValueError(
+                f"Incomplete HSP alignment block for hit {hsp.hit_id!r}:"
+                f" {seq_type} block is missing {', '.join(missing)}"
+            )
     # the parser collects the aligned sequence lines in lists
     for seq_type in ("hit", "query"):
         parsed[seq_type]["seq"] = "".join(parsed[seq_type]["seq"])
@@ -478,31 +489,8 @@ class FastaM10Parser:
         hit_desc = None
         seq_len = None
         while True:
-            # yield hit if we've reached the start of a new query or
-            # the end of the search
-            self.line = self.handle.readline()
-            if not self.line:
-                raise ValueError(
-                    f"File ended inside the alignments of query {query_id!r}"
-                )
-            if self.line.strip() in [">>><<<", ">>>///"] or (
-                not self.line.startswith(">>>") and ">>>" in self.line
-            ):
-                # append last parsed_hsp['hit']['seq'] line
-                if state == _STATE_HIT_BLOCK:
-                    parsed_hsp["hit"]["seq"].append(line.strip())
-                elif state == _STATE_CONS_BLOCK:
-                    hsp.aln_annotation["similarity"].append(line.strip("\r\n"))
-                # process HSP alignment and coordinates
-                _set_hsp_seqs(hsp, parsed_hsp, self._preamble["program"])
-                hit = Hit(hsp_list)
-                hit.description = hit_desc
-                hit.seq_len = seq_len
-                yield hit, strand
-                hsp_list = []
-                break
             # yield hit and create a new one if we're still in the same query
-            elif line.startswith(">>"):
+            if line.startswith(">>"):
                 # try yielding,  if we have hsps
                 if hsp_list:
                     _set_hsp_seqs(hsp, parsed_hsp, self._preamble["program"])
@@ -602,7 +590,23 @@ class FastaM10Parser:
                 # we should not get here!
                 else:
                     raise ValueError("Unexpected line: %r" % line)
-            line = self.line
+            # yield the last hit if the next line starts a new query or
+            # ends the search
+            self.line = line = self.handle.readline()
+            if not line:
+                raise ValueError(
+                    f"File ended inside the alignments of query {query_id!r}"
+                )
+            if line.strip() in [">>><<<", ">>>///"] or (
+                not line.startswith(">>>") and ">>>" in line
+            ):
+                # process HSP alignment and coordinates
+                _set_hsp_seqs(hsp, parsed_hsp, self._preamble["program"])
+                hit = Hit(hsp_list)
+                hit.description = hit_desc
+                hit.seq_len = seq_len
+                yield hit, strand
+                break
 
 
 class FastaM10Indexer(SearchIndexer):

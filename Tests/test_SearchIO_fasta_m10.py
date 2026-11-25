@@ -6,12 +6,14 @@
 """Tests for SearchIO FastaIO parsers."""
 
 import os
+import tempfile
 import unittest
 from io import StringIO
 
 import support
 from search_tests_common import run_python
 
+from Bio import SearchIO
 from Bio.SearchIO import parse
 
 # test case files are in the Blast directory
@@ -50,6 +52,20 @@ def truncated(filename, n):
     with open(get_file(filename)) as handle:
         lines = handle.readlines()
     return EndOfFileGuard("".join(lines[:n]))
+
+
+def look_up(text, query_id):
+    """Write text to a file, index it and return the record for query_id."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "cut.m10")
+        # newline="" keeps "\n" as it is; Windows would write "\r\n".
+        with open(path, "w", newline="") as handle:
+            handle.write(text)
+        index = SearchIO.index(path, FMT)
+        try:
+            return index[query_id]
+        finally:
+            index.close()
 
 
 class Fasta34Cases(unittest.TestCase):
@@ -3350,6 +3366,36 @@ class TruncatedCases(unittest.TestCase):
                     "File ended inside the alignments"
                     " of query 'gi|10955263|ref|NP_052604.1|'",
                 )
+
+    def test_end_marker_inside_hsp(self):
+        """Test a '>>><<<' end marker part way through an HSP block."""
+        # In output002.m10, line 95 is the first '>>' hit line, the first
+        # HSP's aligned query block runs from the ">gi|10955263| .." on line
+        # 107 to line 116, and its aligned hit block starts on line 117. The
+        # cuts fall straight after the '>>' hit line (95), before the query
+        # block (106), before the query's al_display_start (112), before the
+        # hit block (116) and before the hit's al_start (119).
+        with open(get_file("output002.m10")) as handle:
+            lines = handle.readlines()
+        cuts = (
+            (95, "query"),
+            (106, "query"),
+            (112, "query"),
+            (116, "hit"),
+            (119, "hit"),
+        )
+        for n, block in cuts:
+            text = "".join(lines[:n]) + ">>><<<\n"
+            message = (
+                "^Incomplete HSP alignment block for hit"
+                rf" 'gi\|162139799\|ref\|NP_309634\.2\|': {block} block is missing"
+            )
+            with self.subTest(lines=n, via="parse"):
+                with self.assertRaisesRegex(ValueError, message):
+                    list(parse(StringIO(text), FMT))
+            with self.subTest(lines=n, via="index"):
+                with self.assertRaisesRegex(ValueError, message):
+                    look_up(text, "gi|10955263|ref|NP_052604.1|")
 
 
 class LongLineCases(unittest.TestCase):
