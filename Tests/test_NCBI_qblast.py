@@ -4,8 +4,10 @@
 # as part of this package.
 """Testing online code for fetching NCBI qblast.
 
-Uses Bio.Blast.NCBIWWW.qblast() to run some online blast queries, get XML
-blast results back, and then checks Bio.Blast.NCBIXML.parse() can read them.
+Uses Bio.Blast.qblast() to run some online blast queries, get XML blast results
+back, and then checks Bio.Blast.read() can read them. One smoke test does the
+same with the deprecated Bio.Blast.NCBIWWW and Bio.Blast.NCBIXML modules, always
+against a mock file, so it does not repeat an online search.
 
 Goals:
     - Make sure that all retrieval is working as expected.
@@ -18,14 +20,14 @@ file contents instead of internet responses.
 
 IMPORTANT:
 If you add new tests (or change existing tests) you must provide new 'mock' xml
-files which fulfill the requirements of the respective tests. These need to be
-added to the 'response_list' within the 'mock_response' function. Note: The
-tests are run in alphabetical order, so you must place your mock file at the
-correct position.
+files which fulfill the requirements of the respective tests. Add them to
+MOCK_RESULTS under the name of the test that uses them.
 
 """
 
 import unittest
+import warnings
+from io import BufferedReader
 from io import BytesIO
 from unittest import mock
 from urllib.error import HTTPError
@@ -33,12 +35,17 @@ from urllib.error import HTTPError
 import requires_internet
 import support
 
+from Bio import Blast
+from Bio import BiopythonDeprecationWarning
 from Bio import MissingExternalDependencyError
 
-# We want to test these:
-from Bio.Blast import NCBIWWW
-from Bio.Blast import NCBIXML
+with warnings.catch_warnings():
+    # Still tested by test_deprecated_ncbiwww_ncbixml while they ship.
+    warnings.simplefilter("ignore", BiopythonDeprecationWarning)
+    from Bio.Blast import NCBIWWW
+    from Bio.Blast import NCBIXML
 
+Blast.email = "biopython@biopython.org"
 NCBIWWW.email = "biopython@biopython.org"
 
 
@@ -50,39 +57,19 @@ except MissingExternalDependencyError:
     # need to catch this error, because we want to run the tests even offline
     pass  # 'requires_internet_check.available' is now False
 
-if not requires_internet.check.available:
-    # if the tests are running with --offline or if no internet is available,
-    # we mock urlopen, so that it returns files from the blast folder
+# When offline, each qblast call gets the 'wait' page and then the next of
+# these result files, mimicking an NCBI qblast response.
+MOCK_RESULTS = {
+    "test_blastp_nr_actin": ["mock_actin.xml"],
+    "test_deprecated_ncbiwww_ncbixml": ["mock_actin.xml"],
+    "test_discomegablast": ["mock_disco.xml"],
+    "test_orchid_est": ["mock_orchid.xml"],
+    "test_pcr_primers": ["mock_pcr.xml"],
+    "test_short_query": ["mock_short_empty.xml", "mock_short_result.xml"],
+}
 
-    def mock_response():
-        """Mimic an NCBI qblast response."""
-        # Each use of NCBIWWW.qblast makes two urlopen calls with different responses:
-        # a. the 'wait' page, and b. the result.
-        blast = support.DATA / "Blast"
-        wait = [blast / "mock_wait.html"]  # This mimics the 'wait' page
-
-        # These mimic the results. Add new mock files here, if you add more tests.
-        # Note: The test are run in alphabetical order, so place new files at the
-        # correct position.
-        response_list = [
-            blast / "mock_actin.xml",  # result for test_blastp_nr_actin
-            blast / "mock_disco.xml",  # result for test_discomegalast
-            blast / "mock_orchid.xml",  # result for test_orchid_est
-            blast / "mock_pcr.xml",  # result for test_pcr_primers
-            blast / "mock_short_empty.xml",  # result for test_short_query # 1
-            blast / "mock_short_result.xml",  # result for test_short_query # 2
-            blast / "mock_short_result.xml",  # result for test_short_query # 3
-        ]
-
-        # Generate a list of responses with the structure wait|result|wait|result...
-        responses = (
-            BytesIO(open(a, "rb").read())
-            for b in zip(len(response_list) * wait, response_list)
-            for a in b
-        )
-        return responses
-
-    NCBIWWW.urlopen = mock.Mock(side_effect=mock_response())
+# Tests that use their mock files even when online.
+ALWAYS_MOCKED = {"test_deprecated_ncbiwww_ncbixml"}
 
 
 #####################################################################
@@ -98,13 +85,33 @@ if not requires_internet.check.available:
 
 class TestQblast(unittest.TestCase):
     def setUp(self):
-        if not requires_internet.check.available:
-            # We don't want to wait 20 sec for each test... NCBIWWW.time is
-            # the time module itself, so sleep is mocked only while a test
-            # here runs, not for every other test in the process.
-            patcher = mock.patch.object(NCBIWWW.time, "sleep")
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        if (
+            not requires_internet.check.available
+            or self._testMethodName in ALWAYS_MOCKED
+        ):
+            # if the tests are running with --offline or if no internet is
+            # available, we mock urlopen, so that it returns files from the
+            # Blast folder. Bio.Blast.qblast peeks at the stream, so each
+            # response is a BufferedReader.
+            blast = support.DATA / "Blast"
+            wait = (blast / "mock_wait.html").read_bytes()
+            responses = iter(
+                [
+                    BufferedReader(BytesIO(data))
+                    for name in MOCK_RESULTS.get(self._testMethodName, [])
+                    for data in (wait, (blast / name).read_bytes())
+                ]
+            )
+            for patcher in (
+                mock.patch.object(Blast, "urlopen", side_effect=responses),
+                mock.patch.object(NCBIWWW, "urlopen", side_effect=responses),
+                # We don't want to wait 20 sec for each test... Blast.time is
+                # the time module itself, so sleep is mocked only while a test
+                # here runs, not for every other test in the process.
+                mock.patch.object(Blast.time, "sleep"),
+            ):
+                patcher.start()
+                self.addCleanup(patcher.stop)
 
     def test_blastp_nr_actin(self):
         # Simple protein blast filtered for rat only, using protein
@@ -246,122 +253,83 @@ class TestQblast(unittest.TestCase):
     ):
         """Do qblast searches with given parameters and analyze results."""
         try:
-            if program == "blastn":
-                # Check the megablast parameter is accepted
-                handle = NCBIWWW.qblast(
-                    program,
-                    database,
-                    query,
-                    alignments=10,
-                    descriptions=10,
-                    hitlist_size=10,
-                    entrez_query=entrez_filter,
-                    expect=e_value,
-                    **additional_args,
-                )
-            else:
-                handle = NCBIWWW.qblast(
-                    program,
-                    database,
-                    query,
-                    alignments=10,
-                    descriptions=10,
-                    hitlist_size=10,
-                    entrez_query=entrez_filter,
-                    expect=e_value,
-                    **additional_args,
-                )
+            handle = Blast.qblast(
+                program,
+                database,
+                query,
+                alignments=10,
+                descriptions=10,
+                hitlist_size=10,
+                entrez_query=entrez_filter,
+                expect=e_value,
+                **additional_args,
+            )
         except HTTPError:
             # e.g. a proxy error
             raise MissingExternalDependencyError("internet connection failed") from None
 
-        record = NCBIXML.read(handle)
-
-        if record.query == "No definition line":
-            # We used a sequence as the query
-            self.assertEqual(len(query), record.query_letters)
-        elif query.startswith(">"):
-            # We used a FASTA record as the query
-            expected = query[1:].split("\n", 1)[0]
-            self.assertEqual(expected, record.query)
-        elif (
-            record.query_id.startswith("Query_") and len(query) == record.query_letters
-        ):
-            # We used a sequence as the entry and it was given a placeholder name
-            pass
-        else:
-            # We used an identifier as the query
-            self.assertIn(
-                query,
-                record.query_id.split("|"),
-                f"Expected {query!r} within query_id {record.query_id!r}",
-            )
+        with handle:
+            record = Blast.read(handle)
 
         # Check the recorded input parameters agree with those requested
-        self.assertEqual(float(record.expect), e_value)
-        self.assertEqual(record.application.lower(), program)
-        self.assertLessEqual(len(record.alignments), 10)
-        self.assertLessEqual(len(record.descriptions), 10)
+        self.assertEqual(float(record.param["expect"]), e_value)
+        self.assertEqual(record.program.lower(), program)
+        self.assertLessEqual(len(record), 10)
 
-        # Check the expected result(s) are found in the alignments
-        if expected_hits is None:
-            self.assertEqual(len(record.alignments), 0)  # Expected no alignments!
-        else:
-            self.assertGreater(len(record.alignments), 0)  # Expected some alignments!
-            found_result = False
-            for expected_hit in expected_hits:
-                for alignment in record.alignments:
-                    if expected_hit in alignment.hit_id.split("|"):
-                        found_result = True
-                        break
-            self.assertTrue(
-                found_result,
-                "Missing all expected hits (%s), instead have: %s"
-                % (
-                    ", ".join(expected_hits),
-                    ", ".join(a.hit_id for a in record.alignments),
-                ),
-            )
+        # Check the expected result(s) are found in the hits
+        self.assertGreater(len(record), 0)  # Expected some hits!
+        hit_ids = [hit.target.id for hit in record]
+        self.assertTrue(
+            any(
+                expected_hit in hit_id.split("|")
+                for expected_hit in expected_hits
+                for hit_id in hit_ids
+            ),
+            f"Missing all expected hits ({', '.join(expected_hits)}), "
+            f"instead have: {', '.join(hit_ids)}",
+        )
 
-        # Check the expected result(s) are found in the descriptions
-        if expected_hits is None:
-            # Expected no descriptions!
-            self.assertEqual(len(record.descriptions), 0)
-        else:
-            # Expected some descriptions!
-            self.assertGreater(len(record.descriptions), 0)
-            found_result = False
-            for expected_hit in expected_hits:
-                for descr in record.descriptions:
-                    if (
-                        expected_hit == descr.accession
-                        or expected_hit in descr.title.split(None, 1)[0].split("|")
-                    ):
-                        found_result = True
-                        break
-            msg = f"Missing all of {expected_hit} in descriptions"
-            self.assertTrue(found_result, msg=msg)
+    def test_deprecated_ncbiwww_ncbixml(self):
+        """Smoke test of the deprecated NCBIWWW.qblast and NCBIXML.read.
+
+        This always runs against mock_actin.xml (see ALWAYS_MOCKED), as
+        test_blastp_nr_actin already runs this search online.
+        """
+        handle = NCBIWWW.qblast(
+            "blastp",
+            "nr",
+            "NP_075631.2",
+            hitlist_size=10,
+            entrez_query="rat [ORGN]",
+            expect=0.001,
+        )
+        record = NCBIXML.read(handle)
+        handle.close()
+        self.assertEqual(record.application.lower(), "blastp")
+        self.assertEqual(float(record.expect), 0.001)
+        self.assertIn(
+            "NP_112408.1",
+            [part for a in record.alignments for part in a.hit_id.split("|")],
+        )
 
     def test_parse_qblast_ref_page(self):
         with open(support.DATA / "Blast" / "html_msgid_29_blastx_001.html", "rb") as f:
             handle = BytesIO(f.read())
-        self.assertRaises(ValueError, NCBIWWW._parse_qblast_ref_page, handle)
+        self.assertRaises(ValueError, Blast._parse_qblast_ref_page, handle)
 
     def test_short_query(self):
         """Test SHORT_QUERY_ADJUST parameter."""
         # Should give no hits:
-        my_search = NCBIWWW.qblast("blastp", "nr", "ICWENRMP", hitlist_size=5)
-        my_hits = NCBIXML.read(my_search)
-        my_search.close()
-        self.assertEqual(len(my_hits.alignments), 0)
+        with Blast.qblast("blastp", "nr", "ICWENRMP", hitlist_size=5) as my_search:
+            my_hits = Blast.read(my_search)
+        self.assertEqual(len(my_hits), 0)
 
         # Should give hits:
-        my_search = NCBIWWW.qblast(
+        with Blast.qblast(
             "blastp", "nr", "ICWENRMP", hitlist_size=5, short_query=True
-        )
-        my_hits = NCBIXML.read(my_search)
-        my_search.close()
-        self.assertNotEqual(len(my_hits.alignments), 0)
+        ) as my_search:
+            my_hits = Blast.read(my_search)
+        self.assertNotEqual(len(my_hits), 0)
 
         # Disabled for 1.81 release
         # Query does not seem to be returning anything so
@@ -371,21 +339,21 @@ class TestQblast(unittest.TestCase):
         #     # Cause all warnings to always be triggered.
         #     warnings.simplefilter("always")
         #     # Trigger a warning.
-        #     my_search = NCBIWWW.qblast(
+        #     my_search = Blast.qblast(
         #         "blastn", "nt", "ATGTCAACTTCAGAA", hitlist_size=5, short_query=True
         #     )
         #     # Verify some things
         #     self.assertEqual(w[0].category, BiopythonWarning)
         #     self.assertIn("blastn", str(w[0].message))
-        #     my_hits = NCBIXML.read(my_search)
+        #     my_hits = Blast.read(my_search)
         #     my_search.close()
-        #     self.assertNotEqual(len(my_hits.alignments), 0)
+        #     self.assertNotEqual(len(my_hits), 0)
 
     def test_error_conditions(self):
         """Test if exceptions were properly handled."""
         self.assertRaises(
             ValueError,
-            NCBIWWW.qblast,
+            Blast.qblast,
             "megablast",
             "nt",
             "ATGCGTACGCAGCTAAAGTAAACCTATCGCGTCTCCT",
