@@ -7,6 +7,7 @@
 """Tests for SearchIO hmmer2 text module."""
 
 import unittest
+from io import StringIO
 
 import support
 
@@ -254,6 +255,29 @@ class HmmpfamTests(unittest.TestCase):
         res = next(results)
         self.assertEqual("PKSI-KS", res[0].id)
         self.assertEqual("PKSI-FK", res[1].id)
+
+    def test_hmmpfam_truncated_before_domain_rows(self):
+        """Test a file cut before a hit gets a domain-table row (#581)."""
+        with open(support.DATA / "Hmmer" / "text_21_hmmpfam_001.out") as handle:
+            # The first 18 lines end on the domain-table header.
+            text = "".join(handle.readlines()[:18])
+        with self.assertRaisesRegex(ValueError, "no row in the domain table"):
+            list(parse(StringIO(text), self.fmt))
+
+    def test_hmmpfam_domain_row_for_unknown_hit(self):
+        """Test a domain-table row naming a hit not in the hit table (#581)."""
+        with open(support.DATA / "Hmmer" / "text_21_hmmpfam_001.out") as handle:
+            lines = handle.readlines()
+        # Line 19 is the first domain-table row, for the only hit, SEED.
+        self.assertTrue(lines[18].startswith("SEED       1/2 "))
+        lines[18] = lines[18].replace("SEED", "XEED", 1)
+        with self.assertRaises(ValueError) as cm:
+            list(parse(StringIO("".join(lines)), self.fmt))
+        self.assertEqual(
+            str(cm.exception),
+            "Domain table of query 'roa1_drome' names hit 'XEED',"
+            " which is not in the hit table",
+        )
 
     def test_hmmpfam_24(self):
         """Test parsing hmmpfam 2.4 file (text_24_hmmpfam_001.out)."""
