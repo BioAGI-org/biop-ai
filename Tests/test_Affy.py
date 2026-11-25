@@ -559,6 +559,30 @@ class AffyTest(unittest.TestCase):
                 ):
                     CelFile.read(io.BytesIO(bad), version=4)
 
+    def testAffy4BadHeaderField(self):
+        # A missing header field raised a bare KeyError, which escapes
+        # "except ValueError", and a non-integer one a plain ValueError
+        # that did not name the field (issue #524).
+        with open(self.affy4, "rb") as f:
+            data = f.read()
+        cases = [
+            (b"\nDatHeader=", b"\nNotDatHeader=", "file has no DatHeader header"),
+            (b"\nOffsetY=", b"\nNotOffsetY=", "file has no OffsetY header"),
+            (b"\nRows=5\n", b"\nRows=x\n", "header Rows should be an integer, not 'x'"),
+            (b"\nOffsetX=0", b"\nOffsetX=z", "header OffsetX should be an integer"),
+        ]
+        for old, new, message in cases:
+            with self.subTest(message=message):
+                self.assertEqual(data.count(old), 1)
+                headerLen = struct.unpack_from("<i", data, 20)[0]
+                headerLen += len(new) - len(old)
+                bad = data[:20] + struct.pack("<i", headerLen)
+                bad += data[24:].replace(old, new)
+                with self.assertRaisesRegex(
+                    CelFile.ParserError, f"^CEL version 4 {message}"
+                ):
+                    CelFile.read(io.BytesIO(bad), version=4)
+
     @unittest.skipIf(tracemalloc is None, "tracemalloc is not available")
     def testAffy4SizesBeyondEndOfFileMemory(self):
         # From a real file, as opposed to io.BytesIO, a single read(n) sets

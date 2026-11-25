@@ -211,19 +211,34 @@ def _read_v4(f):
     if record.version != 4:
         raise ParserError("Incorrect version number in CEL version 4 file")
 
-    record.GridCornerUL = headersMap["GridCornerUL"]
-    record.GridCornerUR = headersMap["GridCornerUR"]
-    record.GridCornerLR = headersMap["GridCornerLR"]
-    record.GridCornerLL = headersMap["GridCornerLL"]
-    record.DatHeader = headersMap["DatHeader"]
-    record.Algorithm = headersMap["Algorithm"]
-    record.AlgorithmParameters = headersMap["AlgorithmParameters"]
+    def required(field):
+        try:
+            return headersMap[field]
+        except KeyError:
+            raise ParserError(f"CEL version 4 file has no {field} header") from None
+
+    def required_int(field):
+        value = required(field)
+        try:
+            return int(value)
+        except ValueError:
+            raise ParserError(
+                f"CEL version 4 header {field} should be an integer, not {value!r}"
+            ) from None
+
+    record.GridCornerUL = required("GridCornerUL")
+    record.GridCornerUR = required("GridCornerUR")
+    record.GridCornerLR = required("GridCornerLR")
+    record.GridCornerLL = required("GridCornerLL")
+    record.DatHeader = required("DatHeader")
+    record.Algorithm = required("Algorithm")
+    record.AlgorithmParameters = required("AlgorithmParameters")
     record.NumberCells = preHeadersMap["cellNo"]
     # record.intensities are set below
     # record.stdevs are set below
     # record.npix are set below
-    record.nrows = int(headersMap["Rows"])
-    record.ncols = int(headersMap["Cols"])
+    record.nrows = required_int("Rows")
+    record.ncols = required_int("Cols")
     if not (
         record.nrows >= 0
         and record.ncols >= 0
@@ -246,7 +261,7 @@ def _read_v4(f):
     # to take chances. Raising an error is better than returning unreliable
     # data.
     def raiseBadHeader(field, expected):
-        actual = int(headersMap[field])
+        actual = required_int(field)
         message = f"The header {field} is expected to be 0, not {actual}"
         if actual != expected:
             raise ParserError(message)
