@@ -12935,6 +12935,23 @@ class TestAlign_searching(unittest.TestCase):
             self.assertRaises(StopIteration, next, alignments1)
 
 
+class TestAlign_bad_block_sizes(unittest.TestCase):
+    def test_negative_block_size(self):
+        """Test that a negative block size raises ValueError."""
+        # An item for chr1:11873-11879 whose blocks 5,-2 at 0,8 end at 11879,
+        # and on the query at 0,5 end at 3.
+        words = [
+            "q", "1000", "+", "11873", "11879", "0", "2", "5,-2,", "0,8,",
+            "0", "3", "+", "20", "0,5,", "", "", "248956422",
+            "0", "0", "0", "0", "0",
+        ]  # fmt: skip
+        rest = "\t".join(words).encode() + b"\x00"
+        path = support.DATA / "Blat" / "bigPsl.bb"
+        with Align.parse(path, "bigpsl") as alignments:
+            with self.assertRaisesRegex(ValueError, "Negative block size -2"):
+                alignments._create_alignment(0, 11873, 11879, rest, 0, len(rest))
+
+
 class TestAlign_chromId_not_in_index(unittest.TestCase):
     def test_chromId_not_in_index(self):
         """Test that an item whose chromId is not indexed raises ValueError."""

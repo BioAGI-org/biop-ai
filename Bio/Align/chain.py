@@ -217,6 +217,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 self._line = line
                 break
             step = int(words[0])
+            if step < 0:
+                raise ValueError("Negative block size %d" % step)
             qPosition += step
             tPosition += step
             qStarts.append(qPosition)
@@ -225,6 +227,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 break
             tGap = int(words[1])
             qGap = int(words[2])
+            if tGap < 0 or qGap < 0:
+                raise ValueError("Negative gap size %d" % min(tGap, qGap))
             if tGap > 0:
                 tPosition += tGap
                 qStarts.append(qPosition)

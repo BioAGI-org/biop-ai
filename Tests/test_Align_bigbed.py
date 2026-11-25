@@ -8879,6 +8879,17 @@ print(count)
         self.assertEqual(result.stdout, "100000\n")
 
 
+class TestAlign_bad_block_sizes(unittest.TestCase):
+    def test_negative_block_size(self):
+        """Test that a negative block size raises ValueError."""
+        # An item for chr1:1000-1006 whose blocks 5,-2 at 0,8 end at 1006.
+        rest = b"mRNA1\t960\t+\t1000\t1006\t255,0,0\t2\t5,-2,\t0,8,\x00"
+        path = support.DATA / "Blat" / "bed12.bb"
+        with Align.parse(path, "bigbed") as alignments:
+            with self.assertRaisesRegex(ValueError, "Negative block size -2"):
+                alignments._create_alignment(0, 1000, 1006, rest, 0, len(rest))
+
+
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     unittest.main(testRunner=runner)

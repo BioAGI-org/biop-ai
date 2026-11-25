@@ -1150,6 +1150,8 @@ class AlignmentIterator(interfaces.AlignmentIterator):
             blockCount = int(words[6])
             blockSizes = np.fromiter(words[7].rstrip(",").split(","), int)
             blockStarts = np.fromiter(words[8].rstrip(",").split(","), int)
+            if min(blockSizes) < 0:
+                raise ValueError("Negative block size %d" % min(blockSizes))
             if len(blockSizes) != blockCount:
                 raise ValueError(
                     "Inconsistent number of block sizes (%d found, expected %d)"
