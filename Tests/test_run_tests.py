@@ -211,12 +211,6 @@ class ProbeTests(unittest.TestCase):
     def run_pytest(files, *options):
         """Write files to a temporary directory and run pytest on them there."""
         with tempfile.TemporaryDirectory() as directory:
-            # On Windows the temporary directory may come as a short (8.3)
-            # name, such as RUNNER~1, while the child sees its working
-            # directory under the long name. pytest then took their common
-            # parent, the shared temporary directory, and failed on a sibling
-            # that another test process removed meanwhile. Use the long name.
-            directory = os.path.realpath(directory)
             paths = []
             for name, text in files.items():
                 path = os.path.join(directory, name)
@@ -242,28 +236,40 @@ class ProbeTests(unittest.TestCase):
             # --noconftest and -c keep any conftest.py or configuration file
             # in the temporary directory's parents out of the run; -p loads
             # Tests/conftest.py (importable from PYTHONPATH) as a plugin.
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "pytest",
-                    "--noconftest",
-                    "-p",
-                    "conftest",
-                    "-p",
-                    "no:cacheprovider",
-                    "-c",
-                    PYPROJECT,
-                    "--rootdir",
-                    directory,
-                    *options,
-                    *paths,
-                ],
-                cwd=directory,
-                env=env,
-                capture_output=True,
-                text=True,
-            )
+            # On the Windows runners, the child pytest now and then failed to
+            # collect with FileNotFoundError on a directory beside its own or
+            # above it, such as another test's temporary directory, removed
+            # while pytest was listing it. Why pytest lists those directories
+            # is not known (using the long name of the temporary directory,
+            # and a parent of its own, did not help), so run it again then.
+            for _ in range(3):
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        "--noconftest",
+                        "-p",
+                        "conftest",
+                        "-p",
+                        "no:cacheprovider",
+                        "-c",
+                        PYPROJECT,
+                        "--rootdir",
+                        directory,
+                        *options,
+                        *paths,
+                    ],
+                    cwd=directory,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                if not (
+                    "ERROR collecting" in result.stdout
+                    and "FileNotFoundError" in result.stdout
+                ):
+                    break
         return result.returncode, result.stdout + result.stderr
 
     def test_import_time_skips_and_check_skips(self):
