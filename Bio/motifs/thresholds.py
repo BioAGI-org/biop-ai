@@ -147,6 +147,14 @@ class ScoreDistribution:
             self.n_points = precision * motif.length
             self.ic = motif.ic()
         else:
+            for letter in pssm.alphabet:
+                if not all(map(math.isfinite, pssm[letter])):
+                    raise ValueError(
+                        "Cannot compute the score distribution of a matrix with "
+                        "an infinite or NaN value; a log-odds matrix has -inf "
+                        "wherever a count is zero, which pseudocounts avoid, and "
+                        "+inf or NaN wherever a background frequency is zero"
+                    )
             self.min_score = min(0.0, pssm.min)
             self.interval = max(0.0, pssm.max) - self.min_score
             self.n_points = precision * pssm.length
