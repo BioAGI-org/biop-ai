@@ -7,10 +7,11 @@
 
 import io
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
-from subprocess import getoutput
+from unittest import mock
 
 import support
 
@@ -24,7 +25,7 @@ os.environ["LANG"] = "C"
 
 
 # Only the tests that run the psea program need it, so they skip without it.
-have_psea = getoutput("psea -h").startswith("o---")
+have_psea = subprocess.getoutput("psea -h").startswith("o---")
 
 
 def require_psea(test):
@@ -115,19 +116,47 @@ class TestPDBPSEA(unittest.TestCase):
         self.assertTrue(os.path.exists(psae_run))
         self.assertTrue(psae_run.endswith(".sea"))
 
+
+def fake_run(cmd, cwd, **kwargs):
+    """Stand in for the psea program: write <name>.sea where it runs.
+
+    The output always holds what psea gives for 2BEG.pdb.
+    """
+    base = os.path.splitext(os.path.basename(cmd[1]))[0]
+    with open(os.path.join(cwd, base + ".sea"), "w") as handle:
+        handle.write(">p-sea\nccccbbbbbbbccccbbbbbbbbbbc\n\n")
+    return subprocess.CompletedProcess(cmd, 0, "", "")
+
+
+class TestRunInTempDir(unittest.TestCase):
+    """run_in_temp_dir, with a stand-in for psea, so it needs no psea."""
+
+    def setUp(self):
+        run_in_temp_dir(self)
+
     def test_keeps_existing_sea_files(self):
         """Running a test leaves the .sea files in the directory alone."""
         with open("unrelated.sea", "w") as handle:
             handle.write("keep\n")
-        with open("1A8O.sea", "w") as handle:
-            handle.write("mine\n")
+        for name in ("1A8O.sea", "2BEG.sea"):
+            with open(name, "w") as handle:
+                handle.write("mine\n")
         result = unittest.TestResult()
-        TestPDBPSEA("test_run_psea_quiet").run(result)
+        # Run a real test of each class that runs psea, even without psea.
+        with (
+            mock.patch("Bio.PDB.PSEA.subprocess.run", fake_run),
+            mock.patch.object(sys.modules[__name__], "have_psea", True),
+        ):
+            TestPDBPSEA("test_run_psea_tempdir").run(result)
+            TestPSEA("test_get_seq").run(result)
         self.assertTrue(result.wasSuccessful(), result.failures + result.errors)
+        self.assertEqual(result.testsRun, 2)
+        self.assertFalse(result.skipped)
         with open("unrelated.sea") as handle:
             self.assertEqual(handle.read(), "keep\n")
-        with open("1A8O.sea") as handle:
-            self.assertEqual(handle.read(), "mine\n")
+        for name in ("1A8O.sea", "2BEG.sea"):
+            with open(name) as handle:
+                self.assertEqual(handle.read(), "mine\n", name)
 
 
 class TestPsea2HEC(unittest.TestCase):
