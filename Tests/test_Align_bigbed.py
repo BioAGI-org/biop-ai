@@ -8297,6 +8297,54 @@ class TestAlign_malformed_chromosome_index(unittest.TestCase):
                     f"extends past the end of the file ({size} bytes)",
                 )
 
+    def test_wide_node(self):
+        # A synthetic index (accepted by the parser; UCSC writes no empty
+        # leaves) whose root has 65535 children, the most a node can have:
+        # 65534 empty leaves, then the leaf of bed3.bb. Each child used
+        # to be taken with list.pop(0), which shifts the children left after
+        # it, about 2 billion moves in all, so time was quadratic in the
+        # width. Count those moves with a profile hook instead of timing.
+        width = 65535
+        with open(support.DATA / "Blat" / "bed3.bb", "rb") as stream:
+            data = stream.read()
+        (index_offset,) = struct.unpack_from("<Q", data, 8)
+        leaf = data[index_offset + 32 : index_offset + 32 + 4 + 5 + 8]
+        stream, offsets = self.make_stream([list(range(1, width + 1))] + [[]] * width)
+        # The last node, an empty leaf, ends the file; swap in bed3.bb's leaf.
+        # Each node is a seek, so use a plain stream, not a SeekGuard. The
+        # block size in the index header (byte 4 of its 32 bytes) is the
+        # most children a node may have; bed3.bb's is 1, so raise it.
+        data = bytearray(stream.getvalue()[: offsets[-1]] + leaf)
+        struct.pack_into("<I", data, offsets[0] - 32 + 4, width)
+        stream = BytesIO(bytes(data))
+        moves = 0
+        popping = None
+
+        def count_moves(frame, event, arg):
+            nonlocal moves, popping
+            if getattr(arg, "__name__", None) != "pop":
+                return
+            items = getattr(arg, "__self__", None)
+            if not isinstance(items, list):
+                return
+            if event == "c_call":
+                popping = items[-1] if items else None
+            elif event == "c_return" and items and items[-1] == popping:
+                # Not taken from the end, so the items after it moved left.
+                moves += len(items)
+
+        profile = sys.getprofile()
+        sys.setprofile(count_moves)
+        try:
+            alignments = Align.parse(stream, "bigbed")
+        finally:
+            sys.setprofile(profile)
+        with alignments:
+            self.assertEqual(len(alignments.targets), 1)
+            self.assertEqual(alignments.targets[0].id, "chr22")
+            self.assertEqual(len(list(alignments)), 2)
+        self.assertLess(moves, width)
+
 
 class TestAlign_malformed_data_index(unittest.TestCase):
     """R tree indices of the data whose nodes do not form a tree."""
