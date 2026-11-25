@@ -8586,6 +8586,30 @@ class TestAlign_malformed_data_block(unittest.TestCase):
                 coordinates, [[[1000, 5000], [0, 4000]], [[2000, 6000], [0, 4000]]]
             )
 
+    def test_chromId_not_in_index(self):
+        # bed3.bb has one chromosome, chr22, so its only chromId is 0. Looking
+        # up chromId 7 in the chromosome list used to raise IndexError.
+        items = struct.pack("<III", 7, 1000, 5000) + self.items[12:]
+        stream, _ = self.make_stream(zlib.compress(items))
+        message = (
+            "The item at 1000-5000 has chromId 7, which is not in the "
+            "chromosome index (number of chromosomes: 1)"
+        )
+        with Align.parse(stream, "bigbed") as alignments:
+            with self.assertRaises(ValueError) as cm:
+                next(alignments)
+            self.assertEqual(str(cm.exception), message)
+            # Searching all chromosomes reads every item, as iterating does.
+            with self.assertRaises(ValueError) as cm:
+                next(alignments.search())
+            self.assertEqual(str(cm.exception), message)
+            # Searching one chromosome skips items on others, as before.
+            coordinates = [
+                alignment.coordinates.tolist()
+                for alignment in alignments.search("chr22")
+            ]
+            self.assertEqual(coordinates, [[[2000, 6000], [0, 4000]]])
+
     def test_one_byte_too_large(self):
         block = zlib.compress(self.items)
         self.check(block, len(self.items) - 1, self.too_large)

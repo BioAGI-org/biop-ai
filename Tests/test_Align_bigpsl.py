@@ -3,8 +3,11 @@
 # license.  Please see the LICENSE file that should have been included
 # as part of this package.
 """Tests for Align.bigpsl module."""
+import struct
 import tempfile
 import unittest
+import zlib
+from io import BytesIO
 
 import support
 
@@ -12930,6 +12933,38 @@ class TestAlign_searching(unittest.TestCase):
             alignment1 = next(alignments1)
             self.assertEqual(alignment1.query.id, "name8")
             self.assertRaises(StopIteration, next, alignments1)
+
+
+class TestAlign_chromId_not_in_index(unittest.TestCase):
+    def test_chromId_not_in_index(self):
+        """Test that an item whose chromId is not indexed raises ValueError."""
+        # dna_rna.psl.bb has one chromosome, chr3, so its only chromId is 0.
+        # The root of its R tree index (after the 48-byte index header, whose
+        # offset is at byte 24 of the file header) is a leaf holding its one
+        # compressed data block; the offset and size of the block are the
+        # last 16 of the 4 + 32 bytes of the leaf. Give the first item of the
+        # block chromId 7 and append the block, recompressed, to the file.
+        with open(support.DATA / "Blat" / "dna_rna.psl.bb", "rb") as stream:
+            data = bytearray(stream.read())
+        (index_offset,) = struct.unpack_from("<Q", data, 24)
+        offset, size = struct.unpack_from("<QQ", data, index_offset + 48 + 20)
+        items = bytearray(zlib.decompress(data[offset : offset + size]))
+        chromStart, chromEnd = struct.unpack_from("<II", items, 4)
+        struct.pack_into("<I", items, 0, 7)
+        block = zlib.compress(bytes(items))
+        struct.pack_into("<QQ", data, index_offset + 48 + 20, len(data), len(block))
+        data += block
+        message = (
+            f"The item at {chromStart}-{chromEnd} has chromId 7, which is not "
+            "in the chromosome index (number of chromosomes: 1)"
+        )
+        with Align.parse(BytesIO(bytes(data)), "bigpsl") as alignments:
+            with self.assertRaises(ValueError) as cm:
+                next(alignments)
+            self.assertEqual(str(cm.exception), message)
+            with self.assertRaises(ValueError) as cm:
+                next(alignments.search())
+            self.assertEqual(str(cm.exception), message)
 
 
 if __name__ == "__main__":
