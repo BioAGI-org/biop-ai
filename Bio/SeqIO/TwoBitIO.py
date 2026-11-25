@@ -162,6 +162,9 @@ class _TwoBitSequenceData(SequenceDataAbstractBaseClass):
                 raise ValueError("cannot retrieve sequence: file is closed") from None
             raise
         data = np.fromfile(stream, dtype="uint8", count=byteSize)
+        if len(data) < byteSize:
+            # The file is shorter than when it was parsed
+            raise ValueError("Unexpected end of file at byte %d" % stream.tell())
         sequence = _twoBitIO.convert(
             data, start, end, step, self.nBlocks, self.maskBlocks
         )

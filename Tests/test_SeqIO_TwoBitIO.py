@@ -302,6 +302,25 @@ for start, end, step in ((0, 16, 1), (0, 16, 2), (15, -1, -1)):
                         str(cm.exception), "Unexpected end of file at byte %d" % size
                     )
 
+    def test_file_truncated_after_parsing(self):
+        """Check a file that shrinks after parsing raises ValueError on access."""
+        path = support.DATA / "TwoBit" / "sequence.bigendian.2bit"
+        with tempfile.TemporaryFile() as stream:
+            stream.write(path.read_bytes())
+            stream.seek(0)
+            seq = next(SeqIO.parse(stream, "twobit")).seq
+            # Keep only the first 10 bytes (40 bases) of the 480 bases of DNA
+            stream.truncate(seq._data.offset + 10)
+            for key in (slice(None), slice(None, None, 3), slice(100, 200), -1):
+                with self.subTest(key=key):
+                    with self.assertRaises(ValueError) as cm:
+                        seq[key]
+                    self.assertTrue(
+                        str(cm.exception).startswith("Unexpected end of file at byte")
+                    )
+            # The DNA that is still in the file can still be read
+            self.assertEqual(seq[:40], self.records[0].seq[:40])
+
     def test_dna_size_too_large(self):
         """Check a sequence length is checked against the file size."""
         # One record holding one byte of DNA (TCAG), with no blocks
