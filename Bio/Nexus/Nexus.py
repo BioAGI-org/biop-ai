@@ -1264,22 +1264,24 @@ class Nexus:
         self.translate = {}
         opts = CharBuffer(options)
         while True:
+            # get id and state
+            word = opts.next_word()
             try:
-                # get id and state
-                identifier = int(opts.next_word())
-                # hyphen allowed in unquoted labels (biopython/biopython#1022)
-                label = quotestrip(opts.next_word("-"))
-                self.translate[identifier] = label
-                # check for comma or end of command
-                c = opts.next_nonwhitespace()
-                if c is None:
-                    break
-                elif c != ",":
-                    raise NexusError(f"Missing ',' in line {options}.")
-            except NexusError:
-                raise
-            except Exception:  # TODO: ValueError?
-                raise NexusError(f"Format error in line {options}.") from None
+                identifier = int(word)
+            except (ValueError, TypeError) as e:
+                # int() of a non-number, or of None when the number is missing
+                raise NexusError(f"Format error in line {options}.") from e
+            # hyphen allowed in unquoted labels (biopython/biopython#1022)
+            label = opts.next_word("-")
+            if label is None:
+                raise NexusError(f"Missing label for {identifier} in line {options}.")
+            self.translate[identifier] = quotestrip(label)
+            # check for comma or end of command
+            c = opts.next_nonwhitespace()
+            if c is None:
+                break
+            elif c != ",":
+                raise NexusError(f"Missing ',' in line {options}.")
 
     def _utree(self, options):
         """Use 'utree' to denote an unrooted tree (ex: clustalx) (PRIVATE)."""
