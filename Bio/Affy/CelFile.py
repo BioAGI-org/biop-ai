@@ -288,7 +288,7 @@ def _read_v4(f):
         )
 
     # After that there are precisely 15 bytes padded. Again, undocumented.
-    padding = f.read(15)
+    _read_v4_bytes(f, 15, "padding")
 
     # That's how we pull out the values (triplets of the form float, float,
     # signed short).
