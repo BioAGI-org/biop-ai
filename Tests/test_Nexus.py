@@ -2364,6 +2364,29 @@ class TestNcharBound(unittest.TestCase):
                 self.assertEqual(nexus.charsets, charsets)
                 self.assertLess(peak, 1_000_000)
 
+    def test_many_full_width_charsets(self):
+        """Sets holding over 100 entries per input character raise NexusError."""
+        # each charset is stored as a list of every index it covers, so many
+        # short charsets of the whole alignment used (number of charsets) x
+        # nchar memory: 1000 charsets of 20000 characters, a 40 KB input,
+        # kept 792 MB
+        head = (
+            "#NEXUS\nbegin data;\ndimensions ntax=1 nchar=5000;\n"
+            f"format datatype=dna;\nmatrix\nt1 {'A' * 5000}\n;\nend;\n"
+            "begin sets;\n"
+        )
+        # 150 x 5000 entries is under 100 per character of the ~8 KB input
+        # (with its floor of 10,000 characters); 300 x 5000 is over
+        text = head + "".join(f"charset c{i} = 1-5000;\n" for i in range(150))
+        nexus = Nexus.Nexus(text + "end;\n")
+        self.assertEqual(len(nexus.charsets), 150)
+        self.assertEqual(nexus.charsets["c149"], list(range(5000)))
+        text += "".join(f"charset c{i} = 1-5000;\n" for i in range(150, 300))
+        with self.assertRaisesRegex(
+            Nexus.NexusError, "too large for the size of the input"
+        ):
+            Nexus.Nexus(text + "end;\n")
+
 
 def parse_in_child(testcase, code, *args):
     """Run code in a child Python that imports this checkout's Bio.
