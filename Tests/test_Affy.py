@@ -5,7 +5,6 @@
 """Tests for Affy module."""
 
 import io
-import os
 import struct
 import tempfile
 import unittest
@@ -33,15 +32,8 @@ from Bio.Affy import CelFile
 
 
 class AffyTest(unittest.TestCase):
-    def setUp(self):
-        self.affy3 = support.DATA / "Affy" / "affy_v3_example.CEL"
-        self.affy4 = support.DATA / "Affy" / "affy_v4_example.CEL"
-        self.affy4Bad = support.DATA / "Affy" / "affy_v4_bad_example.CEL"
-        with open(self.affy4Bad, "wb") as f:
-            self.writeExampleV4(f, bad=True)
-
-    def tearDown(self):
-        os.remove(self.affy4Bad)
+    affy3 = support.DATA / "Affy" / "affy_v3_example.CEL"
+    affy4 = support.DATA / "Affy" / "affy_v4_example.CEL"
 
     # tests the Affymetrix v3 parser
     def testAffy3(self):
@@ -268,9 +260,13 @@ class AffyTest(unittest.TestCase):
         self.assertEqual(record.AlgorithmParameters[-3:], "169")
 
     def testAffyBadHeader(self):
+        # Built in memory, not written to the shared Tests/Affy directory,
+        # so parallel test workers cannot race on the same file.
+        f = io.BytesIO()
+        self.writeExampleV4(f, bad=True)
+        f.seek(0)
         with self.assertRaises(CelFile.ParserError):
-            with open(self.affy4Bad, "rb") as f:
-                record = CelFile.read(f)
+            CelFile.read(f)
 
     def testAffyDatHeaderWithoutBrackets(self):
         with open(self.affy3) as f:
