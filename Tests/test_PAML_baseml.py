@@ -9,6 +9,7 @@ import os
 import os.path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 import support
@@ -344,6 +345,41 @@ with tempfile.TemporaryDirectory() as tmp:
             params = results["parameters"]
             self.assertIn("SEs", params, version_msg)
 
+    def testParseParameterListOnlyAfterLnL(self):
+        """Take the parameter list only from the line after the lnL line.
+
+        The first line in the file with np numbers was once taken as the
+        parameter list: with np 4 that was a base frequency row, with a nan
+        in the real list it was the "rate:" line, and a match on the last
+        line raised IndexError.
+        """
+        path = os.path.join(self.results_dir, "baseml", "model", "model0-4_7.out")
+        with open(path) as handle:
+            text = handle.read()
+        real = (
+            " 0.000004 0.000004 0.000004 0.004514 0.004515 0.000004 0.009061 999.000000"
+        )
+        self.assertIn(real, text)
+        rate = "rate:   0.95611  0.98294  0.99967  1.01660  1.04468\n"
+        nan_list = " 0.000004 nan 0.004514 0.004515 999.000000"
+        cases = [
+            ("np 4", "np:  4", " 0.000004 0.004514 0.004515 999.000000", None),
+            ("nan in list", "np:  5", nan_list, None),
+            ("match on last line", "np:  5", nan_list, rate),
+        ]
+        expected = {"np 4": "0.000004 0.004514 0.004515 999.000000"}
+        with tempfile.TemporaryDirectory() as tmp:
+            for label, np_text, param_list, last_line in cases:
+                with self.subTest(label):
+                    edited = text.replace("np:  8", np_text).replace(real, param_list)
+                    if last_line:
+                        edited = edited.rsplit("rate:", 1)[0] + last_line
+                    out_file = os.path.join(tmp, "edited.out")
+                    with open(out_file, "w") as handle:
+                        handle.write(edited)
+                    params = baseml.read(out_file)["parameters"]
+                    self.assertEqual(params.get("parameter list"), expected.get(label))
+
     def testParseThreeDigitParameterCount(self):
         """Read np when ntime or np has 3 digits.
 
@@ -363,6 +399,78 @@ with tempfile.TemporaryDirectory() as tmp:
         params = parse_parameters(lines, results, num_params)["parameters"]
         self.assertEqual(params["parameter list"], row)
         self.assertEqual(params["SEs"], row)
+
+    def testParseSEsWithNan(self):
+        """The line after "SEs for parameters:" is the SEs, even with a nan.
+
+        With a nan in the row it has fewer than np numbers. The SEs flag
+        then stayed set, and the "rate:" line was taken as the SEs.
+        """
+        lines = """\
+lnL(ntime:  3  np:  3):   -100.000000      +0.000000
+   4..1     4..2     4..3
+  0.10000  0.20000  0.30000
+SEs for parameters:
+  0.01000      nan  0.03000
+
+rate:   0.95611  0.98294  0.99967
+""".splitlines(
+            True
+        )
+        results, num_params = parse_basics(lines, {})
+        params = parse_parameters(lines, results, num_params)["parameters"]
+        self.assertEqual(params["parameter list"], "0.10000  0.20000  0.30000")
+        self.assertEqual(params["SEs"], "0.01000      nan  0.03000")
+
+    def testParseSEsAfterBlankLine(self):
+        """A blank line after "SEs for parameters:" is skipped."""
+        lines = """\
+lnL(ntime:  3  np:  3):   -100.000000      +0.000000
+   4..1     4..2     4..3
+  0.10000  0.20000  0.30000
+SEs for parameters:
+
+  0.01000  0.02000  0.03000
+""".splitlines(
+            True
+        )
+        results, num_params = parse_basics(lines, {})
+        params = parse_parameters(lines, results, num_params)["parameters"]
+        self.assertEqual(params["SEs"], "0.01000  0.02000  0.03000")
+
+    def testParseSEsMissing(self):
+        """A line after "SEs for parameters:" that is not numbers is not SEs."""
+        lines = """\
+lnL(ntime:  3  np:  3):   -100.000000      +0.000000
+   4..1     4..2     4..3
+  0.10000  0.20000  0.30000
+SEs for parameters:
+rate:   0.95611  0.98294  0.99967
+""".splitlines(
+            True
+        )
+        results, num_params = parse_basics(lines, {})
+        params = parse_parameters(lines, results, num_params)["parameters"]
+        self.assertNotIn("SEs", params)
+
+    def testParseSEsWithoutParameterList(self):
+        """The SEs are read when the parameter list row is missing.
+
+        "SEs for parameters:" right after the branch labels was taken as
+        the parameter list candidate, so its SEs were skipped.
+        """
+        lines = """\
+lnL(ntime:  3  np:  3):   -100.000000      +0.000000
+   4..1     4..2     4..3
+SEs for parameters:
+  0.01000  0.02000  0.03000
+""".splitlines(
+            True
+        )
+        results, num_params = parse_basics(lines, {})
+        params = parse_parameters(lines, results, num_params)["parameters"]
+        self.assertNotIn("parameter list", params)
+        self.assertEqual(params["SEs"], "0.01000  0.02000  0.03000")
 
 
 if __name__ == "__main__":
