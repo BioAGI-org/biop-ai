@@ -3270,6 +3270,23 @@ class TruncatedCases(unittest.TestCase):
                     list(parse(truncated(filename, n), FMT))
                 self.assertEqual(str(cm.exception), message)
 
+    def test_hit_block_before_first_query_line(self):
+        """Test a '>>>' hit block that comes before any query line."""
+        # In output001.m10, lines 1 to 7 are the preamble, line 8 is the first
+        # query line "  1>>>gi|10955263|...", and line 24 opens its hit block,
+        # ">>>gi|10955263|ref|NP_052604.1|, 107 aa vs NC_009649.faa library".
+        # Dropping lines 8 to 23 leaves that hit block with no query.
+        with open(get_file("output001.m10")) as handle:
+            lines = handle.readlines()
+        text = "".join(lines[:7] + lines[23:])
+        with self.assertRaises(ValueError) as cm:
+            list(parse(StringIO(text), FMT))
+        self.assertEqual(
+            str(cm.exception),
+            "Expected a query line '>>>ID DESCRIPTION - LENGTH aa'"
+            " before the first hit block, found:\n" + repr(lines[23]),
+        )
+
     def test_cut_before_first_hit(self):
         """Test a query whose alignments end before the first '>>' hit."""
         # In output001.m10, line 24 is ">>>gi|10955263|ref|NP_052604.1|, ...",
