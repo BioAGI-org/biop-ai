@@ -282,6 +282,196 @@ Other modules:
   ``bytes()``, iteration, ``in`` and ``count()``, and can be written as
   GenBank.
 
+A third round of fixes from the same audit (issues #469 to #604) covers
+faults found while the second round was reviewed: more malformed input that
+raised ``KeyError``, ``IndexError``, ``AttributeError``,
+``UnboundLocalError`` and the like instead of ``ValueError``, readers and
+writers whose run time grew with the square of the input, network clients
+that could wait for ever on a server that never answers, and places that
+gave wrong results with no error. Valid files give the same results as
+before, except as listed here. The Windows, macOS and PyPy test jobs in
+continuous integration fail the build again when a test fails, and the
+graphics tests, which were skipped on macOS, run there.
+
+``Bio.Align`` and ``Bio.AlignIO``:
+
+- bigBed, bigPsl and bigMaf: ``search()`` works with no chromosome and on
+  files with no zoom levels, and no longer decompresses blocks outside the
+  query. Files with no alignments can be written and read, but one whose
+  item count and index disagree about that is rejected. An item with more
+  values than the declared custom fields raises ``ValueError``; the extra
+  values used to be dropped. Wide chromosome indexes are read in linear
+  time.
+- BED, bigBed, bigPsl and chain files reject a negative block size, and
+  chain files a negative gap size, which used to be ignored. A MAF 'i' or
+  'q' line that does not follow an 's' line raises ``ValueError``.
+- PSL lines with zero-size blocks, which UCSC's ``pslCheck`` accepts, are
+  read; a line with no block of positive size raises ``ValueError``.
+- Stockholm (``Bio.Align``) reads markup lines whose fields are separated by
+  tabs, and raises ``ValueError`` for lines before the header, a markup tag
+  with too few fields, or an alignment with no sequences.
+- Mauve (``Bio.AlignIO``) checks ``seq_count``. The writer lists every
+  sequence in the first block, with ``N:0-0`` placeholders as the Mauve
+  program does, so a first alignment lacking some sequences gains all-gap
+  rows on re-reading. The writer reads all the alignments before writing
+  the first.
+- ``Alignment.from_alignments_with_same_reference`` works with int32 and
+  uint32 coordinates, and ``Alignment.inverse_indices`` raises the clear
+  ``ValueError`` for SAM alignments read without ``@SQ`` headers.
+- ``MafIndex.get_spliced`` skips a reference row of size 0.
+  ``MafIndex.search`` returns no blocks for coordinates beyond SQLite's
+  64-bit range, and very wide queries no longer exhaust memory.
+
+``Bio.SeqIO``, ``Bio.GenBank`` and ``Bio.bgzf``:
+
+- The "fasta" parser raises ``ValueError`` for non-ASCII letters in a
+  sequence, which it stored as UTF-8 bytes, giving the wrong length. A GCK
+  file with nothing after its header, and a SeqXML file that declares an
+  entity, raise ``ValueError``. Reading SeqXML from a handle no longer
+  closes it. A ``.2bit`` file that got shorter after it was parsed raises
+  ``ValueError``, not ``RuntimeError``. An ABI boolean entry with several
+  elements is a tuple, not a single ``True``.
+- ``close()`` on a ``SeqIO.index_db`` or ``SearchIO.index_db`` dictionary
+  closes the SQLite file, so it can be deleted on Windows, and a later
+  lookup raises ``sqlite3.ProgrammingError`` instead of reopening the
+  files. ``SeqIO.index`` and ``SearchIO.index`` close the file when
+  indexing fails.
+- BGZF-compressed EMBL files and the ``SearchIO`` HMMER, Infernal,
+  Exonerate, fasta-m10, BLAT and BLAST tabular formats can be indexed when
+  a record crosses a block boundary; such records failed to load or gave
+  the wrong bytes. A BGZF block with a bad CRC or length raises an error
+  that is both ``ValueError`` and ``RuntimeError``, and short reads from raw
+  handles no longer look like a truncated block.
+- GenBank and EMBL multi-line qualifier and structured comment values are
+  read in linear time, as are CONTIG and CO lines and ``str()`` of a
+  ``Bio.GenBank`` record on PyPy. A continuation line that reopens a
+  structured comment block gives a ``BiopythonParserWarning`` instead of a
+  ``KeyError`` or text added to an earlier field.
+
+``Bio.SearchIO``:
+
+- Malformed or truncated fasta-m10, HMMER, HHsuite and Infernal text files
+  raise ``ValueError`` instead of ``KeyError``, ``IndexError``,
+  ``AttributeError``, ``TypeError`` or ``UnboundLocalError``.
+- Behaviour changes, each in ``DEPRECATED.rst``: a fasta-m10 file with no
+  ``>>><<<`` line after its last query raises, where that query came back
+  with hits missing. A ``//`` line before any query raises in infernal-text,
+  hmmer2-text and hmmer3-text. HHsuite files, and ``Bio.Align`` hhr files,
+  with no ``Query`` line raise, where SearchIO gave an ``id`` of ``None``.
+- ``get_raw`` no longer adds a second ``>>><<<`` line to the last fasta-m10
+  query, nor, from ``index_db``, the next query's first line to a blat-psl
+  query.
+- Long alignments in hhsuite2-text, hmmer3-text and infernal-text, and long
+  runs of spaces in blast-xml hit IDs, are read in linear time (8 to 16
+  million residues took eight minutes or more).
+
+``Bio.Blast`` and the other web clients:
+
+- ``qblast`` (in ``Bio.Blast`` and ``Bio.Blast.NCBIWWW``) raises
+  ``RuntimeError`` when NCBI reports a search as failed or no longer knows
+  it, instead of polling for ever. ``Bio.Blast.qblast`` has a new
+  ``max_wait`` argument, the total wait in seconds before it raises
+  ``TimeoutError`` (default ``None``, no limit), and warns once about a slow
+  search, not at every poll. ``NCBIWWW.qblast`` accepts ``timeout``.
+- ``Bio.Blast.NCBIXML`` reads long text elements in linear time; an 8 MiB
+  element took 3.7 s and now takes 0.06 s.
+- ``Bio.Entrez``, ``Bio.ExPASy``, ``Bio.KEGG.REST`` and ``Bio.TogoWS`` have
+  a module variable ``timeout``, and ``ScanProsite.scan`` and ``weblogo`` in
+  ``Bio.motifs`` a ``timeout`` keyword: a socket timeout for connecting and
+  for each read. The default, ``None``, behaves as before. A ``timeout``
+  given to ``scan`` or ``weblogo`` used to be sent to the server. In
+  ``Bio.Entrez`` a read timeout raises ``TimeoutError`` at once, while a
+  connection timeout is retried.
+
+``Bio.Nexus``, ``Bio.Phylo`` and ``Bio.Phylo.PAML``:
+
+- Errors inside a known NEXUS command are no longer reported as "Unknown
+  command", and TRANSLATE no longer turns unrelated errors into
+  ``NexusError`` but raises it for an entry with no label. Trees with
+  parentheses inside ``[&...]`` comments, and one-leaf trees, are read, and
+  ``to_string(ignore_comments=False)`` writes the comments. Repeated names
+  such as ``seq.copy_a`` are renamed instead of raising (a repeated
+  ``a.copy-1`` becomes ``a.copy-1.copy``, not ``a.copy0``), an empty
+  sequence can be added, and quoted charpartition names are written back in
+  quotes.
+- Writing an alignment as NEXUS takes linear time (20,000 repeated plus
+  50,000 distinct names take under half a second, where they did not finish
+  in 20 s). Charsets, taxsets and partitions together may store 100
+  entries per character of input (at least 1,000,000 in all) before
+  ``NexusError`` is raised.
+- The Newick reader handles many unclosed ``[`` comments in linear time; a
+  few hundred kilobytes used to take minutes.
+- ``codeml.read`` gives site-class omega values as floats, not strings.
+  ``baseml.read`` takes the parameter list only from the line after
+  ``lnL``, and leaves it out rather than give a wrong line. Both read the
+  parameter list and standard errors of models with 100 or more
+  parameters, which they left out, and no longer take a later table row
+  for the standard errors. ``chi2.cdf_chi2`` raises ``ValueError`` for
+  an infinite or NaN number of degrees of freedom or a NaN statistic.
+- ``Codeml.run()``, ``Baseml.run()`` and ``Yn00.run()`` start the program in
+  ``working_dir`` instead of changing the process's working directory, so
+  runs in parallel threads no longer interfere. A relative ``ctl_file`` is
+  taken relative to ``working_dir``, and on Windows a file on another drive
+  no longer makes ``run()`` fail.
+
+``Bio.Cluster``:
+
+- Spearman distances change when a mask is used with unequal weights; each
+  weight was applied to the wrong value.
+- ``Cluster.read`` reads files whose first header cell is NAME, GWEIGHT or
+  GORDER, and raises ``ValueError`` for a header that repeats one of
+  them. ``Record.save`` raises ``ValueError`` for a ``gorder`` or
+  ``eorder`` of the wrong size and writes no file; it could write a
+  truncated ``.cdt`` file.
+- On CPython, Ctrl-C stops a long ``clusterdistance`` or ``pca`` call within
+  about a second. ``somcluster`` raises ``RuntimeError`` for a grid of more
+  than 2**31 - 1 cells, which never worked. The private
+  ``_cluster.clustercentroids`` raises ``ValueError`` instead of
+  ``RuntimeError``; see ``DEPRECATED.rst``.
+
+``Bio.motifs``:
+
+- Malformed ``pfm-four-rows``, ``pfm-four-columns`` and ``jaspar`` input
+  raises ``ValueError`` naming the problem. Before, a motif with fewer than
+  four rows was merged into the next or dropped, a header such as
+  ``T7 promoter`` was read as a T row, counts after a stray word or a truncated
+  last JASPAR matrix were dropped, and a file in another format gave no
+  motifs. A ``pfm-four-rows`` row needs whitespace, ``[`` or ``|`` after
+  its letter, and a bare ``>`` line starts an unnamed motif.
+- A PSSM keeps the background it was built with, as ``pssm.background``,
+  and ``distribution()`` and ``ScoreDistribution`` use it by default instead
+  of a uniform one, so their false-negative-rate thresholds for a
+  non-uniform background are now right. ``ScoreDistribution(motif=...)``
+  and ``ScoreDistribution(pssm=...)`` work, and ``threshold_patser`` gives
+  the lowest score where it raised for a mismatched background.
+- The MEME and MAST readers' ``ValueError`` gives the line and column.
+
+``Bio.PDB``:
+
+- Ctrl-C stops ``CEAligner`` while it builds its matrices, and a large
+  ``max_gap`` no longer slows it; the alignments are unchanged.
+- ``kdtrees.Point`` and ``kdtrees.Neighbor`` accept indices above
+  2**31 - 1, and ``psea2HEC`` raises ``ValueError`` for a symbol other than
+  a, b or c instead of copying the previous letter.
+
+Other modules:
+
+- ``Bio.Affy.CelFile.read`` raises ``ValueError`` for a ``version`` other
+  than ``None``, 3 or 4, or one that does not match the file; it was
+  ignored. Malformed CEL v3 lines and v4 headers raise ``ParserError`` (a
+  ``ValueError``) instead of ``KeyError`` or ``IndexError``, and
+  ``Record.nmodified`` is always set.
+- ``Bio.KEGG``: Compound PATHWAY names with a double space or a line wrap
+  read back from ``str(record)``, and Gene's ``str(record)`` also writes
+  DEFINITION, ORTHOLOGY, ORGANISM, POSITION and MOTIF. Enzyme STRUCTURES
+  lines for databases other than PDB are separate entries, not merged into
+  the PDB IDs. A continuation line before any ``database:`` line raises
+  ``ValueError`` naming the field.
+- ``Bio.SCOP`` raises ``ValueError`` instead of ``AttributeError`` when a
+  CLA sunid names a DES node that is not a domain, and
+  ``ACEFileRecord.sort()`` in ``Bio.Sequencing.Ace`` no longer duplicates
+  whole-assembly tags when called again.
+
 ``Bio.PDB.PDBIO.save`` has a new ``write_ter`` keyword. The default, ``True``,
 writes exactly what it wrote before. With ``write_ter=False`` no ``TER``
 records are written, for tools that do not expect them. In the default
