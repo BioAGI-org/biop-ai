@@ -1881,7 +1881,7 @@ class Nexus:
                         command,
                         safename(n),
                         ", ".join(
-                            f"{sn}: {_compact4nexus(newpartition[sn])}"
+                            f"{safename(sn)}: {_compact4nexus(newpartition[sn])}"
                             for sn in names
                             if sn in newpartition
                         ),
