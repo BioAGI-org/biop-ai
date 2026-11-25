@@ -1190,6 +1190,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                 raise ValueError(
                     "start and end must both be None if chromosome is None"
                 )
+            data = self._iterate_index(stream)
         else:
             for chromIx, target in enumerate(self.targets):
                 if target.id == chromosome:
@@ -1204,7 +1205,7 @@ class AlignmentIterator(interfaces.AlignmentIterator):
                     raise ValueError("end must be None if start is None")
             elif end is None:
                 end = start + 1
-        data = self._search_index(stream, chromIx, start, end)
+            data = self._search_index(stream, chromIx, start, end)
         for row in data:
             chromIx, chromStart, chromEnd, rest, dataStart, dataEnd = row
             alignment = self._create_alignment(
