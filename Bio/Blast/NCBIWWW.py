@@ -311,6 +311,8 @@ def qblast(
         status = results[i + len("Status=") : j].strip()
         if status.upper() == "READY":
             break
+        if status.upper() in ("FAILED", "UNKNOWN"):
+            raise RuntimeError(f"BLAST request {rid} has status {status} on the server")
     return StringIO(results)
 
 
