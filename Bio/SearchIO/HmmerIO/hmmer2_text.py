@@ -232,7 +232,12 @@ class Hmmer2TextParser:
                 hsp.hit_endtype = seq_compl
 
             if id_ not in unordered_hits:
-                placeholder = [p for p in hit_placeholders if p.id_ == id_][0]
+                placeholder = next((p for p in hit_placeholders if p.id_ == id_), None)
+                if placeholder is None:
+                    raise ValueError(
+                        f"Domain table of query {self.qresult.id!r} names hit "
+                        f"{id_!r}, which is not in the hit table"
+                    )
                 hit = placeholder.createHit([hsp])
                 unordered_hits[id_] = hit
             else:
@@ -243,6 +248,12 @@ class Hmmer2TextParser:
         # The placeholder list is in the correct order, so use that order for
         # the Hit objects in the qresult
         for p in hit_placeholders:
+            if p.id_ not in unordered_hits:
+                raise ValueError(
+                    f"Hit {p.id_!r} of query {self.qresult.id!r} is in the hit "
+                    "table but has no row in the domain table; the file may be "
+                    "truncated"
+                )
             self.qresult.append(unordered_hits[p.id_])
 
     def parse_hsp_alignments(self):
