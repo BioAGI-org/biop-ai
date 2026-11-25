@@ -413,6 +413,11 @@ if sqlite3:
 
         def test_wide_coordinates_beyond_sqlite_integer_range(self):
             """Wide queries, also those past 2**63 - 1, do not list their bins."""
+            if sys.platform == "win32":
+                # As in test_correct_retrieval_1: git may check the MAF file
+                # out with Windows newlines, which the bundled index's
+                # offsets do not allow for (biopython issues 3640 and 1149).
+                self.skipTest("the bundled index assumes Unix newlines")
             # A query has one bin per 128 kb at the finest level, so listing
             # the bins of a query of 2**60 bases would exhaust memory. Count
             # the bases whose bins are listed instead of running out of it.
