@@ -469,7 +469,7 @@ jobs:
   # cibuildwheel only import-tests; this job runs the suite on that platform.
   # It also matters for floating point: aarch64 always has fused multiply-add,
   # and GCC contracts a*b+c into one by default (-ffp-contract=fast), whereas
-  # on baseline x86-64 it cannot. Minimal dependencies, as on macOS.
+  # on baseline x86-64 it cannot. Minimal dependencies: numpy only.
   test_linux_arm:
     timeout-minutes: 15
     needs: [style, build]
