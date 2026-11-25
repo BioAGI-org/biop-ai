@@ -412,11 +412,35 @@ class PositionWeightMatrix(GenericPositionMatrix):
                         logodds = math.nan
                 values[letter].append(logodds)
         pssm = PositionSpecificScoringMatrix(alphabet, values)
+        pssm.background = background
         return pssm
 
 
 class PositionSpecificScoringMatrix(GenericPositionMatrix):
-    """Class for the support of Position Specific Scoring Matrix calculations."""
+    """Class for the support of Position Specific Scoring Matrix calculations.
+
+    The background attribute holds the normalised background the PSSM was
+    built with by PositionWeightMatrix.log_odds, or None if it is unknown.
+    """
+
+    background = None
+
+    def __getitem__(self, key):
+        """Return the item, with the stored background if it is a PSSM."""
+        item = super().__getitem__(key)
+        if isinstance(item, PositionSpecificScoringMatrix):
+            if self.background is not None:
+                item.background = dict(self.background)
+        return item
+
+    def reverse_complement(self):
+        """Compute reverse complement, complementing the background too."""
+        rc = super().reverse_complement()
+        if self.background is not None:
+            b = self.background
+            t = "U" if self.alphabet == "ACGU" else "T"
+            rc.background = {"A": b[t], "C": b["G"], "G": b["C"], t: b["A"]}
+        return rc
 
     def calculate(self, sequence):
         """Return the PWM score for a given sequence for all positions.
@@ -650,21 +674,21 @@ class PositionSpecificScoringMatrix(GenericPositionMatrix):
 
         The background must be the one the PSSM was built with, as the motif
         probabilities are recovered from the scores as 2**score * background.
-        It defaults to a uniform background. With any other background the
-        false negative rates are wrong. A BiopythonWarning is given when, in
-        any column, 2**score * background adds up to a total that differs
-        from 1 by more than 0.1% (math.isclose with rel_tol=1e-3), that is,
-        when the background does not match the normalised column weights. This
-        check can miss a mismatched background whose column totals still
-        come to 1.
+        It defaults to that background, which log_odds stores on the PSSM as
+        its background attribute, or to a uniform one for a PSSM without it.
+        With any other background the false negative rates are wrong, and a
+        BiopythonWarning is given when it differs from the stored one by more
+        than 0.1% (math.isclose with rel_tol=1e-3) for any letter. Without a
+        stored background, the warning is given when, in any column,
+        2**score * background adds up to a total that differs from 1 by more
+        than 0.1%; this check can miss a mismatched background whose column
+        totals still come to 1.
         """
         from .thresholds import ScoreDistribution
 
-        if background is None:
-            background = dict.fromkeys(self.alphabet, 1.0)
-        else:
+        if background is not None:
             background = dict(background)
-        total = sum(background.values())
-        for letter in self.alphabet:
-            background[letter] /= total
+            total = sum(background.values())
+            for letter in self.alphabet:
+                background[letter] /= total
         return ScoreDistribution(precision=precision, pssm=self, background=background)

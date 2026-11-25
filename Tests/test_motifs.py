@@ -6260,9 +6260,9 @@ class TestScoreDistribution(unittest.TestCase):
         """A background other than the PSSM's own gives a warning.
 
         The motif density is built as 2**score * background, which adds up
-        to 1 only with the background the PSSM was built with; with the
-        default uniform one it added up to 1.068 here, and the FNR
-        thresholds were silently wrong.
+        to 1 only with the background the PSSM was built with; with a
+        uniform one it added up to 1.068 here, and the FNR thresholds were
+        silently wrong.
         """
         motif = motifs.create([Seq("TACAA"), Seq("TACGC"), Seq("AATGC")])
         motif.pseudocounts = 0.5
@@ -6272,10 +6272,80 @@ class TestScoreDistribution(unittest.TestCase):
             warnings.simplefilter("error")
             distribution = pssm.distribution(motif.background)
         self.assertAlmostEqual(sum(distribution.mo_density), 1)
-        for background in (None, {"A": 0.1, "C": 0.4, "G": 0.4, "T": 0.1}):
+        for background in (
+            {"A": 0.25, "C": 0.25, "G": 0.25, "T": 0.25},
+            {"A": 0.1, "C": 0.4, "G": 0.4, "T": 0.1},
+        ):
             with self.subTest(background=background):
                 with self.assertWarnsRegex(BiopythonWarning, "background"):
                     pssm.distribution(background)
+        # Without a stored background, the column totals give it away.
+        unknown = PositionSpecificScoringMatrix("ACGT", pssm)
+        with self.assertWarnsRegex(BiopythonWarning, "background"):
+            unknown.distribution()
+
+    def test_stored_background(self):
+        """The PSSM keeps its background, as the default and to check against.
+
+        log_odds dropped the background, so distribution() defaulted to a
+        uniform one, and a wrong background whose column totals of
+        2**score * background still came to 1 gave wrong FNR thresholds
+        with no warning (#535).
+        """
+        motif = motifs.create([Seq(letter) for letter in "ACCGGGTTTT"])
+        pssm = motif.pssm  # built with a uniform background
+        # 2**score * background adds up to 0.14 + 0.04 + 0.42 + 0.40 = 1.
+        background = {"A": 0.35, "C": 0.05, "G": 0.35, "T": 0.25}
+        with self.assertWarnsRegex(BiopythonWarning, "background"):
+            pssm.distribution(background, precision=100)
+        motif.background = background
+        pssm = motif.pssm
+        self.assertEqual(pssm.background, background)
+        rc = pssm.reverse_complement()
+        self.assertEqual(rc.background, {"A": 0.25, "C": 0.35, "G": 0.05, "T": 0.35})
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            distribution = pssm.distribution(precision=100)
+            expected = pssm.distribution(background, precision=100)
+            rc.distribution(precision=100)
+        self.assertEqual(distribution.mo_density, expected.mo_density)
+        self.assertEqual(distribution.bg_density, expected.bg_density)
+
+    def test_sliced_pssm_keeps_background(self):
+        """A slice of a PSSM that is itself a PSSM keeps the background.
+
+        With a list alphabet, a full-alphabet slice is a PSSM; it had no
+        background, so its distribution used a uniform one, and the motif
+        density added up to 1.686 here.
+        """
+        background = {"A": 0.1, "C": 0.4, "G": 0.4, "T": 0.1}
+        counts = {"A": [1, 2], "C": [2, 1], "G": [3, 1], "T": [4, 6]}
+        pwm = PositionWeightMatrix(list("ACGT"), counts)
+        sliced = pwm.log_odds(background)[:, 1:]
+        self.assertIsInstance(sliced, PositionSpecificScoringMatrix)
+        self.assertEqual(sliced.background, background)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            distribution = sliced.distribution(precision=100)
+        self.assertAlmostEqual(sum(distribution.mo_density), 1)
+
+    def test_motif_background_changed_in_place(self):
+        """ScoreDistribution(motif=...) uses the background the PSSM was built with.
+
+        It reread motif.background, which an in-place change leaves
+        unnormalised, while the PSSM normalises it; the densities then
+        added up to more than 1, with a mismatch warning.
+        """
+        motif = motifs.create([Seq("ACGT"), Seq("ACGA"), Seq("TCGT")])
+        motif.pseudocounts = 0.5
+        motif.background["A"] = 0.4
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            distribution = ScoreDistribution(motif=motif, precision=100)
+            expected = motif.pssm.distribution(precision=100)
+        self.assertEqual(distribution.mo_density, expected.mo_density)
+        self.assertEqual(distribution.bg_density, expected.bg_density)
+        self.assertAlmostEqual(sum(distribution.bg_density), 1)
 
     def test_infinite_score_raises(self):
         """An infinite log-odds score raises a ValueError naming the cause.
