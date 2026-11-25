@@ -196,6 +196,8 @@ def _read_pfm_four_columns(handle):
                     motif_nbr_added = motif_nbr
 
                 # Reinitialize variables for the new motif.
+                if nbr_columns < 2:
+                    raise ValueError(f"Missing name in line: {line!r}")
                 motif_name = columns[1]
                 nucleotide_order = default_nucleotide_order
             elif columns[0] == "Motif":
@@ -208,6 +210,8 @@ def _read_pfm_four_columns(handle):
                     motif_nbr_added = motif_nbr
 
                 # Reinitialize variables for the new motif.
+                if nbr_columns < 2:
+                    raise ValueError(f"Missing name in line: {line!r}")
                 motif_name = columns[1]
                 nucleotide_order = default_nucleotide_order
             elif columns[0] == "Pos":
@@ -245,12 +249,12 @@ def _read_pfm_four_columns(handle):
                     nucleotide_counts = {"A": [], "C": [], "G": [], "T": []}
                     motif_nbr += 1
 
-                [
-                    nucleotide_counts[nucleotide].append(float(nucleotide_count))
-                    for nucleotide, nucleotide_count in zip(
-                        nucleotide_order, matrix_columns
-                    )
-                ]
+                try:
+                    counts = [float(count) for count in matrix_columns]
+                except ValueError:
+                    raise ValueError(f"Malformed count in row: {line!r}") from None
+                for nucleotide, count in zip(nucleotide_order, counts):
+                    nucleotide_counts[nucleotide].append(count)
         else:
             # Empty lines can be separators between motifs.
             if motif_nbr != 0 and motif_nbr_added != motif_nbr:
