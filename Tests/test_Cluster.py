@@ -4147,11 +4147,16 @@ skip_ctrl_c_on_pypy = unittest.skipIf(
 # simulates Ctrl-C half a second in.
 CTRL_C_KCLUSTER = """\
 import _thread
+import signal
 import threading
 
 import numpy as np
 
 from Bio.Cluster import kcluster
+
+# interrupt_main does nothing if SIGINT is ignored, as it is in a shell's
+# background job, so install Python's own handler first.
+signal.signal(signal.SIGINT, signal.default_int_handler)
 
 data = np.random.default_rng(0).random((500, 10))
 threading.Timer(0.5, _thread.interrupt_main).start()
@@ -4169,11 +4174,16 @@ else:
 # 66 of them minutes; _thread.interrupt_main simulates Ctrl-C half a second in.
 CTRL_C_KENDALL = """\
 import _thread
+import signal
 import threading
 
 import numpy as np
 
 from Bio.Cluster import distancematrix
+
+# interrupt_main does nothing if SIGINT is ignored, as it is in a shell's
+# background job, so install Python's own handler first.
+signal.signal(signal.SIGINT, signal.default_int_handler)
 
 data = np.random.default_rng(0).random((12, 25000))
 threading.Timer(0.5, _thread.interrupt_main).start()
