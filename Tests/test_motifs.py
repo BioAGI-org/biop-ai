@@ -3225,6 +3225,30 @@ except ValueError as error:
         ):
             motifs.parse(stream, "jaspar")
 
+    def test_jaspar_bad_rows(self):
+        """Test that repeated, missing or stray JASPAR rows raise ValueError."""
+        motif = ">MA0001.1 AGL3\nA [1 2]\nC [3 4]\nG [5 6]\nT [7 8]\n"
+        incomplete = ">MA0002.1 RUNX1\nA [1 2]\nC [3 4]\n"
+        for text, message in [
+            (
+                ">MA0001.1 AGL3\nA [1 2]\nA [9 9]\nC [3 4]\nG [5 6]\n",
+                r"^Second row for A in one motif: 'A \[9 9\]'$",
+            ),
+            (motif + incomplete, r"^Last motif has only 2 of its 4 rows$"),
+            (incomplete + motif, r"^Motif has only 2 of its 4 rows$"),
+            # A header with no rows was dropped, or gave an empty Record.
+            (">MA0002.1 RUNX1\n" + motif, r"^Motif has only 0 of its 4 rows$"),
+            (motif + ">MA0002.1 RUNX1\n", r"^Last motif has only 0 of its 4 rows$"),
+            (">MA0002.1 RUNX1\n", r"^Last motif has only 0 of its 4 rows$"),
+            (
+                ">MA0001.1 AGL3\nfoo\n1 2\n3 4\n5 6\n",
+                r"^Not a JASPAR header or matrix row: 'foo'$",
+            ),
+        ]:
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(ValueError, message):
+                    motifs.parse(StringIO(text), "jaspar")
+
 
 class TestMEME(unittest.TestCase):
     def test_meme_parser_1(self):
