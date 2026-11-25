@@ -13,6 +13,7 @@ import support
 
 from Bio.KEGG import Compound
 from Bio.KEGG import Enzyme
+from Bio.KEGG import Gene
 from Bio.KEGG import Map
 from Bio.Pathway import System
 
@@ -127,6 +128,36 @@ class EnzymeTests(unittest.TestCase):
                 next(records)
             self.assertRaises(StopIteration, next, records)
 
+    def test_continuation_before_database(self):
+        """A continuation line with no database line above it raises."""
+        for field, kind in (
+            ("DBLINKS", "ids"),
+            ("DISEASE", "text"),
+            ("GENES", "ids"),
+            ("STRUCTURES", "ids"),
+        ):
+            text = f"ENTRY       EC 1.1.1.1\n{field:<12}            1234\n///\n"
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(
+                    ValueError, f"^{field} {kind} before any database"
+                ):
+                    next(Enzyme.parse(StringIO(text)))
+
+    def test_structures_any_database(self):
+        """STRUCTURES lines for databases other than PDB start a new entry."""
+        text = (
+            "ENTRY       EC 1.1.1.1\n"
+            "STRUCTURES  PDB: 1ABC  2DEF\n"
+            "            EMDB: 1234\n"
+            "///\n"
+        )
+        record = next(Enzyme.parse(StringIO(text)))
+        self.assertEqual(
+            record.structures, [("PDB", ["1ABC", "2DEF"]), ("EMDB", ["1234"])]
+        )
+        reparsed = next(Enzyme.parse(StringIO(str(record) + "\n")))
+        self.assertEqual(reparsed.structures, record.structures)
+
 
 class CompoundTests(unittest.TestCase):
     """Bio.KEGG.Compound tests."""
@@ -232,6 +263,12 @@ class CompoundTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "^STRUCTURES ids before any database"):
             next(Compound.parse(StringIO(text)))
 
+    def test_dblinks_without_database(self):
+        """DBLINKS ids with no database line above them raise."""
+        text = "ENTRY       C00001\nDBLINKS                 12345\n///\n"
+        with self.assertRaisesRegex(ValueError, "^DBLINKS ids before any database"):
+            next(Compound.parse(StringIO(text)))
+
     def test_irregular(self):
         """compound.irregular tests."""
         with open(support.DATA / "KEGG" / "compound.irregular") as handle:
@@ -249,6 +286,16 @@ class CompoundTests(unittest.TestCase):
         self.assertEqual(records[2].mass, "89.0477")
         self.assertEqual(records[3].entry, "C00294")
         self.assertEqual(records[3].mass, "268.0808")
+
+
+class GeneTests(unittest.TestCase):
+    """Bio.KEGG.Gene tests."""
+
+    def test_dblinks_without_database(self):
+        """DBLINKS ids with no database line above them raise."""
+        text = "ENTRY       b0001\nDBLINKS                 12345\n///\n"
+        with self.assertRaisesRegex(ValueError, "^DBLINKS ids before any database"):
+            next(Gene.parse(StringIO(text)))
 
 
 class MapTests(unittest.TestCase):
