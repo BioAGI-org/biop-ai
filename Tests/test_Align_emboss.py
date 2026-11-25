@@ -3431,7 +3431,18 @@ AlignmentCounts object with
 
     def test_unexpected_line(self):
         """A malformed file raises ValueError naming the bad line."""
-        for text, line in (("hello\n", "hello"), ("#" * 40 + "\nbad\n", "bad")):
+        header = "#" * 40 + "\n# Program: needle\n" + "#" * 40 + "\n"
+        metadata = "#" + "=" * 39 + "\n"
+        for text, line in (
+            ("hello\n", "hello"),
+            ("#" * 40 + "\nbad\n", "bad"),
+            # before the alignment metadata block
+            (header + "bad\n", "bad"),
+            # inside the alignment metadata block
+            (header + metadata + "bad\n", "bad"),
+            # in the sequence identifiers after Aligned_sequences
+            (header + metadata + "# Aligned_sequences: 2\nbad\n", "bad"),
+        ):
             with self.assertRaisesRegex(ValueError, f"^Unexpected line: {line}$"):
                 list(Align.parse(StringIO(text), "emboss"))
 
