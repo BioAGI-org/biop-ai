@@ -677,6 +677,12 @@ class TestAbiCorrupt(unittest.TestCase):
         self.assertEqual(raw["RUNT1"], ("01:02:03", "04:05:06"))
         self.assertEqual(raw["ZZZZ1"], ((0, 1), (2, 3), (4, 5)))
 
+    def test_several_bool_elements(self):
+        """Test a bool entry with more than one element."""
+        # bool() of the whole tuple used to give a single True here:
+        self.assertEqual(AbiIO._parse_tag_data(13, 2, b"\x00\x01"), (False, True))
+        self.assertIs(AbiIO._parse_tag_data(13, 1, b"\x00"), False)
+
     def test_overlapping_data_blocks(self):
         """Test directory entries whose data blocks overlap."""
         # 50 entries of 1000 chars (type 2), each starting one byte after

@@ -640,6 +640,8 @@ def _parse_tag_data(elem_code, elem_num, raw_data):
         elif elem_code == 11:
             return str(datetime.time(*data[:3]))
         elif elem_code == 13:
+            if isinstance(data, tuple):
+                return tuple(bool(x) for x in data)
             return bool(data)
         elif elem_code == 18:
             return data[1:]
