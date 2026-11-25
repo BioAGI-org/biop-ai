@@ -45,9 +45,6 @@ with warnings.catch_warnings():
     from Bio.Blast import NCBIWWW
     from Bio.Blast import NCBIXML
 
-Blast.email = "biopython@biopython.org"
-NCBIWWW.email = "biopython@biopython.org"
-
 
 try:
     requires_internet.check()
@@ -85,6 +82,11 @@ ALWAYS_MOCKED = {"test_deprecated_ncbiwww_ncbixml"}
 
 class TestQblast(unittest.TestCase):
     def setUp(self):
+        # Set the email only while a test here runs, not for the whole process.
+        for module in (Blast, NCBIWWW):
+            patcher = mock.patch.object(module, "email", "biopython@biopython.org")
+            patcher.start()
+            self.addCleanup(patcher.stop)
         if (
             not requires_internet.check.available
             or self._testMethodName in ALWAYS_MOCKED
@@ -109,6 +111,10 @@ class TestQblast(unittest.TestCase):
                 # the time module itself, so sleep is mocked only while a test
                 # here runs, not for every other test in the process.
                 mock.patch.object(Blast.time, "sleep"),
+                # With sleep mocked, each call would move qblast.previous
+                # into the future, and so delay a real search run later.
+                mock.patch.object(Blast.qblast, "previous", 0),
+                mock.patch.object(NCBIWWW.qblast, "previous", 0),
             ):
                 patcher.start()
                 self.addCleanup(patcher.stop)
