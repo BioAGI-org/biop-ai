@@ -13,6 +13,7 @@ import warnings
 from io import BytesIO
 
 import support
+from search_tests_common import run_python
 
 import Bio
 from Bio import BiopythonParserWarning
@@ -4129,32 +4130,20 @@ print(len(next(parse(BytesIO(data.encode()), "blast-xml")).version))
     def test_hit_def_with_long_space_run(self):
         """Check a long run of spaces in Hit_def is split correctly, and fast."""
         # A run of spaces not followed by '>' took quadratic time in the
-        # regex that splits ID-description pairs (about 1 s for 40,000
-        # spaces), so split it in a child process.
+        # regex that splits ID-description pairs: 1.5 s for 50,000 spaces,
+        # 6 s for 100,000. It still split correctly, so time it in a child
+        # process: with 1,000,000 spaces the old pattern would take about
+        # 10 minutes and the new one takes milliseconds, so the 20 second
+        # timeout fails the test on the old pattern.
         code = """\
 from Bio.SearchIO.BlastIO.blast_xml import _extract_ids_and_descs
-ids, descs, _ = _extract_ids_and_descs("gi|1|ref|A|", "x" + " " * 500_000 + "y >B z")
+raw_def = "x" + " " * 1_000_000 + "y >B z"
+ids, descs, _ = _extract_ids_and_descs("gi|1|ref|A|", raw_def)
 print(ids, [len(d) for d in descs])
 """
-        env = os.environ.copy()
-        env["PYTHONPATH"] = os.pathsep.join(
-            filter(
-                None,
-                [os.path.dirname(os.path.dirname(Bio.__file__)), env.get("PYTHONPATH")],
-            )
-        )
-        try:
-            result = subprocess.run(
-                [sys.executable, "-c", code],
-                timeout=60,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            self.fail("Splitting a Hit_def with 500,000 spaces took over 60 seconds")
+        result = run_python(code)
         self.assertEqual(
-            result.stdout, "['gi|1|ref|A|', 'B'] [500002, 1]\n", result.stderr
+            result.stdout, "['gi|1|ref|A|', 'B'] [1000002, 1]\n", result.stderr
         )
 
 
