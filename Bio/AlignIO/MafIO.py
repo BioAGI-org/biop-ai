@@ -697,8 +697,17 @@ class MafIndex:
         if strand not in (1, -1):
             raise ValueError(f"Strand must be 1 or -1, got {strand}")
 
-        # pull all alignments that span the desired intervals
-        fetched = list(self.search(starts, ends))
+        # pull all alignments that span the desired intervals, leaving out
+        # any block whose reference row has no letters (size 0): it covers
+        # no reference position, so it has nothing to add to the splice
+        fetched = [
+            multiseq
+            for multiseq in self.search(starts, ends)
+            if not any(
+                seqrec.id == self._target_seqname and seqrec.annotations["size"] == 0
+                for seqrec in multiseq
+            )
+        ]
 
         # keep track of the expected letter count
         # (sum of lengths of [start, end) segments,

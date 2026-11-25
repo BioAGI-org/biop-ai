@@ -867,6 +867,37 @@ idx.close()
                 result.stderr,
             )
 
+    class TestSpliceEmptyReferenceRow(unittest.TestCase):
+        """Test in silico splicing past a block whose reference row is empty."""
+
+        def setUp(self):
+            self.tmpdir = tempfile.mkdtemp()
+            maf = os.path.join(self.tmpdir, "empty.maf")
+            with open(maf, "w") as handle:
+                handle.write(
+                    "##maf version=1\n\n"
+                    "a score=1\n"
+                    "s ref.chr1 0 4 + 100 ACGT\n"
+                    "s oth.chr1 0 4 + 100 ACGT\n\n"
+                    "a score=2\n"
+                    "s ref.chr1 5 0 + 100 ---\n"
+                    "s oth.chr1 10 3 + 100 GGG\n\n"
+                )
+            self.idx = MafIndex(maf + ".idx", maf, "ref.chr1")
+
+        def tearDown(self):
+            self.idx.close()
+            shutil.rmtree(self.tmpdir)
+
+        def test_get_spliced(self):
+            # The second block's reference row has size 0, so it covers no
+            # reference position. get_spliced used to raise KeyError on it.
+            result = self.idx.get_spliced([0], [10])
+            self.assertEqual(
+                {record.id: str(record.seq) for record in result},
+                {"ref.chr1": "ACGTNNNNNN", "oth.chr1": "ACGT------"},
+            )
+
     class TestSpliceBadMAF(unittest.TestCase):
         """Test in silico splicing on an incorrectly-formatted MAF."""
 
