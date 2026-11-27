@@ -19,8 +19,6 @@ import support
 from seq_tests_common import SeqRecordTestBaseClass
 
 from Bio import BiopythonWarning
-
-# local stuff
 from Bio import MissingExternalDependencyError
 from Bio import SeqIO
 from Bio.Seq import MutableSeq
