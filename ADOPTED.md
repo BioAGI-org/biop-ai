@@ -331,11 +331,13 @@ fork's second hook (`--select=S101` over the parser packages) still enables
 only S101, as `--show-settings` shows, and passes. Peter Cock is already in
 `CONTRIB.rst`.
 
-**Upstream status:** as of 2026-11-10 the pull request is open, not a draft,
-with no reviews from others (peterjc left two comment reviews on his own
-pull request on 2026-10-21). He rebased it on 2026-11-02. Issue #2828 is
-open. The licence box is ticked. If upstream merges a different shape, expect
-a small conflict in `pyproject.toml` at the next sync.
+**Upstream status:** merged on 2026-11-26, closing #2828, with the same four
+commits. The licence box is ticked. The 2026-11-27 sync kept this fork's
+`pyproject.toml`, since the merge would otherwise have added the moved
+settings a second time. The isort and black sweep left behind above came in
+with that sync, except in the files whose conflicts kept the fork's text:
+`Bio/pairwise2.py`, `Bio/Restriction/__init__.py`, `Tests/test_GenBank.py`,
+`Tests/test_BioSQL_sqlite3.py` and `Tests/test_GraphicsDistribution.py`.
 
 ### [#5380](https://github.com/biopython/biopython/pull/5380) — Shubhodeep Chatterjee (shubhodeepcx)
 
@@ -923,12 +925,14 @@ with the long name, and `protein`. With `c43a3816d` in place of the fork's
 fix, the eight rows of five to seven letters fail, and so do `NA` and
 `ss-NA` with the long name and the two proteins with a prefix.
 
-**Upstream status:** as of 2026-11-09 the pull request is open, with no
-commits since 2026-10-02 and style-only review comments from peterjc. On #4878
-the same day another contributor asked to be assigned the issue. The author
-replied that the review changes would come by 15 November and that the
-other contributor was welcome to take it over if not. Nobody upstream has
-mentioned the overflow. The licence box is ticked.
+**Upstream status:** merged on 2026-11-16, closing #4878 and #4879, as two
+of the author's commits on top of Erik Whiting's #4918 commit. The writer
+change described above is unchanged. Nobody upstream has mentioned the overflow.
+On `master` `9c5325410` (run 2026-11-27) `snoRNA` still gives an
+81-character LOCUS line that `SeqIO` cannot read back, and the parser cannot
+read back the `ss-NA` the writer writes. The 2026-11-27 sync kept this
+fork's code and tests, and did not take `example_NA.gb`. The defect is
+queued in `UPSTREAM.md` (row 49). The licence box is ticked.
 
 ### [#5389](https://github.com/biopython/biopython/pull/5389) — Michiel de Hoon
 

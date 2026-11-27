@@ -1581,7 +1581,7 @@ duplicated `--source`.
 > `[mypy-numpy.*]` override is gone from `.mypy.ini`, and the five
 > `Bio/PDB/Atom.py` errors are resolved (a `_isclose` helper handling
 > `float | None`). **The ruff half is fixed** by adopting upstream PR #5386
-> (open upstream, peterjc; see `ADOPTED.md`). The settings moved from the
+> (peterjc; merged upstream on 2026-11-26; see `ADOPTED.md`). The settings moved from the
 > pre-commit CLI args into `[tool.ruff.lint]` in `pyproject.toml`, so a bare
 > `ruff check` now agrees with the hook. **Still open:** `ci-dependencies.txt:10`
 > still pins `black==22.12.0` against pre-commit's `24.10.0`,
@@ -2124,7 +2124,7 @@ against this fork's tree, not just read about.
 | 10 | [#5175](https://github.com/biopython/biopython/pull/5175) **adopted** | nine `assert`s validating input in production code, which vanish under `python -O`, the same defect as §0.8 | S |
 | 11 | [#5121](https://github.com/biopython/biopython/pull/5121) **adopted** | mmCIF parsing is about 50% slower than it needs to be for want of a six-line fast path | S |
 | 12 | [#5244](https://github.com/biopython/biopython/pull/5244) **adopted** | every SAM file written has `TLEN` 0 on every record | M |
-| 13 | [#4918](https://github.com/biopython/biopython/pull/4918) **adopted** | GenBank `LOCUS` lines with molecule type `NA` are rejected outright | S |
+| 13 | [#4918](https://github.com/biopython/biopython/pull/4918) **adopted** (upstream merged its commit with #5350 on 2026-11-16; #4918 itself is still open) | GenBank `LOCUS` lines with molecule type `NA` are rejected outright | S |
 | 14 | [#5157](https://github.com/biopython/biopython/pull/5157) **superseded by the fork's own fix** | `PDBList` hardcodes wwPDB paths, so EBI and other mirrors cannot be used | S |
 | 15 | [#4634](https://github.com/biopython/biopython/pull/4634) **adopted** | no way to resolve polytomies in `Bio.Phylo`, which many downstream tools require | S |
 
@@ -2550,7 +2550,9 @@ on 2026-10-13 as a segfault or an abort; the other two were read.
 
 - `Bio/SeqIO/FastaIO.py:390`: `FastaBlastIterator` has the typo
   `self_line = line`, so every record gets the first record's title:
-  `>a`, `>b`, `>c` read as `a`, `a`, `a`. Upstream too. (PR #132)
+  `>a`, `>b`, `>c` read as `a`, `a`, `a`. Upstream too. (PR #132) *(Fixed
+  upstream in biopython/biopython#5418, for #5377; merged here in the
+  2026-11-27 sync.)*
 - `Bio/Seq.py` (`join`): the type check uses up a generator, so
   `Seq("N").join(x for x in ["A", "C"])` is `Seq('')`. Upstream too.
   (PR #176)
