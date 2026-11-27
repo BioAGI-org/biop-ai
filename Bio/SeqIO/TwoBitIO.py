@@ -73,6 +73,7 @@ methods that allow it to be used as a dictionary.
 #             significant 2-bit byte; the last base is in the least significant
 #             2 bits. For example, the sequence TCAG is represented as 00011011.
 import os
+import warnings
 
 try:
     import numpy as np
@@ -84,6 +85,7 @@ except ImportError:
         "See http://www.numpy.org/"
     ) from None
 
+from Bio import BiopythonParserWarning
 from Bio.Seq import Seq
 from Bio.Seq import SequenceDataAbstractBaseClass
 from Bio.SeqRecord import SeqRecord
@@ -193,24 +195,34 @@ class _TwoBitSequenceData(SequenceDataAbstractBaseClass):
 
 
 def _check_blocks(kind, blocks, name, dnaSize):
-    """Check that each N or mask block of a sequence lies inside it.
+    """Check the N or mask blocks of a sequence, clipping them to it.
 
     The file stores 32-bit block starts and sizes, and the block ends are
     computed as 32-bit integers, so a block running past 2**32 wraps round
-    to an end before its start. The C code that applies the blocks relies
-    on every block ending after its start and inside the sequence.
+    to an end before its start. No valid file has such a block, so raise a
+    ValueError for it. A block running past the end of the sequence is
+    clipped to the sequence end with a warning, which is how such blocks
+    were read before.
     """
     starts = blocks[:, 0]
     ends = blocks[:, 1]
-    bad = (ends < starts) | (ends > dnaSize)
-    if bad.any():
+    for bad in (ends < starts, ends > dnaSize):
+        if not bad.any():
+            continue
         i = bad.argmax()
         start = int(starts[i])
         size = (int(ends[i]) - start) % 2**32
-        raise ValueError(
+        message = (
             "Found %s block of size %u at position %u for sequence %s, "
             "which has length %u" % (kind, size, start, name, dnaSize)
         )
+        if ends[i] < starts[i]:
+            raise ValueError(message)
+        warnings.warn(
+            message + "; clipping it to the end of the sequence",
+            BiopythonParserWarning,
+        )
+        np.minimum(blocks, dnaSize, out=blocks)
 
 
 class TwoBitIterator(SequenceIterator):

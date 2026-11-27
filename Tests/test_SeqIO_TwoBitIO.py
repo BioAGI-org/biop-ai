@@ -1,11 +1,13 @@
 """Tests for SeqIO TwoBitIO module."""
 
+import contextlib
 import io
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from unittest import mock
 
@@ -13,6 +15,7 @@ import numpy as np
 import support
 
 import Bio
+from Bio import BiopythonParserWarning
 from Bio import SeqIO
 from Bio.Seq import MutableSeq
 from Bio.Seq import Seq
@@ -186,8 +189,31 @@ for start, end, step in ((0, 16, 1), (0, 16, 2), (15, -1, -1)):
                         "too many blocks for a file of 770 bytes" % (field, count),
                     )
 
-    def test_block_past_end_of_sequence(self):
-        """Check N and mask blocks must end inside their sequence."""
+    @contextlib.contextmanager
+    def _patched_file(self, patches):
+        """Yield the sample file, with some 32-bit fields patched, as a file."""
+        path = support.DATA / "TwoBit" / "sequence.littleendian.2bit"
+        patched = bytearray(path.read_bytes())
+        for position, value in patches:
+            patched[position : position + 4] = value.to_bytes(4, "little")
+        # np.fromfile needs a real file, not an io.BytesIO
+        with tempfile.TemporaryFile() as stream:
+            stream.write(patched)
+            stream.seek(0)
+            yield stream
+
+    def _parse_patched(self, patches):
+        """Parse the patched sample file and read it all.
+
+        Returns a dictionary mapping each name to its sequence as a string.
+        """
+        with self._patched_file(patches) as stream:
+            return {
+                record.id: str(record.seq) for record in SeqIO.parse(stream, "twobit")
+            }
+
+    def test_block_wrapping_past_2_32(self):
+        """Check N and mask blocks whose end wraps round past 2**32 are rejected."""
         path = support.DATA / "TwoBit" / "sequence.littleendian.2bit"
         data = path.read_bytes()
         # The record of seq11111 (480 bases) starts at byte 81. Its first N
@@ -195,20 +221,14 @@ for start, end, step in ((0, 16, 1), (0, 16, 2), (15, -1, -1)):
         # block has its start at byte 109 and its size at byte 117.
         mask_start = int.from_bytes(data[109:113], "little")
         cases = (
-            # a size that wraps the 32-bit end round to 7, before the start
+            # sizes that wrap the 32-bit end round to before the start
             ("N", 97, 77, 2**32 - 70),
-            ("N", 97, 77, 480 - 77 + 1),
             ("mask", 117, mask_start, 2**32 - 1),
-            ("mask", 117, mask_start, 480 - mask_start + 1),
         )
         for kind, position, start, size in cases:
-            patched = bytearray(data)
-            patched[position : position + 4] = size.to_bytes(4, "little")
             with self.subTest(kind=kind, size=size):
-                # np.fromfile needs a real file, not an io.BytesIO
-                with tempfile.TemporaryFile() as stream:
-                    stream.write(patched)
-                    stream.seek(0)
+                # Raised on opening the file, before any sequence is read
+                with self._patched_file([(position, size)]) as stream:
                     with self.assertRaises(ValueError) as cm:
                         SeqIO.parse(stream, "twobit")
                 self.assertEqual(
@@ -216,15 +236,85 @@ for start, end, step in ((0, 16, 1), (0, 16, 2), (15, -1, -1)):
                     "Found %s block of size %u at position %u for sequence "
                     "seq11111, which has length 480" % (kind, size, start),
                 )
-        # A block may end exactly at the end of the sequence
-        patched = bytearray(data)
-        patched[97:101] = (480 - 77).to_bytes(4, "little")
-        with tempfile.TemporaryFile() as stream:
-            stream.write(patched)
-            stream.seek(0)
-            record = next(SeqIO.parse(stream, "twobit"))
-            self.assertEqual(record.id, "seq11111")
-            self.assertEqual(record.seq[77:].upper(), "N" * (480 - 77))
+
+    def test_block_past_end_of_sequence(self):
+        """Check N and mask blocks running past the sequence end are clipped.
+
+        Such a block is clipped to the end of its sequence with a warning, as
+        the reader did before, and the other records of the file still read.
+        """
+        expected = self._parse_patched([])
+        seq = expected["seq11111"]
+        self.assertEqual(len(seq), 480)
+        # The last N block of seq11111 starts at 305 with its size at byte
+        # 101, its last mask block starts at 356 with its size at byte 121.
+        # Each is followed by no block of its kind; mask blocks must not
+        # overlap, as applyMask lower cases a base once for each block.
+        masked_ns = "".join("n" if c.islower() else "N" for c in seq[305:])
+        cases = (
+            ("N", 101, 305, 480 - 305 + 1, seq[:305] + masked_ns),
+            ("N", 101, 305, 2**32 - 306, seq[:305] + masked_ns),
+            ("mask", 121, 356, 480 - 356 + 1, seq[:356] + seq[356:].lower()),
+            ("mask", 121, 356, 2**32 - 357, seq[:356] + seq[356:].lower()),
+        )
+        for kind, position, start, size, seq11111 in cases:
+            with self.subTest(kind=kind, size=size):
+                with self._patched_file([(position, size)]) as stream:
+                    with self.assertWarns(BiopythonParserWarning) as cm:
+                        records = SeqIO.to_dict(SeqIO.parse(stream, "twobit"))
+                    sequences = {name: str(r.seq) for name, r in records.items()}
+                    data = records["seq11111"].seq._data
+                self.assertEqual(
+                    str(cm.warning),
+                    "Found %s block of size %u at position %u for sequence "
+                    "seq11111, which has length 480; clipping it to the end of "
+                    "the sequence" % (kind, size, start),
+                )
+                self.assertEqual(sequences["seq11111"], seq11111)
+                self.assertEqual(sequences, {**expected, "seq11111": seq11111})
+                # The parser itself clips the block, not only the C reader
+                table = data.nBlocks if kind == "N" else data.maskBlocks
+                self.assertEqual(list(table[-1]), [start, 480])
+        # A block may also start past the end; it is clipped to [480, 480]
+        for kind, patches in (
+            ("N", [(93, 500), (101, 10)]),
+            ("mask", [(113, 500), (121, 10)]),
+        ):
+            with self.subTest(kind=kind, start=500):
+                with self._patched_file(patches) as stream:
+                    with self.assertWarns(BiopythonParserWarning):
+                        records = SeqIO.to_dict(SeqIO.parse(stream, "twobit"))
+                    data = records["seq11111"].seq._data
+                    table = data.nBlocks if kind == "N" else data.maskBlocks
+                    self.assertEqual(list(table[-1]), [480, 480])
+                    self.assertEqual(len(str(records["seq11111"].seq)), 480)
+        # A block may end exactly at the end of the sequence, without a warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", BiopythonParserWarning)
+            sequences = self._parse_patched([(97, 480 - 77)])
+        self.assertEqual(sequences["seq11111"][77:].upper(), "N" * (480 - 77))
+
+    def test_zero_size_blocks(self):
+        """Check N and mask blocks of size zero leave the bases as they are."""
+        expected = self._parse_patched([])
+        seq = expected["seq11111"]
+        # The N block at 77 (size at byte 97) is 19 bases of N, the mask
+        # block at 178 (size at byte 117) is 16 bases of lower case.
+        self.assertEqual(seq[77:96], "N" * 19)
+        self.assertEqual(seq[178:194], seq[178:194].lower())
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", BiopythonParserWarning)
+            sequences = self._parse_patched([(97, 0)])
+        self.assertNotIn("N", sequences["seq11111"][77:96].upper())
+        self.assertRegex(sequences["seq11111"][77:96], "^[ACGT]+$")
+        self.assertEqual(sequences["seq11111"][:77], seq[:77])
+        self.assertEqual(sequences["seq11111"][96:], seq[96:])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", BiopythonParserWarning)
+            sequences = self._parse_patched([(117, 0)])
+        self.assertEqual(sequences["seq11111"][178:194], seq[178:194].upper())
+        self.assertEqual(sequences["seq11111"][:178], seq[:178])
+        self.assertEqual(sequences["seq11111"][194:], seq[194:])
 
     def test_overlapping_block_tables(self):
         """Check overlapping records cannot claim more blocks than the file holds."""

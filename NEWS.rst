@@ -75,9 +75,10 @@ are unchanged except as listed here.
 
 Visible changes from these fixes, all for unusual input:
 
-- ``.2bit`` files: an N or mask block running past the end of its sequence
-  now raises ``ValueError`` instead of being clipped, and names sharing one
-  record share one ``Seq``.
+- ``.2bit`` files: an N or mask block whose end wraps past 2**32 raises
+  ``ValueError``; one running past the end of its sequence is still clipped
+  to it, now with a ``BiopythonParserWarning``. Names sharing one record
+  share one ``Seq``.
 - ``.ab1`` files: entries sharing a data block share one decoded value; a
   file whose earlier repeated PBAS2, PCON2 or SMPL1 entry fails to decode
   but whose last one decodes now parses.
