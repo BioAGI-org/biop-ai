@@ -1880,6 +1880,18 @@ https://github.com/BioAGI-org/biop-ai. It is still published on PyPI as
 The old ``biopaithon.*`` groups are still read, with a
 ``BiopythonDeprecationWarning``; see ``DEPRECATED.rst``.
 
+Upstream Biopython ``master`` as of 2026-11-26 is merged. Changes from
+upstream that users may notice: ``SeqRecord.format()``, ``format(record, ...)``
+and f-strings now raise ``ValueError`` ("Unknown format") for a format name
+``Bio.SeqIO`` cannot write, rather than a bare ``KeyError``; and
+``Scripts/PDB/hsexpo.py`` no longer swaps the up and down half spheres for its
+``HSEBU`` and ``HSEBD`` options. Upstream also merged the GenBank ``NA``
+molecule type and LOCUS strand column changes, which this fork adopted in
+1.88 and 1.89. Its versions were not taken: its writer puts a five to seven
+letter molecule type such as ``snoRNA`` past the LOCUS line's columns, and its
+parser cannot read back the ``ss-NA`` its writer writes. This fork's versions
+are kept.
+
 Upstream Biopython ``master`` as of 2026-11-06 is merged. Changes from
 upstream that users may notice: the ``PairwiseAligner`` gap-score attribute
 names that were renamed in release 1.86, such as ``target_gap_score``, and its
@@ -3716,7 +3728,9 @@ header line starts with ``CLUSTALW`` as a single word, as written by some tools.
 Many thanks to the Biopython developers and community for making this release
 possible, especially the following contributors:
 
+- Brandon Mokrytzki (first contribution)
 - Mohit Arvind Khakharia (first contribution)
+- Peter Cock
 - Yuxuan Luo (first contribution)
 
 6 August 2026: Biopython 1.88

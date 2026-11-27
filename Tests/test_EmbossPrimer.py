@@ -14,8 +14,6 @@ import unittest
 import support
 
 from Bio.Emboss import Primer3
-
-# local stuff
 from Bio.Emboss import PrimerSearch
 
 

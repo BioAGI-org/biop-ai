@@ -10,10 +10,10 @@ public API only, what each entry point raises today, so that a change to how
 formats are looked up cannot alter an exception type or message without a test
 noticing.
 
-Some rows pin quirks rather than designs: format(record, "txt") raises
-KeyError, Bio.AlignIO accepts "123" where Bio.SeqIO rejects it, and
-Bio.Align.write names an unwritable format in the case it was given.  Changing
-any of them should be a deliberate decision, made together with its row here.
+Some rows pin quirks rather than designs: Bio.AlignIO accepts "123" where
+Bio.SeqIO rejects it, and Bio.Align.write names an unwritable format in the
+case it was given.  Changing any of them should be a deliberate decision, made
+together with its row here.
 """
 
 import re
@@ -163,8 +163,10 @@ class SeqIOFormatErrors(FormatErrorTestCase):
         record = SeqRecord(Seq("ACGT"), id="x", description="")
         binary = "Binary format sff cannot be used with SeqRecord format method"
         table = [
-            ("txt", KeyError, "txt"),
-            ("FASTA", KeyError, "FASTA"),
+            # A ValueError since upstream's biopython/biopython#5411; it was
+            # a bare KeyError, a quirk this table pinned until then.
+            ("txt", ValueError, "Unknown format 'txt'"),
+            ("FASTA", ValueError, "Unknown format 'FASTA'"),
             ("sff", ValueError, binary),
         ]
         with self.subTest(call="format(record, fmt)"):
